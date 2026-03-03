@@ -59,9 +59,9 @@ export function SystemAdminBottomNav() {
   };
 
   return (
-    <nav className="fixed bottom-0 left-1/2 z-20 w-full -translate-x-1/2 px-2 pb-[calc(env(safe-area-inset-bottom)+0.4rem)] pt-2 lg:max-w-6xl lg:px-4">
-      <div className="border-t bg-white/95 backdrop-blur lg:rounded-2xl lg:border lg:shadow-sm">
-        <ul className="mx-auto grid w-full grid-cols-2 gap-1 p-1 lg:gap-2 lg:p-2">
+    <nav className="fixed bottom-0 left-1/2 z-20 w-full -translate-x-1/2 px-2 pb-[calc(env(safe-area-inset-bottom)+0.4rem)] pt-2 min-[1200px]:max-w-[var(--app-shell-max-width-desktop)] min-[1200px]:px-4">
+      <div className="border-t bg-white/95 backdrop-blur min-[1200px]:rounded-2xl min-[1200px]:border min-[1200px]:shadow-sm">
+        <ul className="mx-auto grid w-full grid-cols-2 gap-1 p-1 min-[1200px]:gap-2 min-[1200px]:p-2">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = isTabActive(currentPath, tab.href);
@@ -71,13 +71,13 @@ export function SystemAdminBottomNav() {
                 <button
                   type="button"
                   onClick={() => navigateToTab(tab.href)}
-                  className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] lg:min-h-14 lg:text-xs ${
+                  className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] min-[1200px]:min-h-14 min-[1200px]:text-xs ${
                     isActive
                       ? "bg-blue-50 font-semibold text-blue-700"
                       : "text-slate-500"
                   } w-full`}
                 >
-                  <Icon className="h-4 w-4 lg:h-5 lg:w-5" />
+                  <Icon className="h-4 w-4 min-[1200px]:h-5 min-[1200px]:w-5" />
                   <span>{tab.label}</span>
                 </button>
               </li>

@@ -209,7 +209,7 @@ export function AppTopNav({
 
   useEffect(() => {
     const syncViewportAndDevice = () => {
-      setIsDesktopViewport(window.innerWidth >= 1024);
+      setIsDesktopViewport(window.innerWidth >= 1200);
       setIsSmallViewport(window.innerWidth < 640);
 
       const hasTouchPoints = navigator.maxTouchPoints > 0;

@@ -14,7 +14,11 @@
     --primary: 221.2 83.2% 53.3%;
     --primary-foreground: 210 40% 98%;
     --radius: 0.75rem;
-    --app-shell-max-width: 76rem;
+    --app-shell-max-width: 80rem;
+    --app-shell-max-width-desktop: 80rem;
+    --app-shell-max-width-desktop-wide: 90rem;
+    --layout-pad-tablet: 1.5rem;
+    --layout-pad-desktop: 2rem;
     --auth-shell-max-width: 45rem;
     --bottom-tab-nav-height: 5.5rem;
   }

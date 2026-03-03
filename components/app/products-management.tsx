@@ -2768,7 +2768,7 @@ export function ProductsManagement({
         isOpen={showCreateSheet}
         onClose={requestCloseCreateSheet}
         title={mode === "create" ? "เพิ่มสินค้าใหม่" : "แก้ไขสินค้า"}
-        panelMaxWidthClass="max-w-3xl"
+        panelMaxWidthClass="min-[1200px]:max-w-3xl"
         closeOnBackdrop={false}
         disabled={loadingKey !== null}
         footer={

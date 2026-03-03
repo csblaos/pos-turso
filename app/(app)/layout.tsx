@@ -49,10 +49,10 @@ export default async function AppLayout({
 
   return (
     <div
-      className={`mx-auto flex min-h-dvh w-full flex-col ${layoutPreset.appBgClassName} lg:max-w-[var(--app-shell-max-width)] lg:border-x lg:shadow-sm`}
+      className={`mx-auto flex min-h-dvh w-full flex-col ${layoutPreset.appBgClassName} min-[1200px]:max-w-[var(--app-shell-max-width-desktop)] min-[1200px]:border-x min-[1200px]:shadow-sm`}
     >
       <header
-        className={`sticky top-0 z-10 border-b px-4 py-3 backdrop-blur lg:px-6 ${layoutPreset.headerBgClassName}`}
+        className={`sticky top-0 z-10 border-b px-4 py-3 backdrop-blur md:px-6 min-[1200px]:px-8 ${layoutPreset.headerBgClassName}`}
       >
         <AppTopNav
           activeStoreName={activeStoreName}
@@ -69,7 +69,7 @@ export default async function AppLayout({
           </p>
         ) : null}
       </header>
-      <main className="flex-1 px-4 pb-[calc(var(--bottom-tab-nav-height)+env(safe-area-inset-bottom)+1rem)] pt-4 lg:px-6 lg:pb-[calc(var(--bottom-tab-nav-height)+1.5rem)]">
+      <main className="flex-1 px-4 pb-[calc(var(--bottom-tab-nav-height)+env(safe-area-inset-bottom)+1rem)] pt-4 md:px-6 min-[1200px]:px-8 min-[1200px]:pb-[calc(var(--bottom-tab-nav-height)+1.5rem)]">
         {children}
       </main>
       <BottomTabNav permissionKeys={permissionKeys} storeType={activeStoreType} />

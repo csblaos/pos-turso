@@ -7,12 +7,12 @@ import {
   Plus,
   Trash2,
   Upload,
-  X,
 } from "lucide-react";
 import Image from "next/image";
-import { type ChangeEvent, type TouchEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch } from "@/lib/auth/client-token";
 import {
   findLaosBankByCode,
@@ -194,35 +194,7 @@ export function StorePaymentAccountsSettings({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const [isDesktopViewport, setIsDesktopViewport] = useState(false);
-  const [isSheetDragging, setIsSheetDragging] = useState(false);
-  const [sheetDragY, setSheetDragY] = useState(0);
-  const sheetStartYRef = useRef<number | null>(null);
-  const sheetCanDragRef = useRef(false);
-
   const qrInputRef = useRef<HTMLInputElement | null>(null);
-  const sheetScrollYRef = useRef(0);
-  const bodyStyleRef = useRef<{
-    position: string;
-    top: string;
-    left: string;
-    right: string;
-    width: string;
-    overflow: string;
-  } | null>(null);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(min-width: 640px)");
-    const applyViewportState = () => {
-      setIsDesktopViewport(mediaQuery.matches);
-    };
-
-    applyViewportState();
-    mediaQuery.addEventListener("change", applyViewportState);
-    return () => {
-      mediaQuery.removeEventListener("change", applyViewportState);
-    };
-  }, []);
 
   useEffect(() => {
     const objectUrl = fileToObjectUrl(qrImageFile);
@@ -235,73 +207,13 @@ export function StorePaymentAccountsSettings({
     };
   }, [qrImageFile]);
 
-  const resetSheetDrag = () => {
-    setSheetDragY(0);
-    setIsSheetDragging(false);
-    sheetStartYRef.current = null;
-    sheetCanDragRef.current = false;
-  };
-
   const closeSheet = (options?: { force?: boolean }) => {
     if (!options?.force && (isSaving || isDeleting)) {
       return;
     }
 
-    resetSheetDrag();
     setIsSheetOpen(false);
   };
-
-  useEffect(() => {
-    if (!isSheetOpen) {
-      return;
-    }
-
-    const body = document.body;
-    sheetScrollYRef.current = window.scrollY;
-    bodyStyleRef.current = {
-      position: body.style.position,
-      top: body.style.top,
-      left: body.style.left,
-      right: body.style.right,
-      width: body.style.width,
-      overflow: body.style.overflow,
-    };
-
-    body.style.position = "fixed";
-    body.style.top = `-${sheetScrollYRef.current}px`;
-    body.style.left = "0";
-    body.style.right = "0";
-    body.style.width = "100%";
-    body.style.overflow = "hidden";
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || isSaving || isDeleting) {
-        return;
-      }
-
-      setSheetDragY(0);
-      setIsSheetDragging(false);
-      sheetStartYRef.current = null;
-      sheetCanDragRef.current = false;
-      setIsSheetOpen(false);
-    };
-
-    window.addEventListener("keydown", handleEscape);
-
-    return () => {
-      window.removeEventListener("keydown", handleEscape);
-      const previousBodyStyle = bodyStyleRef.current;
-      if (previousBodyStyle) {
-        body.style.position = previousBodyStyle.position;
-        body.style.top = previousBodyStyle.top;
-        body.style.left = previousBodyStyle.left;
-        body.style.right = previousBodyStyle.right;
-        body.style.width = previousBodyStyle.width;
-        body.style.overflow = previousBodyStyle.overflow;
-      }
-      window.scrollTo(0, sheetScrollYRef.current);
-    };
-  }, [isSheetOpen, isSaving, isDeleting]);
 
   const reachedPolicyLimit = accounts.length >= policy.maxAccountsPerStore;
 
@@ -378,53 +290,6 @@ export function StorePaymentAccountsSettings({
     setIsSheetOpen(true);
   };
 
-  const handleSheetTouchStart = (event: TouchEvent<HTMLDivElement>) => {
-    if (!isSheetOpen || isSaving || isDeleting || isDesktopViewport) {
-      return;
-    }
-
-    sheetCanDragRef.current = true;
-    sheetStartYRef.current = event.touches[0]?.clientY ?? null;
-    setSheetDragY(0);
-    setIsSheetDragging(false);
-  };
-
-  const handleSheetTouchMove = (event: TouchEvent<HTMLDivElement>) => {
-    if (isDesktopViewport || !sheetCanDragRef.current || sheetStartYRef.current === null) {
-      return;
-    }
-
-    const currentY = event.touches[0]?.clientY;
-    if (typeof currentY !== "number") {
-      return;
-    }
-
-    const deltaY = Math.max(0, currentY - sheetStartYRef.current);
-    if (deltaY <= 0) {
-      return;
-    }
-
-    setIsSheetDragging(true);
-    setSheetDragY(deltaY);
-    event.preventDefault();
-  };
-
-  const handleSheetTouchEnd = () => {
-    if (isDesktopViewport) {
-      return;
-    }
-
-    if (!sheetCanDragRef.current && sheetStartYRef.current === null) {
-      return;
-    }
-
-    if (sheetDragY > 120) {
-      closeSheet();
-      return;
-    }
-
-    resetSheetDrag();
-  };
 
   const handleQrFileChanged = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
@@ -587,13 +452,6 @@ export function StorePaymentAccountsSettings({
   const fieldClassName =
     "h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-900 outline-none ring-primary focus:ring-2 disabled:bg-slate-100";
 
-  const sheetBackdropOpacity = isSheetOpen
-    ? Math.max(0, 1 - Math.min(sheetDragY / 220, 1) * 0.55)
-    : 0;
-
-  const sheetInlineStyle =
-    isSheetOpen && !isDesktopViewport ? { transform: `translateY(${sheetDragY}px)` } : undefined;
-
   return (
     <section className="space-y-4">
       <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -687,67 +545,72 @@ export function StorePaymentAccountsSettings({
       ) : null}
       {successMessage ? <p className="text-sm text-emerald-700">{successMessage}</p> : null}
 
-      <div
-        className={`fixed inset-0 z-50 ${isSheetOpen ? "" : "pointer-events-none"}`}
-        aria-hidden={!isSheetOpen}
-      >
-        <button
-          type="button"
-          aria-label="ปิดฟอร์มบัญชีรับเงิน"
-          className={`absolute inset-0 bg-slate-900/40 backdrop-blur-[1px] transition-opacity duration-200 ${
-            isSheetOpen ? "opacity-100" : "opacity-0"
-          }`}
-          style={{ opacity: sheetBackdropOpacity }}
-          onClick={() => closeSheet()}
-          disabled={isSaving || isDeleting}
-        />
-
-        <div
-          className={`absolute inset-x-0 bottom-0 max-h-[calc(100dvh-0.5rem)] overflow-y-auto overscroll-contain rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-h-[min(760px,calc(100dvh-2rem))] sm:w-full sm:max-w-md sm:rounded-2xl ${
-            isSheetDragging && !isDesktopViewport
-              ? "transition-none"
-              : "transition-all duration-300 ease-out"
-          } ${
-            isSheetOpen
-              ? "translate-y-0 opacity-100 sm:-translate-x-1/2 sm:-translate-y-1/2"
-              : "translate-y-full opacity-0 sm:-translate-x-1/2 sm:-translate-y-[42%]"
-          }`}
-          style={sheetInlineStyle}
-        >
-          <div className="sticky top-0 z-10 border-b border-slate-100 bg-white/95 backdrop-blur">
-            <div
-              className="flex touch-none justify-center pb-1 pt-2 sm:hidden"
-              onTouchStart={handleSheetTouchStart}
-              onTouchMove={handleSheetTouchMove}
-              onTouchEnd={handleSheetTouchEnd}
-              onTouchCancel={handleSheetTouchEnd}
-            >
-              <span className="h-1.5 w-12 rounded-full bg-slate-300" />
-            </div>
-
-            <div className="flex items-center justify-between px-4 pb-3 pt-1 sm:py-3">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">
-                  {mode === "create" ? "เพิ่มบัญชีรับเงิน" : "แก้ไขบัญชีรับเงิน"}
-                </p>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  {mode === "create" ? "กรอกข้อมูลและอัปโหลด QR ได้ทันที" : "ปรับข้อมูลบัญชีและสถานะการใช้งาน"}
-                </p>
-              </div>
-
-              <button
+      <SlideUpSheet
+        isOpen={isSheetOpen}
+        onClose={() => closeSheet()}
+        title={mode === "create" ? "เพิ่มบัญชีรับเงิน" : "แก้ไขบัญชีรับเงิน"}
+        description={
+          mode === "create"
+            ? "กรอกข้อมูลและอัปโหลด QR ได้ทันที"
+            : "ปรับข้อมูลบัญชีและสถานะการใช้งาน"
+        }
+        panelMaxWidthClass="min-[1200px]:max-w-md"
+        disabled={isSaving || isDeleting}
+        footer={
+          <div className="flex items-center gap-2">
+            {mode === "edit" ? (
+              <Button
                 type="button"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600"
+                variant="outline"
+                className="h-11 rounded-xl border-red-200 px-4 text-red-600 hover:bg-red-50"
+                onClick={removeAccount}
+                disabled={!canUpdate || isSaving || isDeleting}
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    กำลังลบ...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" />
+                    ลบ
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-xl px-4"
                 onClick={() => closeSheet()}
                 disabled={isSaving || isDeleting}
-                aria-label="ปิด"
               >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
+                ยกเลิก
+              </Button>
+            )}
 
-          <div className="space-y-3 px-4 pb-[calc(env(safe-area-inset-bottom)+7rem)] pt-4 sm:pb-28">
+            <Button
+              type="button"
+              className="h-11 min-w-[170px] flex-1 rounded-xl"
+              onClick={saveAccount}
+              disabled={!canUpdate || isSaving || isDeleting}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  กำลังบันทึก...
+                </>
+              ) : mode === "create" ? (
+                "สร้างบัญชี"
+              ) : (
+                "บันทึกการแก้ไข"
+              )}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
             <div className="space-y-2">
               <label className="text-xs text-slate-500" htmlFor="payment-display-name">
                 ชื่อบัญชี (สำหรับแสดงผล)
@@ -944,63 +807,8 @@ export function StorePaymentAccountsSettings({
                 {errorMessage}
               </p>
             ) : null}
-          </div>
-
-          <div className="sticky bottom-0 z-10 border-t border-slate-100 bg-white px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 sm:pb-4">
-            <div className="flex items-center gap-2">
-              {mode === "edit" ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-11 rounded-xl border-red-200 px-4 text-red-600 hover:bg-red-50"
-                  onClick={removeAccount}
-                  disabled={!canUpdate || isSaving || isDeleting}
-                >
-                  {isDeleting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      กำลังลบ...
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="h-4 w-4" />
-                      ลบ
-                    </>
-                  )}
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-11 rounded-xl px-4"
-                  onClick={() => closeSheet()}
-                  disabled={isSaving || isDeleting}
-                >
-                  ยกเลิก
-                </Button>
-              )}
-
-              <Button
-                type="button"
-                className="h-11 min-w-[170px] flex-1 rounded-xl"
-                onClick={saveAccount}
-                disabled={!canUpdate || isSaving || isDeleting}
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    กำลังบันทึก...
-                  </>
-                ) : mode === "create" ? (
-                  "สร้างบัญชี"
-                ) : (
-                  "บันทึกการแก้ไข"
-                )}
-              </Button>
-            </div>
-          </div>
         </div>
-      </div>
+      </SlideUpSheet>
     </section>
   );
 }

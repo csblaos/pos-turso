@@ -2,15 +2,68 @@
 
 ## Snapshot Date
 
-- March 2, 2026
+- March 3, 2026
 
 ## Changed (ล่าสุด)
+
+- ปรับ UX ตะกร้าใน create order (`/orders` และ `/orders/new`):
+  - ปุ่ม `ลบ` ในการ์ดตะกร้าทุกมุมมอง (mobile preview, panel ขวา, cart sheet, และ row editor desktop) ลบได้จนเหลือ `0` รายการแล้ว
+  - การ์ดสินค้าในตะกร้า (panel ขวา + cart sheet) แสดงบรรทัด `คงเหลือ ...` ต่อรายการ เพื่อช่วยตัดสินใจตอนปรับจำนวน
+
+- ปรับพฤติกรรม modal `ชำระเงินและรายละเอียดออเดอร์` ใน create order:
+  - กดนอก modal (backdrop) แล้วจะไม่ปิด
+  - ถ้ากดปิดและมีข้อมูล checkout ที่กรอก/ปรับแล้ว จะขึ้น custom confirm ก่อนปิด
+  - ถ้ายังไม่มีข้อมูล checkout ที่กรอก/ปรับ จะปิดได้ทันทีโดยไม่ขึ้น confirm
+
+- ปรับหัวหน้า `/orders/new` ให้กระชับขึ้น:
+  - เอาการ์ด header ทั้งบล็อกที่มี `step 1-3` และ `สรุปตะกร้า` ออก
+  - ผลลัพธ์คือหน้าเริ่มที่ส่วนค้นหา/สินค้าโดยตรง ทำให้เห็นรายการสินค้าได้เร็วขึ้น
+
+- ปรับ cart panel ฝั่ง tablet/desktop ใน `/orders/new`:
+  - บังคับให้ footer (`ยอดรวม` + ปุ่ม `ถัดไป: ชำระเงิน`) ติดอยู่ด้านล่าง panel ตลอด
+  - รายการสินค้าในตะกร้าจะเป็นส่วนที่ scroll ได้เอง เพื่อลดเคสต้องเลื่อนหน้าลงเพื่อกดชำระเงิน
+  - เสริมความเสถียร sticky rail: ตั้ง `md:items-start` ให้ layout grid และคำนวณ `top`/`height` ของ cart rail แบบไดนามิกจากความสูงจริงของ search sticky (`ResizeObserver`) โดยจูนค่าปัจจุบันเป็น `CREATE_ONLY_CART_STICKY_GAP_FALLBACK_PX=11` และ `CREATE_ONLY_CART_STICKY_EXTRA_TOP_PX=11`
+  - breakpoint sticky ปัจจุบันตั้ง `TABLET_MIN_WIDTH_PX=1200` เท่ากับ `DESKTOP_MIN_WIDTH_PX=1200` แบบ intentional เพื่อให้ tablet/desktop ใช้สูตร sticky เดียวกัน
+  - ปุ่มลัด `ดูตะกร้า` และ sticky checkout bar บนมือถือของ `/orders/new` ปรับ `bottom` เป็น `calc(env(safe-area-inset-bottom) + 0.75rem)` เพื่อให้ติดก้นจอจริงและลดช่องว่างลอยด้านล่าง
+
+- ปรับ UX ตัวกรองสินค้าใน create order ให้เรียบขึ้น:
+  - เอา filter เรียงสินค้า (`แนะนำ`, `ชื่อ A-Z`, `ราคาต่ำ-สูง`, `ราคาสูง-ต่ำ`) ออกจากหน้า `/orders/new`
+  - เอา dropdown `เรียง` ใน quick add POS-lite (หน้า `/orders`) ออกด้วย เพื่อให้ behavior สอดคล้องกัน
+
+- ปรับโครง sticky ของหน้า `/orders/new`:
+  - บล็อกค้นหาด้านบน (search + filter + category chips + scanner helper) ตั้งเป็น sticky ติดบนตลอด และถอดสไตล์การ์ดออกให้เป็น full-width
+  - แถว `ค้นหา + สแกน + filter สต็อก` จัดเป็น 3 คอลัมน์บรรทัดเดียวบนมือถือ และย่อ label filter เป็น `มีสต็อก`/`มีสต็อก✓`
+  - ปรับ sticky search ลงอีกเล็กน้อยเป็น `top-[3.8rem]` ทั้ง mobile/desktop และคง `border-b` ใต้บล็อก เพื่อให้ตำแหน่งบาลานซ์ขึ้น
+  - ดึง container ของหน้า create ขึ้น (`-mt-4`) เพื่อลบช่องว่างระหว่าง navbar กับ search section
+  - cart panel ฝั่ง tablet/desktop ยังคง sticky ขวา และ footer ปุ่มชำระเงินติดล่างเหมือนเดิม
+
+- ปรับ layout contract สำหรับ tablet/desktop ให้สอดคล้องกันทั้ง shell + overlay:
+  - เปลี่ยนเกณฑ์ desktop จาก `>=1024px` เป็น `>=1200px` ใน app shell และ navbar fullscreen logic
+  - app shell หลัก (`(app)` และ `system-admin`) ใช้โหมด tablet (`768-1199px`) แบบเต็มจอพร้อม padding `px-6`, และ desktop (`>=1200px`) แบบ constrained พร้อม padding `px-8`
+  - ปรับความกว้าง desktop shell เป็น `80rem` และเตรียม token โหมดกว้าง `90rem` สำหรับหน้าข้อมูลหนาแน่น
+  - `SlideUpSheet` ปรับพฤติกรรมเป็น 3 ช่วงชัดเจน:
+    - mobile `<768px` = bottom sheet + drag handle
+    - tablet `768-1199px` = centered sheet (`min(45rem, 100vw-2rem)`, `max-h: 92dvh`)
+    - desktop `>=1200px` = centered modal (ใช้ `panelMaxWidthClass` เฉพาะ desktop)
+  - bottom nav ทั้ง app และ system-admin ถูก constrain เฉพาะ desktop (`>=1200px`) เพื่อให้ tablet ใช้งานเต็มความกว้าง
+  - quick inbox threshold ฝั่ง navbar เปลี่ยนตามนิยามใหม่: non-desktop = `<1200px`
+  - phase 2: migrate custom modal/sheet ที่ยังไม่ได้ใช้ `SlideUpSheet` (users, categories, units, store payment accounts, stores management, force-change password modal) ให้เริ่ม centered mode ที่ `>=768px` และใช้ drag/mobile behavior เฉพาะ `<768px` ตาม contract ใหม่
+  - phase 3: ย้าย modal/sheet จาก custom implementation เข้า `SlideUpSheet` กลางครบแล้ว (`/settings/categories`, `/settings/units`, `/settings/store/payments`, `/settings/users`, `/settings/stores`, และ force-change password modal ใน `/login`) โดยคง behavior เดิมของฟอร์ม/validation/API
 
 - ปรับ scanner ของหน้า `/orders` และ `/orders/new` ให้ใช้มาตรฐานเดียวกับหน้าอื่น:
   - ย้ายจาก scanner logic ที่ฝังใน `orders-management.tsx` มาใช้คอมโพเนนต์กลาง `components/app/barcode-scanner-panel.tsx`
   - เพิ่ม permission sheet ก่อนเปิดกล้อง (`ยกเลิก` + `อนุญาตและสแกน`) แบบเดียวกับ `/products` และ `/stock`
   - พฤติกรรมเปิด/ปิดกล้อง, เลือกกล้อง, manual barcode fallback, และ cleanup stream ตอนปิด ถูก unify กับหน้าที่ใช้ scanner อื่น ๆ แล้ว
   - policy สำหรับงานถัดไป: หากเพิ่มปุ่ม `สแกนบาร์โค้ด` ในหน้าใหม่ ให้ใช้ `BarcodeScannerPanel` + permission sheet มาตรฐานเดียวกัน (ไม่แยกเขียน logic กล้องใหม่ในหน้า)
+
+- ปรับค่าเริ่มต้นฟอร์มสร้างออเดอร์ให้ตะกร้าว่าง:
+  - `defaultValues.items` ใน `orders-management.tsx` เปลี่ยนเป็น `[]` (ไม่ preload สินค้าตัวแรกอัตโนมัติ)
+  - มีผลทั้ง `สร้างด่วน` ในหน้า `/orders` และหน้า `/orders/new`
+
+- เพิ่ม draft persistence ให้หน้า `/orders/new`:
+  - บันทึก draft create order (ตะกร้า + checkout fields + checkout flow) ลง `sessionStorage` ระหว่างผู้ใช้กรอกฟอร์ม
+  - ถ้า refresh หน้า `/orders/new` จะกู้คืน draft ล่าสุดอัตโนมัติ (TTL 60 นาที)
+  - ถ้ากดยืนยันออกจากหน้า create order ผ่านปุ่ม back (`กลับรายการออเดอร์`) หรือ logout ระบบจะล้าง draft ทิ้งทันที
 
 - เพิ่มหน้าใหม่ `/orders/new` สำหรับสร้างออเดอร์แบบหน้าเต็ม (full create flow):
   - หน้า `/orders` ปรับบทบาทเป็น “จัดการออเดอร์” และแยก action เป็น 2 แบบ: `สร้างด่วน` (modal เดิม) กับ `สร้างออเดอร์` (ไป `/orders/new`)
@@ -19,7 +72,13 @@
   - เพิ่มความกว้าง app shell บน desktop จาก `70rem` เป็น `76rem` เพื่อให้หน้า POS/หน้าจัดการข้อมูลมีพื้นที่ใช้งานมากขึ้น
   - product card รองรับรูปย่อสินค้า (`imageUrl`) พร้อม fallback placeholder
   - ย่อ product card ในหน้า `/orders/new` ให้ compact ขึ้นบนมือถือ (ลด padding/ขนาดรูป/ขนาดตัวอักษรเล็กน้อย) เพื่อเพิ่มจำนวนสินค้าที่เห็นต่อจอ
-  - product picker รองรับ `ค้นหา + สแกนบาร์โค้ด + category chips + filter เฉพาะมีสต็อก + sort`
+  - product picker รองรับ `ค้นหา + สแกนบาร์โค้ด + category chips + filter เฉพาะมีสต็อก`
+  - เอา sidebar `เลือกหมวดเร็ว` ออกจาก layout หน้า `/orders/new` (desktop) เพื่อไม่ซ้ำกับ category chips ที่อยู่ใต้ search
+  - ปรับการ์ดรายการในตะกร้าให้ minimal ทั้ง panel ด้านขวาและ cart sheet: ตัดข้อมูลรอง (SKU/คงเหลือ) และลดขนาดแถวให้โฟกัสที่ `หน่วย + จำนวน +/- + ยอด`
+  - แก้ความกว้างช่อง `select หน่วย` ในตะกร้าให้เท่ากันทุกแถว โดย lock ความกว้างคอลัมน์ยอดบรรทัด (ลดอาการ select แกว่งตามจำนวนหลักของราคา)
+  - เพิ่ม stock guard ฝั่ง UI ใน create order:
+    - ถ้า `available <= 0` ปุ่มเพิ่มสินค้าจาก product card จะ disabled และแสดงสถานะ `หมดสต็อก/ติดจอง`
+    - ปุ่ม `+` ในตะกร้าเพิ่มจำนวนได้ไม่เกิน `available` เท่านั้น (รวมเคสเหลือ 1 ชิ้นเพิ่มได้สูงสุด 1)
   - checkout เพิ่มตัวเลือก `ประเภทออเดอร์` 3 แบบ: `Walk-in ทันที` / `มารับที่ร้านภายหลัง` / `สั่งออนไลน์/จัดส่ง`
   - ฟอร์ม checkout แสดง field แบบ dynamic ตามประเภทออเดอร์ (เช่น ช่องทาง+ลูกค้า+ที่อยู่จะแสดงเฉพาะ flow ออนไลน์)
   - validation ฝั่ง client ตาม flow: `มารับที่ร้านภายหลัง` ต้องมีเบอร์โทร, `สั่งออนไลน์/จัดส่ง` ต้องมีที่อยู่จัดส่ง และเปิด `COD` เฉพาะ flow ออนไลน์
@@ -27,10 +86,17 @@
   - ฝั่ง API `PATCH /api/orders/[orderId]` เปิดให้ `confirm_paid`/`submit_payment_slip` ใช้ได้กับสถานะ `READY_FOR_PICKUP` และการ `cancel` จากสถานะนี้จะปล่อยจองสต็อก (`RELEASE`) กลับ
   - ผู้ใช้เลือกสินค้าในหน้า POS ก่อน แล้วกด `ชำระเงิน / กรอกรายละเอียด` เพื่อเปิด Checkout sheet (ลูกค้า/ชำระเงิน/ที่อยู่)
   - sticky action bar บนมือถือปรับเป็น summary + ปุ่มลัด `แก้ตะกร้า` และปุ่มหลักเดียว `ถัดไป: ชำระเงิน` เพื่อให้ flow checkout ง่ายขึ้น
+  - รีดีไซน์ `/orders/new` รอบล่าสุดเป็น `Scan-First POS`:
+    - Desktop (`>=1200px`) เป็น 3 คอลัมน์ (`หมวด/ทางลัด`, `สินค้า`, `ตะกร้า`)
+    - Tablet (`768-1199px`) เป็น 2 คอลัมน์ (`สินค้า`, `ตะกร้า`)
+    - Mobile (`<768px`) คง 1 คอลัมน์ + sticky checkout bar
+  - เพิ่ม step indicator 3 ขั้นด้านบน (`เพิ่มสินค้า`, `ตรวจตะกร้า`, `ชำระเงิน`) เพื่อให้เห็น progress ชัดเจนขึ้นระหว่างทำรายการ
+  - ตะกร้าใน tablet/desktop ปรับเป็น inline editor ที่แผงขวา (แก้หน่วย, ปรับจำนวน, ลบสินค้า) ลดการสลับเข้าออก sheet ระหว่างคิดบิล
+  - ปุ่ม `สแกนบาร์โค้ด` บนแถบค้นหา `/orders/new` เปลี่ยนจากข้อความเป็น icon-only button พร้อม `aria-label` และ `title`
   - Cart sheet มี action ต่อไป Checkout ได้ทันที และยังกลับไปเลือกสินค้าได้
   - เพิ่ม guard permission ในหน้าใหม่: ถ้าไม่มี `orders.view` จะไม่ให้เข้า และถ้าไม่มี `orders.create` จะเห็นข้อความไม่มีสิทธิ์สร้าง
   - ซ่อน bottom tab navigation อัตโนมัติเมื่ออยู่หน้า `/orders/new` และลดความสูงจองพื้นที่ nav เพื่อให้โหมด create บนมือถือโฟกัสมากขึ้น
-  - ปุ่ม back บน navbar สำหรับหน้า `/orders/new` เปลี่ยน label เป็น `กลับรายการออเดอร์` และมี confirm ก่อนออกเมื่อมี draft ค้าง
+  - ปุ่ม back บน navbar สำหรับหน้า `/orders/new` เปลี่ยน label เป็น `กลับรายการออเดอร์` และใช้ custom confirm dialog ก่อนออกเมื่อมี draft ค้าง (แทน browser confirm)
   - ถอดลิงก์ `กลับไปหน้ารายการขาย` ด้านล่างหน้าออก เพื่อลดปุ่มซ้ำและให้ผู้ใช้ใช้ปุ่ม back ใน navbar เป็นทางหลัก
   - checkout sheet ปรับให้ flow กระชับขึ้นโดยตัดปุ่ม `เปิดตะกร้า` ใน step รายละเอียดออก (คงปุ่มกลับไปเลือกสินค้า)
   - เพิ่ม fallback ชื่อลูกค้าอัตโนมัติทั้งฝั่ง client+API เมื่อไม่กรอกชื่อ (`ลูกค้าหน้าร้าน` / `ลูกค้าออนไลน์`)

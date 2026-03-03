@@ -11,7 +11,7 @@ type SlideUpSheetProps = {
   description?: string;
   children: ReactNode;
   footer?: ReactNode;
-  /** Optional max-width class for sheet panel (default: max-w-2xl). */
+  /** Optional desktop max-width class (default: min-[1200px]:max-w-2xl). */
   panelMaxWidthClass?: string;
   /** Allow closing when clicking backdrop (default: true). */
   closeOnBackdrop?: boolean;
@@ -38,7 +38,7 @@ export function SlideUpSheet({
   description,
   children,
   footer,
-  panelMaxWidthClass = "max-w-2xl",
+  panelMaxWidthClass = "min-[1200px]:max-w-2xl",
   closeOnBackdrop = true,
   disabled = false,
 }: SlideUpSheetProps) {
@@ -213,7 +213,7 @@ export function SlideUpSheet({
   // ── Touch drag handlers (mobile swipe-to-close) ──
   const handleTouchStart = (event: React.TouchEvent) => {
     if (disabled) return;
-    if (window.matchMedia("(min-width: 640px)").matches) return;
+    if (window.matchMedia("(min-width: 768px)").matches) return;
     const target = event.target;
     if (
       target instanceof HTMLElement &&
@@ -327,18 +327,18 @@ export function SlideUpSheet({
 
       {/* Sheet panel */}
       <div
-        className={`absolute inset-x-0 bottom-0 mx-auto flex max-h-[92dvh] w-full ${panelMaxWidthClass} flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-h-[90dvh] sm:w-full sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl ${
+        className={`absolute inset-x-0 bottom-0 mx-auto flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl md:inset-auto md:left-1/2 md:top-1/2 md:w-[min(45rem,calc(100vw-2rem))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl min-[1200px]:max-h-[90dvh] min-[1200px]:w-full ${panelMaxWidthClass} ${
           isDragging ? "transition-none" : "transition-all duration-300 ease-out"
         } ${
           isOpen
             ? "translate-y-0 opacity-100"
-            : "translate-y-full opacity-0 sm:-translate-x-1/2 sm:-translate-y-[42%]"
+            : "translate-y-full opacity-0 md:-translate-x-1/2 md:-translate-y-[42%]"
         }`}
         style={sheetTranslateStyle}
       >
         {/* Drag handle (mobile only) */}
         <div
-          className="flex touch-none justify-center pt-2 sm:hidden"
+          className="flex touch-none justify-center pt-2 md:hidden"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -349,7 +349,7 @@ export function SlideUpSheet({
 
         {/* Header */}
         <div
-          className="shrink-0 flex touch-none items-center justify-between border-b border-slate-100 px-4 py-3 sm:touch-auto"
+          className="shrink-0 flex touch-none items-center justify-between border-b border-slate-100 px-4 py-3 md:touch-auto"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}

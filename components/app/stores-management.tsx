@@ -1,6 +1,6 @@
 "use client";
 
-import { type TouchEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRightLeft,
@@ -15,10 +15,10 @@ import {
   Store,
   UtensilsCrossed,
   Warehouse,
-  X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch, setClientAuthToken } from "@/lib/auth/client-token";
 import {
   formatLaosAddress,
@@ -290,36 +290,9 @@ export function StoresManagement({
   const [branchCreateStep, setBranchCreateStep] = useState<BranchCreateStep>(1);
   const [branchFieldErrors, setBranchFieldErrors] = useState<BranchFieldErrors>({});
   const [isCreateBranchSheetOpen, setIsCreateBranchSheetOpen] = useState(false);
-  const [isCreateBranchSheetDragging, setIsCreateBranchSheetDragging] = useState(false);
-  const [createBranchSheetDragY, setCreateBranchSheetDragY] = useState(0);
   const [isBranchAdvancedOpen, setIsBranchAdvancedOpen] = useState(false);
   const [switchToCreatedBranch, setSwitchToCreatedBranch] = useState(false);
   const [isCreateStoreSheetOpen, setIsCreateStoreSheetOpen] = useState(false);
-  const [isCreateStoreSheetDragging, setIsCreateStoreSheetDragging] = useState(false);
-  const [createStoreSheetDragY, setCreateStoreSheetDragY] = useState(0);
-  const [isDesktopViewport, setIsDesktopViewport] = useState(false);
-  const createBranchSheetStartYRef = useRef<number | null>(null);
-  const createBranchSheetCanDragRef = useRef(false);
-  const createBranchSheetScrollYRef = useRef(0);
-  const createBranchSheetBodyStyleRef = useRef<{
-    position: string;
-    top: string;
-    left: string;
-    right: string;
-    width: string;
-    overflow: string;
-  } | null>(null);
-  const createStoreSheetStartYRef = useRef<number | null>(null);
-  const createStoreSheetCanDragRef = useRef(false);
-  const createStoreSheetScrollYRef = useRef(0);
-  const createStoreSheetBodyStyleRef = useRef<{
-    position: string;
-    top: string;
-    left: string;
-    right: string;
-    width: string;
-    overflow: string;
-  } | null>(null);
 
   const activeStore = useMemo(
     () => memberships.find((item) => item.storeId === activeStoreId) ?? null,
@@ -602,119 +575,6 @@ export function StoresManagement({
   }, [branchSharingMode, branchSourceBranchId, branches, mainBranch]);
 
   useEffect(() => {
-    if (!isCreateBranchSheetOpen) {
-      return;
-    }
-
-    const body = document.body;
-    createBranchSheetScrollYRef.current = window.scrollY;
-    createBranchSheetBodyStyleRef.current = {
-      position: body.style.position,
-      top: body.style.top,
-      left: body.style.left,
-      right: body.style.right,
-      width: body.style.width,
-      overflow: body.style.overflow,
-    };
-
-    body.style.position = "fixed";
-    body.style.top = `-${createBranchSheetScrollYRef.current}px`;
-    body.style.left = "0";
-    body.style.right = "0";
-    body.style.width = "100%";
-    body.style.overflow = "hidden";
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || loadingKey === "create-branch") {
-        return;
-      }
-      setCreateBranchSheetDragY(0);
-      setIsCreateBranchSheetDragging(false);
-      createBranchSheetStartYRef.current = null;
-      createBranchSheetCanDragRef.current = false;
-      setIsCreateBranchSheetOpen(false);
-    };
-
-    window.addEventListener("keydown", handleEscape);
-    return () => {
-      window.removeEventListener("keydown", handleEscape);
-      const previousBodyStyle = createBranchSheetBodyStyleRef.current;
-      if (previousBodyStyle) {
-        body.style.position = previousBodyStyle.position;
-        body.style.top = previousBodyStyle.top;
-        body.style.left = previousBodyStyle.left;
-        body.style.right = previousBodyStyle.right;
-        body.style.width = previousBodyStyle.width;
-        body.style.overflow = previousBodyStyle.overflow;
-      }
-      window.scrollTo(0, createBranchSheetScrollYRef.current);
-    };
-  }, [isCreateBranchSheetOpen, loadingKey]);
-
-  useEffect(() => {
-    if (!isCreateStoreSheetOpen) {
-      return;
-    }
-
-    const body = document.body;
-    createStoreSheetScrollYRef.current = window.scrollY;
-    createStoreSheetBodyStyleRef.current = {
-      position: body.style.position,
-      top: body.style.top,
-      left: body.style.left,
-      right: body.style.right,
-      width: body.style.width,
-      overflow: body.style.overflow,
-    };
-
-    body.style.position = "fixed";
-    body.style.top = `-${createStoreSheetScrollYRef.current}px`;
-    body.style.left = "0";
-    body.style.right = "0";
-    body.style.width = "100%";
-    body.style.overflow = "hidden";
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || loadingKey === "create-store") {
-        return;
-      }
-      setCreateStoreSheetDragY(0);
-      setIsCreateStoreSheetDragging(false);
-      createStoreSheetStartYRef.current = null;
-      createStoreSheetCanDragRef.current = false;
-      setIsCreateStoreSheetOpen(false);
-    };
-
-    window.addEventListener("keydown", handleEscape);
-    return () => {
-      window.removeEventListener("keydown", handleEscape);
-      const previousBodyStyle = createStoreSheetBodyStyleRef.current;
-      if (previousBodyStyle) {
-        body.style.position = previousBodyStyle.position;
-        body.style.top = previousBodyStyle.top;
-        body.style.left = previousBodyStyle.left;
-        body.style.right = previousBodyStyle.right;
-        body.style.width = previousBodyStyle.width;
-        body.style.overflow = previousBodyStyle.overflow;
-      }
-      window.scrollTo(0, createStoreSheetScrollYRef.current);
-    };
-  }, [isCreateStoreSheetOpen, loadingKey]);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(min-width: 640px)");
-    const applyViewportState = () => {
-      setIsDesktopViewport(mediaQuery.matches);
-    };
-
-    applyViewportState();
-    mediaQuery.addEventListener("change", applyViewportState);
-    return () => {
-      mediaQuery.removeEventListener("change", applyViewportState);
-    };
-  }, []);
-
-  useEffect(() => {
     setBranchCreateStep(1);
     setBranchFieldErrors({});
     setBranchName("");
@@ -726,10 +586,6 @@ export function StoresManagement({
     setIsBranchAdvancedOpen(false);
     setSwitchToCreatedBranch(false);
     setIsCreateBranchSheetOpen(false);
-    setCreateBranchSheetDragY(0);
-    setIsCreateBranchSheetDragging(false);
-    createBranchSheetStartYRef.current = null;
-    createBranchSheetCanDragRef.current = false;
   }, [activeStoreId]);
 
   const clearBranchFieldError = (field: keyof BranchFieldErrors) => {
@@ -904,10 +760,6 @@ export function StoresManagement({
     setBranchFieldErrors({});
     setIsBranchAdvancedOpen(false);
     setIsCreateBranchSheetOpen(false);
-    setCreateBranchSheetDragY(0);
-    setIsCreateBranchSheetDragging(false);
-    createBranchSheetStartYRef.current = null;
-    createBranchSheetCanDragRef.current = false;
     setSuccessMessage("สร้างสาขาเรียบร้อยแล้ว");
     setLoadingKey(null);
 
@@ -944,148 +796,15 @@ export function StoresManagement({
     if (loadingKey === "create-branch") {
       return;
     }
-    setCreateBranchSheetDragY(0);
-    setIsCreateBranchSheetDragging(false);
-    createBranchSheetStartYRef.current = null;
-    createBranchSheetCanDragRef.current = false;
     setIsCreateBranchSheetOpen(false);
-  };
-
-  const resetCreateBranchSheetDrag = () => {
-    setCreateBranchSheetDragY(0);
-    setIsCreateBranchSheetDragging(false);
-    createBranchSheetStartYRef.current = null;
-    createBranchSheetCanDragRef.current = false;
-  };
-
-  const handleCreateBranchSheetTouchStart = (event: TouchEvent<HTMLDivElement>) => {
-    if (!isCreateBranchSheetOpen || loadingKey === "create-branch" || isDesktopViewport) {
-      return;
-    }
-
-    createBranchSheetCanDragRef.current = true;
-    createBranchSheetStartYRef.current = event.touches[0]?.clientY ?? null;
-    setCreateBranchSheetDragY(0);
-    setIsCreateBranchSheetDragging(false);
-  };
-
-  const handleCreateBranchSheetTouchMove = (event: TouchEvent<HTMLDivElement>) => {
-    if (isDesktopViewport || !createBranchSheetCanDragRef.current || createBranchSheetStartYRef.current === null) {
-      return;
-    }
-
-    const currentY = event.touches[0]?.clientY;
-    if (typeof currentY !== "number") {
-      return;
-    }
-
-    const deltaY = Math.max(0, currentY - createBranchSheetStartYRef.current);
-    if (deltaY <= 0) {
-      return;
-    }
-
-    setIsCreateBranchSheetDragging(true);
-    setCreateBranchSheetDragY(deltaY);
-    event.preventDefault();
-  };
-
-  const handleCreateBranchSheetTouchEnd = () => {
-    if (isDesktopViewport) {
-      return;
-    }
-
-    if (!createBranchSheetCanDragRef.current && createBranchSheetStartYRef.current === null) {
-      return;
-    }
-
-    const shouldClose = createBranchSheetDragY > 120;
-    if (shouldClose) {
-      closeCreateBranchSheet();
-      return;
-    }
-
-    resetCreateBranchSheetDrag();
   };
 
   const closeCreateStoreSheet = () => {
     if (loadingKey === "create-store") {
       return;
     }
-    setCreateStoreSheetDragY(0);
-    setIsCreateStoreSheetDragging(false);
-    createStoreSheetStartYRef.current = null;
-    createStoreSheetCanDragRef.current = false;
     setIsCreateStoreSheetOpen(false);
   };
-
-  const resetCreateStoreSheetDrag = () => {
-    setCreateStoreSheetDragY(0);
-    setIsCreateStoreSheetDragging(false);
-    createStoreSheetStartYRef.current = null;
-    createStoreSheetCanDragRef.current = false;
-  };
-
-  const handleCreateStoreSheetTouchStart = (event: TouchEvent<HTMLDivElement>) => {
-    if (!isCreateStoreSheetOpen || loadingKey === "create-store" || isDesktopViewport) {
-      return;
-    }
-
-    createStoreSheetCanDragRef.current = true;
-    createStoreSheetStartYRef.current = event.touches[0]?.clientY ?? null;
-    setCreateStoreSheetDragY(0);
-    setIsCreateStoreSheetDragging(false);
-  };
-
-  const handleCreateStoreSheetTouchMove = (event: TouchEvent<HTMLDivElement>) => {
-    if (isDesktopViewport || !createStoreSheetCanDragRef.current || createStoreSheetStartYRef.current === null) {
-      return;
-    }
-
-    const currentY = event.touches[0]?.clientY;
-    if (typeof currentY !== "number") {
-      return;
-    }
-
-    const deltaY = Math.max(0, currentY - createStoreSheetStartYRef.current);
-    if (deltaY <= 0) {
-      return;
-    }
-
-    setIsCreateStoreSheetDragging(true);
-    setCreateStoreSheetDragY(deltaY);
-    event.preventDefault();
-  };
-
-  const handleCreateStoreSheetTouchEnd = () => {
-    if (isDesktopViewport) {
-      return;
-    }
-
-    if (!createStoreSheetCanDragRef.current && createStoreSheetStartYRef.current === null) {
-      return;
-    }
-
-    const shouldClose = createStoreSheetDragY > 120;
-    if (shouldClose) {
-      closeCreateStoreSheet();
-      return;
-    }
-
-    resetCreateStoreSheetDrag();
-  };
-
-  const createBranchSheetBackdropOpacity = isCreateBranchSheetOpen
-    ? Math.max(0, 1 - Math.min(createBranchSheetDragY / 220, 1) * 0.55)
-    : 0;
-  const createBranchSheetInlineStyle =
-    isCreateBranchSheetOpen && !isDesktopViewport
-      ? { transform: `translateY(${createBranchSheetDragY}px)` }
-      : undefined;
-  const createStoreSheetBackdropOpacity = isCreateStoreSheetOpen
-    ? Math.max(0, 1 - Math.min(createStoreSheetDragY / 220, 1) * 0.55)
-    : 0;
-  const createStoreSheetInlineStyle =
-    isCreateStoreSheetOpen && !isDesktopViewport ? { transform: `translateY(${createStoreSheetDragY}px)` } : undefined;
 
   return (
     <section className="space-y-5">
@@ -1340,58 +1059,45 @@ export function StoresManagement({
       ) : null}
 
       {showBranchManagePanel ? (
-      <div
-        className={`fixed inset-0 z-50 ${isCreateBranchSheetOpen ? "" : "pointer-events-none"}`}
-        aria-hidden={!isCreateBranchSheetOpen}
-      >
-        <button
-          type="button"
-          aria-label="ปิดหน้าต่างสร้างสาขาใหม่"
-          className={`absolute inset-0 bg-slate-900/45 backdrop-blur-[1px] transition-opacity duration-200 ${
-            isCreateBranchSheetOpen ? "opacity-100" : "opacity-0"
-          }`}
-          style={{ opacity: createBranchSheetBackdropOpacity }}
-          onClick={closeCreateBranchSheet}
+        <SlideUpSheet
+          isOpen={isCreateBranchSheetOpen}
+          onClose={closeCreateBranchSheet}
+          title="สร้างสาขาใหม่"
+          description="3 ขั้นตอน: ข้อมูลสาขา, รูปแบบสาขา, ตรวจสอบและสร้าง"
+          panelMaxWidthClass="min-[1200px]:max-w-2xl"
           disabled={loadingKey === "create-branch"}
-        />
-        <div
-          className={`absolute inset-x-0 bottom-0 mx-auto flex w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-h-[90dvh] sm:w-full sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl ${
-            isCreateBranchSheetDragging && !isDesktopViewport
-              ? "transition-none"
-              : "transition-all duration-300 ease-out"
-          } ${
-            isCreateBranchSheetOpen
-              ? "translate-y-0 opacity-100"
-              : "translate-y-full opacity-0 sm:-translate-x-1/2 sm:-translate-y-[42%]"
-          }`}
-          style={createBranchSheetInlineStyle}
+          footer={
+            <>
+              {branchPolicy && !branchPolicy.effectiveCanCreateBranches ? (
+                <p className="mb-2 text-sm text-red-600">บัญชีนี้ยังไม่ได้รับสิทธิ์สร้างสาขา</p>
+              ) : null}
+              <div className="flex items-center justify-between gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 px-4"
+                  onClick={branchCreateStep === 1 ? closeCreateBranchSheet : moveBranchStepBackward}
+                  disabled={loadingKey !== null}
+                >
+                  {branchCreateStep === 1 ? "ยกเลิก" : "ย้อนกลับ"}
+                </Button>
+                <Button
+                  type="button"
+                  className="h-10 min-w-[9rem] px-4"
+                  onClick={moveBranchStepForward}
+                  disabled={loadingKey !== null || !canCreateBranch}
+                >
+                  {branchCreateStep === 3
+                    ? loadingKey === "create-branch"
+                      ? "กำลังสร้างสาขา..."
+                      : "สร้างสาขา"
+                    : "ถัดไป"}
+                </Button>
+              </div>
+            </>
+          }
         >
-          <div
-            className="flex touch-none justify-center pt-2 sm:hidden"
-            onTouchStart={handleCreateBranchSheetTouchStart}
-            onTouchMove={handleCreateBranchSheetTouchMove}
-            onTouchEnd={handleCreateBranchSheetTouchEnd}
-            onTouchCancel={handleCreateBranchSheetTouchEnd}
-          >
-            <span className="h-1.5 w-12 rounded-full bg-slate-300" />
-          </div>
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">สร้างสาขาใหม่</p>
-              <p className="mt-0.5 text-xs text-slate-500">3 ขั้นตอน: ข้อมูลสาขา, รูปแบบสาขา, ตรวจสอบและสร้าง</p>
-            </div>
-            <button
-              type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600"
-              onClick={closeCreateBranchSheet}
-              disabled={loadingKey === "create-branch"}
-              aria-label="ปิด"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="max-h-[82dvh] space-y-4 overflow-y-auto px-4 pb-4 pt-0">
+          <div className="space-y-4">
             <div className="sticky top-0 z-10 -mx-4 border-b border-slate-100 bg-white/95 px-4 py-3 backdrop-blur">
               <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
                 <div className="relative">
@@ -1709,92 +1415,39 @@ export function StoresManagement({
               </div>
             ) : null}
           </div>
+        </SlideUpSheet>
+      ) : null}
 
-          <div className="border-t border-slate-100 bg-white px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
-            {branchPolicy && !branchPolicy.effectiveCanCreateBranches ? (
-              <p className="mb-2 text-sm text-red-600">บัญชีนี้ยังไม่ได้รับสิทธิ์สร้างสาขา</p>
-            ) : null}
+      {showStoreCreatePanel ? (
+        <SlideUpSheet
+          isOpen={isCreateStoreSheetOpen}
+          onClose={closeCreateStoreSheet}
+          title="สร้างร้านใหม่"
+          description="กรอกข้อมูลร้านแล้วกดยืนยันการสร้าง"
+          panelMaxWidthClass="min-[1200px]:max-w-md"
+          disabled={loadingKey === "create-store"}
+          footer={
             <div className="flex items-center justify-between gap-2">
               <Button
                 type="button"
                 variant="outline"
                 className="h-10 px-4"
-                onClick={branchCreateStep === 1 ? closeCreateBranchSheet : moveBranchStepBackward}
-                disabled={loadingKey !== null}
+                onClick={closeCreateStoreSheet}
+                disabled={loadingKey === "create-store"}
               >
-                {branchCreateStep === 1 ? "ยกเลิก" : "ย้อนกลับ"}
+                ยกเลิก
               </Button>
               <Button
-                type="button"
                 className="h-10 min-w-[9rem] px-4"
-                onClick={moveBranchStepForward}
-                disabled={loadingKey !== null || !canCreateBranch}
+                onClick={createStore}
+                disabled={loadingKey !== null || !canCreateStore}
               >
-                {branchCreateStep === 3
-                  ? loadingKey === "create-branch"
-                    ? "กำลังสร้างสาขา..."
-                    : "สร้างสาขา"
-                  : "ถัดไป"}
+                {loadingKey === "create-store" ? "กำลังสร้างร้าน..." : "ยืนยันสร้างร้าน"}
               </Button>
             </div>
-          </div>
-        </div>
-      </div>
-      ) : null}
-
-      {showStoreCreatePanel ? (
-      <div
-        className={`fixed inset-0 z-50 ${isCreateStoreSheetOpen ? "" : "pointer-events-none"}`}
-        aria-hidden={!isCreateStoreSheetOpen}
-      >
-        <button
-          type="button"
-          aria-label="ปิดหน้าต่างสร้างร้านใหม่"
-          className={`absolute inset-0 bg-slate-900/45 backdrop-blur-[1px] transition-opacity duration-200 ${
-            isCreateStoreSheetOpen ? "opacity-100" : "opacity-0"
-          }`}
-          style={{ opacity: createStoreSheetBackdropOpacity }}
-          onClick={closeCreateStoreSheet}
-          disabled={loadingKey === "create-store"}
-        />
-        <div
-          className={`absolute inset-x-0 bottom-0 mx-auto flex w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl ${
-            isCreateStoreSheetDragging && !isDesktopViewport
-              ? "transition-none"
-              : "transition-all duration-300 ease-out"
-          } ${
-            isCreateStoreSheetOpen
-              ? "translate-y-0 opacity-100"
-              : "translate-y-full opacity-0 sm:-translate-x-1/2 sm:-translate-y-[42%]"
-          }`}
-          style={createStoreSheetInlineStyle}
+          }
         >
-          <div
-            className="flex touch-none justify-center pt-2 sm:hidden"
-            onTouchStart={handleCreateStoreSheetTouchStart}
-            onTouchMove={handleCreateStoreSheetTouchMove}
-            onTouchEnd={handleCreateStoreSheetTouchEnd}
-            onTouchCancel={handleCreateStoreSheetTouchEnd}
-          >
-            <span className="h-1.5 w-12 rounded-full bg-slate-300" />
-          </div>
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">สร้างร้านใหม่</p>
-              <p className="mt-0.5 text-xs text-slate-500">กรอกข้อมูลร้านแล้วกดยืนยันการสร้าง</p>
-            </div>
-            <button
-              type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600"
-              onClick={closeCreateStoreSheet}
-              disabled={loadingKey === "create-store"}
-              aria-label="ปิด"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="max-h-[82dvh] flex-1 space-y-3 overflow-y-auto px-4 pb-4 pt-4">
+          <div className="space-y-3">
             <div className="space-y-1.5">
               <p className="text-xs text-slate-500">ประเภทร้าน</p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label="ประเภทร้าน">
@@ -1922,28 +1575,7 @@ export function StoresManagement({
               ค่าเริ่มต้นหลังสร้างร้าน: สกุลเงิน LAK และปิด VAT (7.00%) ปรับได้ภายหลังที่หน้าข้อมูลร้าน
             </p>
           </div>
-          <div className="border-t border-slate-100 bg-white px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
-            <div className="flex items-center justify-between gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 px-4"
-                onClick={closeCreateStoreSheet}
-                disabled={loadingKey === "create-store"}
-              >
-                ยกเลิก
-              </Button>
-              <Button
-                className="h-10 min-w-[9rem] px-4"
-                onClick={createStore}
-                disabled={loadingKey !== null || !canCreateStore}
-              >
-                {loadingKey === "create-store" ? "กำลังสร้างร้าน..." : "ยืนยันสร้างร้าน"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
+        </SlideUpSheet>
       ) : null}
 
       {successMessage ? (

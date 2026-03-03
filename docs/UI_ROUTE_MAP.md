@@ -6,7 +6,7 @@
 
 - หน้าแบบ server component บางหน้า query DB ตรงใน server action/query layer โดยไม่ยิง `/api/*`
 - ตารางนี้เน้น flow หลักที่มีการเรียก API จากฝั่ง UI โดยตรง
-- global header (`components/app/app-top-nav.tsx`) มี quick notification inbox (bell) เรียก `GET/PATCH /api/settings/notifications/inbox` และมีลิงก์ไป `/settings/notifications`; desktop ใช้ anchored popover, ส่วนจอ non-desktop (`<1024px`) ใช้ fixed-centered popover + จำกัดความสูง `~68dvh`
+- global header (`components/app/app-top-nav.tsx`) มี quick notification inbox (bell) เรียก `GET/PATCH /api/settings/notifications/inbox` และมีลิงก์ไป `/settings/notifications`; desktop ใช้ anchored popover, ส่วนจอ non-desktop (`<1200px`) ใช้ fixed-centered popover + จำกัดความสูง `~68dvh`
 - หน้า `/stock?tab=purchase` ใช้ workspace switcher ในหน้าเดียว (`PO Operations` / `Month-End Close` / `AP by Supplier`) เป็นบล็อกนำทางแยกจาก KPI โดย reuse API เดิมทั้งหมด และจำโหมดล่าสุดผ่าน query `workspace` + localStorage; KPI strip (`Open PO`, `Pending Rate`, `Overdue AP`, `Outstanding`) เป็น summary-only (ไม่คลิก), ส่วน shortcut ใช้ saved preset ต่อผู้ใช้ (localStorage) และ sync filter ลง URL (`poStatus`, `due`, `payment`, `sort`) โดย `PO Operations` ใช้ default filter เป็น `OPEN`
 
 ## Dashboard

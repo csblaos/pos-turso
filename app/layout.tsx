@@ -34,7 +34,7 @@ export default function RootLayout({
   return (
     <html lang="th">
       <body className="bg-white font-sans antialiased">
-        <div className="min-h-dvh bg-white lg:px-4">{children}</div>
+        <div className="min-h-dvh bg-white min-[1200px]:px-4">{children}</div>
         <AppToaster />
         {showPerfVitals ? <ClientPerfVitals /> : null}
       </body>

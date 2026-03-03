@@ -1,12 +1,13 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
+import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { clearClientAuthToken, setClientAuthToken } from "@/lib/auth/client-token";
 
 const loginSchema = z.object({
@@ -293,94 +294,81 @@ export function LoginForm() {
         </section>
       </form>
 
-      <div className={`fixed inset-0 z-50 ${isForceChangeOpen ? "" : "pointer-events-none"}`} aria-hidden={!isForceChangeOpen}>
-        <button
-          type="button"
-          className={`absolute inset-0 bg-slate-900/40 transition-opacity duration-200 ${isForceChangeOpen ? "opacity-100" : "opacity-0"}`}
-          onClick={closeForceChangeModal}
-          disabled={isForceChanging}
-          aria-label="ปิดหน้าต่างเปลี่ยนรหัสผ่าน"
-        />
-        <div
-          className={`absolute inset-x-0 bottom-0 max-h-[88dvh] overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl transition-all duration-300 ease-out sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-md sm:rounded-2xl ${
-            isForceChangeOpen
-              ? "translate-y-0 opacity-100 sm:-translate-x-1/2 sm:-translate-y-1/2"
-              : "translate-y-full opacity-0 sm:-translate-x-1/2 sm:-translate-y-[42%]"
-          }`}
-        >
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">ตั้งรหัสผ่านใหม่ก่อนใช้งาน</p>
-              <p className="mt-0.5 text-xs text-slate-500">{forceChangeEmail}</p>
-            </div>
-            <button
+      <SlideUpSheet
+        isOpen={isForceChangeOpen}
+        onClose={closeForceChangeModal}
+        title="ตั้งรหัสผ่านใหม่ก่อนใช้งาน"
+        description={forceChangeEmail}
+        panelMaxWidthClass="min-[1200px]:max-w-md"
+        disabled={isForceChanging}
+      >
+        <div className="space-y-3">
+          <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            รหัสผ่านปัจจุบันเป็นรหัสชั่วคราว กรุณาตั้งรหัสใหม่เพื่อเข้าใช้งานระบบ
+          </p>
+
+          <div className="space-y-1.5">
+            <label className="text-xs text-slate-500" htmlFor="force-change-password">
+              รหัสผ่านใหม่
+            </label>
+            <input
+              id="force-change-password"
+              type="password"
+              value={forceChangePassword}
+              onChange={(event) => setForceChangePassword(event.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none ring-primary focus:ring-2"
+              disabled={isForceChanging}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs text-slate-500" htmlFor="force-change-confirm-password">
+              ยืนยันรหัสผ่านใหม่
+            </label>
+            <input
+              id="force-change-confirm-password"
+              type="password"
+              value={forceChangeConfirmPassword}
+              onChange={(event) => setForceChangeConfirmPassword(event.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none ring-primary focus:ring-2"
+              disabled={isForceChanging}
+            />
+          </div>
+
+          {forceChangeError ? (
+            <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {forceChangeError}
+            </p>
+          ) : null}
+
+          <div className="grid grid-cols-2 gap-2">
+            <Button
               type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600"
+              variant="outline"
+              className="h-10 rounded-xl"
               onClick={closeForceChangeModal}
               disabled={isForceChanging}
-              aria-label="ปิด"
             >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="space-y-3 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 sm:pb-4">
-            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-              รหัสผ่านปัจจุบันเป็นรหัสชั่วคราว กรุณาตั้งรหัสใหม่เพื่อเข้าใช้งานระบบ
-            </p>
-
-            <div className="space-y-1.5">
-              <label className="text-xs text-slate-500" htmlFor="force-change-password">
-                รหัสผ่านใหม่
-              </label>
-              <input
-                id="force-change-password"
-                type="password"
-                value={forceChangePassword}
-                onChange={(event) => setForceChangePassword(event.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none ring-primary focus:ring-2"
-                disabled={isForceChanging}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs text-slate-500" htmlFor="force-change-confirm-password">
-                ยืนยันรหัสผ่านใหม่
-              </label>
-              <input
-                id="force-change-confirm-password"
-                type="password"
-                value={forceChangeConfirmPassword}
-                onChange={(event) => setForceChangeConfirmPassword(event.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none ring-primary focus:ring-2"
-                disabled={isForceChanging}
-              />
-            </div>
-
-            {forceChangeError ? (
-              <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                {forceChangeError}
-              </p>
-            ) : null}
-
-            <div className="grid grid-cols-2 gap-2">
-              <Button type="button" variant="outline" className="h-10 rounded-xl" onClick={closeForceChangeModal} disabled={isForceChanging}>
-                ภายหลัง
-              </Button>
-              <Button type="button" className="h-10 rounded-xl" onClick={submitForceChangePassword} disabled={isForceChanging}>
-                {isForceChanging ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    กำลังบันทึก...
-                  </>
-                ) : (
-                  "บันทึกรหัสใหม่"
-                )}
-              </Button>
-            </div>
+              ภายหลัง
+            </Button>
+            <Button
+              type="button"
+              className="h-10 rounded-xl"
+              onClick={submitForceChangePassword}
+              disabled={isForceChanging}
+            >
+              {isForceChanging ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  กำลังบันทึก...
+                </>
+              ) : (
+                "บันทึกรหัสใหม่"
+              )}
+            </Button>
           </div>
         </div>
-      </div>
+      </SlideUpSheet>
     </>
   );
 }

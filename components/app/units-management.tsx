@@ -1,13 +1,14 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Plus, X } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type TouchEvent, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import toast from "react-hot-toast";
 import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
+import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch } from "@/lib/auth/client-token";
 import type { UnitOption } from "@/lib/products/service";
 import {
@@ -33,27 +34,6 @@ export function UnitsManagement({ units, canCreate, canUpdate, canDelete }: Unit
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
   const [editingUnit, setEditingUnit] = useState<UnitOption | null>(null);
   const [deleteDialogUnit, setDeleteDialogUnit] = useState<UnitOption | null>(null);
-  const [isDesktopViewport, setIsDesktopViewport] = useState(false);
-
-  const [isCreateSheetDragging, setIsCreateSheetDragging] = useState(false);
-  const [createSheetDragY, setCreateSheetDragY] = useState(0);
-  const createSheetStartYRef = useRef<number | null>(null);
-  const createSheetCanDragRef = useRef(false);
-
-  const [isEditSheetDragging, setIsEditSheetDragging] = useState(false);
-  const [editSheetDragY, setEditSheetDragY] = useState(0);
-  const editSheetStartYRef = useRef<number | null>(null);
-  const editSheetCanDragRef = useRef(false);
-
-  const sheetScrollYRef = useRef(0);
-  const bodyStyleRef = useRef<{
-    position: string;
-    top: string;
-    left: string;
-    right: string;
-    width: string;
-    overflow: string;
-  } | null>(null);
 
   const createForm = useForm<CreateUnitFormInput, unknown, CreateUnitInput>({
     resolver: zodResolver(createUnitSchema),
@@ -76,171 +56,10 @@ export function UnitsManagement({ units, canCreate, canUpdate, canDelete }: Unit
     setDeleteErrorMessage(null);
   };
 
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(min-width: 640px)");
-    const applyViewportState = () => {
-      setIsDesktopViewport(mediaQuery.matches);
-    };
-
-    applyViewportState();
-    mediaQuery.addEventListener("change", applyViewportState);
-    return () => {
-      mediaQuery.removeEventListener("change", applyViewportState);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isCreateSheetOpen && !isEditSheetOpen) {
-      return;
-    }
-
-    const body = document.body;
-    sheetScrollYRef.current = window.scrollY;
-    bodyStyleRef.current = {
-      position: body.style.position,
-      top: body.style.top,
-      left: body.style.left,
-      right: body.style.right,
-      width: body.style.width,
-      overflow: body.style.overflow,
-    };
-
-    body.style.position = "fixed";
-    body.style.top = `-${sheetScrollYRef.current}px`;
-    body.style.left = "0";
-    body.style.right = "0";
-    body.style.width = "100%";
-    body.style.overflow = "hidden";
-
-    return () => {
-      const previousBodyStyle = bodyStyleRef.current;
-      if (previousBodyStyle) {
-        body.style.position = previousBodyStyle.position;
-        body.style.top = previousBodyStyle.top;
-        body.style.left = previousBodyStyle.left;
-        body.style.right = previousBodyStyle.right;
-        body.style.width = previousBodyStyle.width;
-        body.style.overflow = previousBodyStyle.overflow;
-      }
-      window.scrollTo(0, sheetScrollYRef.current);
-    };
-  }, [isCreateSheetOpen, isEditSheetOpen]);
-
-  const resetCreateSheetDrag = () => {
-    setCreateSheetDragY(0);
-    setIsCreateSheetDragging(false);
-    createSheetStartYRef.current = null;
-    createSheetCanDragRef.current = false;
-  };
-
-  const resetEditSheetDrag = () => {
-    setEditSheetDragY(0);
-    setIsEditSheetDragging(false);
-    editSheetStartYRef.current = null;
-    editSheetCanDragRef.current = false;
-  };
-
-  const handleCreateSheetTouchStart = (event: TouchEvent<HTMLDivElement>) => {
-    if (!isCreateSheetOpen || createForm.formState.isSubmitting || isDesktopViewport) {
-      return;
-    }
-
-    createSheetCanDragRef.current = true;
-    createSheetStartYRef.current = event.touches[0]?.clientY ?? null;
-    setCreateSheetDragY(0);
-    setIsCreateSheetDragging(false);
-  };
-
-  const handleCreateSheetTouchMove = (event: TouchEvent<HTMLDivElement>) => {
-    if (isDesktopViewport || !createSheetCanDragRef.current || createSheetStartYRef.current === null) {
-      return;
-    }
-
-    const currentY = event.touches[0]?.clientY;
-    if (typeof currentY !== "number") {
-      return;
-    }
-
-    const deltaY = Math.max(0, currentY - createSheetStartYRef.current);
-    if (deltaY <= 0) {
-      return;
-    }
-
-    setIsCreateSheetDragging(true);
-    setCreateSheetDragY(deltaY);
-    event.preventDefault();
-  };
-
-  const handleCreateSheetTouchEnd = () => {
-    if (isDesktopViewport) {
-      return;
-    }
-
-    if (!createSheetCanDragRef.current && createSheetStartYRef.current === null) {
-      return;
-    }
-
-    if (createSheetDragY > 120) {
-      closeCreateSheet();
-      return;
-    }
-
-    resetCreateSheetDrag();
-  };
-
-  const handleEditSheetTouchStart = (event: TouchEvent<HTMLDivElement>) => {
-    if (!isEditSheetOpen || updateForm.formState.isSubmitting || isDesktopViewport) {
-      return;
-    }
-
-    editSheetCanDragRef.current = true;
-    editSheetStartYRef.current = event.touches[0]?.clientY ?? null;
-    setEditSheetDragY(0);
-    setIsEditSheetDragging(false);
-  };
-
-  const handleEditSheetTouchMove = (event: TouchEvent<HTMLDivElement>) => {
-    if (isDesktopViewport || !editSheetCanDragRef.current || editSheetStartYRef.current === null) {
-      return;
-    }
-
-    const currentY = event.touches[0]?.clientY;
-    if (typeof currentY !== "number") {
-      return;
-    }
-
-    const deltaY = Math.max(0, currentY - editSheetStartYRef.current);
-    if (deltaY <= 0) {
-      return;
-    }
-
-    setIsEditSheetDragging(true);
-    setEditSheetDragY(deltaY);
-    event.preventDefault();
-  };
-
-  const handleEditSheetTouchEnd = () => {
-    if (isDesktopViewport) {
-      return;
-    }
-
-    if (!editSheetCanDragRef.current && editSheetStartYRef.current === null) {
-      return;
-    }
-
-    if (editSheetDragY > 120) {
-      closeEditSheet();
-      return;
-    }
-
-    resetEditSheetDrag();
-  };
-
   const closeCreateSheet = () => {
     if (createForm.formState.isSubmitting) {
       return;
     }
-    resetCreateSheetDrag();
     setIsCreateSheetOpen(false);
   };
 
@@ -250,7 +69,6 @@ export function UnitsManagement({ units, canCreate, canUpdate, canDelete }: Unit
     }
 
     resetFeedback();
-    resetEditSheetDrag();
     setEditingUnit(unit);
     updateForm.reset({
       code: unit.code,
@@ -264,7 +82,6 @@ export function UnitsManagement({ units, canCreate, canUpdate, canDelete }: Unit
       return;
     }
 
-    resetEditSheetDrag();
     setIsEditSheetOpen(false);
     setEditingUnit(null);
   };
@@ -359,7 +176,6 @@ export function UnitsManagement({ units, canCreate, canUpdate, canDelete }: Unit
 
       createForm.reset({ code: "", nameTh: "" });
       toast.success("เพิ่มหน่วยสินค้าเรียบร้อย");
-      resetCreateSheetDrag();
       setIsCreateSheetOpen(false);
       router.refresh();
     } catch {
@@ -532,17 +348,6 @@ export function UnitsManagement({ units, canCreate, canUpdate, canDelete }: Unit
     </form>
   );
 
-  const createSheetBackdropOpacity = isCreateSheetOpen
-    ? Math.max(0, 1 - Math.min(createSheetDragY / 220, 1) * 0.55)
-    : 0;
-  const editSheetBackdropOpacity = isEditSheetOpen
-    ? Math.max(0, 1 - Math.min(editSheetDragY / 220, 1) * 0.55)
-    : 0;
-  const createSheetInlineStyle =
-    isCreateSheetOpen && !isDesktopViewport ? { transform: `translateY(${createSheetDragY}px)` } : undefined;
-  const editSheetInlineStyle =
-    isEditSheetOpen && !isDesktopViewport ? { transform: `translateY(${editSheetDragY}px)` } : undefined;
-
   return (
     <section className="space-y-5">
       <div className="space-y-2">
@@ -556,7 +361,6 @@ export function UnitsManagement({ units, canCreate, canUpdate, canDelete }: Unit
             className="h-11 w-full rounded-xl sm:w-auto sm:px-5"
             onClick={() => {
               resetFeedback();
-              resetCreateSheetDrag();
               setIsCreateSheetOpen(true);
             }}
             disabled={!canCreate}
@@ -644,200 +448,75 @@ export function UnitsManagement({ units, canCreate, canUpdate, canDelete }: Unit
         </article>
       </div>
 
-      <div
-        className={`fixed inset-0 z-50 ${isCreateSheetOpen ? "" : "pointer-events-none"}`}
-        aria-hidden={!isCreateSheetOpen}
+      <SlideUpSheet
+        isOpen={isCreateSheetOpen}
+        onClose={closeCreateSheet}
+        title="เพิ่มหน่วยสินค้า"
+        description="กรอกรหัสและชื่อหน่วยที่ต้องการ"
+        panelMaxWidthClass="min-[1200px]:max-w-md"
+        disabled={createForm.formState.isSubmitting}
       >
-        <button
-          type="button"
-          aria-label="ปิดหน้าต่างเพิ่มหน่วย"
-          className={`absolute inset-0 bg-slate-900/40 backdrop-blur-[1px] transition-opacity duration-200 ${
-            isCreateSheetOpen ? "opacity-100" : "opacity-0"
-          }`}
-          style={{ opacity: createSheetBackdropOpacity }}
-          onClick={closeCreateSheet}
-          disabled={createForm.formState.isSubmitting}
-        />
-        <div
-          className={`absolute inset-x-0 bottom-0 max-h-[88dvh] overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-md sm:rounded-2xl ${
-            isCreateSheetDragging && !isDesktopViewport
-              ? "transition-none"
-              : "transition-all duration-300 ease-out"
-          } ${
-            isCreateSheetOpen
-              ? "translate-y-0 opacity-100 sm:-translate-x-1/2 sm:-translate-y-1/2"
-              : "translate-y-full opacity-0 sm:-translate-x-1/2 sm:-translate-y-[42%]"
-          }`}
-          style={createSheetInlineStyle}
-        >
-          <div
-            className="flex touch-none justify-center pt-2 sm:hidden"
-            onTouchStart={handleCreateSheetTouchStart}
-            onTouchMove={handleCreateSheetTouchMove}
-            onTouchEnd={handleCreateSheetTouchEnd}
-            onTouchCancel={handleCreateSheetTouchEnd}
-          >
-            <span className="h-1.5 w-12 rounded-full bg-slate-300" />
-          </div>
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">เพิ่มหน่วยสินค้า</p>
-              <p className="mt-0.5 text-xs text-slate-500">กรอกรหัสและชื่อหน่วยที่ต้องการ</p>
-            </div>
-            <button
-              type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600"
-              onClick={closeCreateSheet}
-              disabled={createForm.formState.isSubmitting}
-              aria-label="ปิด"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+        {renderCreateForm("mobile")}
+      </SlideUpSheet>
 
-          <div className="overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 sm:pb-4">
-            {renderCreateForm("mobile")}
-          </div>
-        </div>
-      </div>
-
-      <div
-        className={`fixed inset-0 z-50 ${isEditSheetOpen ? "" : "pointer-events-none"}`}
-        aria-hidden={!isEditSheetOpen}
+      <SlideUpSheet
+        isOpen={isEditSheetOpen}
+        onClose={() => closeEditSheet()}
+        title="แก้ไขหน่วยสินค้า"
+        description={editingUnit ? `รายการ: ${editingUnit.code}` : "อัปเดตรหัสและชื่อหน่วย"}
+        panelMaxWidthClass="min-[1200px]:max-w-md"
+        disabled={updateForm.formState.isSubmitting}
       >
-        <button
-          type="button"
-          aria-label="ปิดหน้าต่างแก้ไขหน่วย"
-          className={`absolute inset-0 bg-slate-900/40 backdrop-blur-[1px] transition-opacity duration-200 ${
-            isEditSheetOpen ? "opacity-100" : "opacity-0"
-          }`}
-          style={{ opacity: editSheetBackdropOpacity }}
-          onClick={() => closeEditSheet()}
-          disabled={updateForm.formState.isSubmitting}
-        />
-        <div
-          className={`absolute inset-x-0 bottom-0 max-h-[88dvh] overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-md sm:rounded-2xl ${
-            isEditSheetDragging && !isDesktopViewport
-              ? "transition-none"
-              : "transition-all duration-300 ease-out"
-          } ${
-            isEditSheetOpen
-              ? "translate-y-0 opacity-100 sm:-translate-x-1/2 sm:-translate-y-1/2"
-              : "translate-y-full opacity-0 sm:-translate-x-1/2 sm:-translate-y-[42%]"
-          }`}
-          style={editSheetInlineStyle}
-        >
-          <div
-            className="flex touch-none justify-center pt-2 sm:hidden"
-            onTouchStart={handleEditSheetTouchStart}
-            onTouchMove={handleEditSheetTouchMove}
-            onTouchEnd={handleEditSheetTouchEnd}
-            onTouchCancel={handleEditSheetTouchEnd}
-          >
-            <span className="h-1.5 w-12 rounded-full bg-slate-300" />
-          </div>
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">แก้ไขหน่วยสินค้า</p>
-              <p className="mt-0.5 text-xs text-slate-500">
-                {editingUnit ? `รายการ: ${editingUnit.code}` : "อัปเดตรหัสและชื่อหน่วย"}
-              </p>
-            </div>
-            <button
-              type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600"
-              onClick={() => closeEditSheet()}
-              disabled={updateForm.formState.isSubmitting}
-              aria-label="ปิด"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+        {renderEditForm("edit")}
+      </SlideUpSheet>
 
-          <div className="overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 sm:pb-4">
-            {renderEditForm("edit")}
-          </div>
-        </div>
-      </div>
-
-      <div
-        className={`fixed inset-0 z-50 ${deleteDialogUnit ? "" : "pointer-events-none"}`}
-        aria-hidden={!deleteDialogUnit}
+      <SlideUpSheet
+        isOpen={Boolean(deleteDialogUnit)}
+        onClose={closeDeleteDialog}
+        title="ยืนยันการลบหน่วยสินค้า"
+        description={deleteDialogUnit ? `หน่วย: ${deleteDialogUnit.code}` : "เลือกหน่วยที่ต้องการลบ"}
+        panelMaxWidthClass="min-[1200px]:max-w-md"
+        disabled={Boolean(deletingUnitId)}
       >
-        <button
-          type="button"
-          aria-label="ปิดหน้าต่างยืนยันลบหน่วย"
-          className={`absolute inset-0 bg-slate-900/40 transition-opacity duration-200 ${
-            deleteDialogUnit ? "opacity-100" : "opacity-0"
-          }`}
-          onClick={closeDeleteDialog}
-          disabled={Boolean(deletingUnitId)}
-        />
-        <div
-          className={`absolute inset-x-0 bottom-0 max-h-[88dvh] overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl transition-all duration-300 ease-out sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-md sm:rounded-2xl ${
-            deleteDialogUnit
-              ? "translate-y-0 opacity-100 sm:-translate-x-1/2 sm:-translate-y-1/2"
-              : "translate-y-full opacity-0 sm:-translate-x-1/2 sm:-translate-y-[42%]"
-          }`}
-        >
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">ยืนยันการลบหน่วยสินค้า</p>
-              <p className="mt-0.5 text-xs text-slate-500">
-                {deleteDialogUnit ? `หน่วย: ${deleteDialogUnit.code}` : "เลือกหน่วยที่ต้องการลบ"}
-              </p>
-            </div>
-            <button
+        <div className="space-y-3">
+          <p className="text-sm text-slate-700">
+            คุณต้องการลบหน่วยนี้ใช่หรือไม่? ระบบจะลบได้เฉพาะหน่วยที่ไม่ถูกใช้งานในสินค้าและรายการขาย
+          </p>
+
+          {deleteErrorMessage ? (
+            <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+              {deleteErrorMessage}
+            </p>
+          ) : null}
+
+          <div className="grid grid-cols-2 gap-2">
+            <Button
               type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600"
+              variant="outline"
+              className="h-11 rounded-xl"
               onClick={closeDeleteDialog}
               disabled={Boolean(deletingUnitId)}
-              aria-label="ปิด"
             >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="space-y-3 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 sm:pb-4">
-            <p className="text-sm text-slate-700">
-              คุณต้องการลบหน่วยนี้ใช่หรือไม่? ระบบจะลบได้เฉพาะหน่วยที่ไม่ถูกใช้งานในสินค้าและรายการขาย
-            </p>
-
-            {deleteErrorMessage ? (
-              <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
-                {deleteErrorMessage}
-              </p>
-            ) : null}
-
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11 rounded-xl"
-                onClick={closeDeleteDialog}
-                disabled={Boolean(deletingUnitId)}
-              >
-                ยกเลิก
-              </Button>
-              <Button
-                type="button"
-                className="h-11 rounded-xl bg-red-600 text-white hover:bg-red-700"
-                onClick={onConfirmDeleteUnit}
-                disabled={Boolean(deletingUnitId)}
-              >
-                {deletingUnitId ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    กำลังลบ...
-                  </>
-                ) : (
-                  "ลบหน่วย"
-                )}
-              </Button>
-            </div>
+              ยกเลิก
+            </Button>
+            <Button
+              type="button"
+              className="h-11 rounded-xl bg-red-600 text-white hover:bg-red-700"
+              onClick={onConfirmDeleteUnit}
+              disabled={Boolean(deletingUnitId)}
+            >
+              {deletingUnitId ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  กำลังลบ...
+                </>
+              ) : (
+                "ลบหน่วย"
+              )}
+            </Button>
           </div>
         </div>
-      </div>
+      </SlideUpSheet>
 
     </section>
   );

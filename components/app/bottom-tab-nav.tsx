@@ -128,7 +128,7 @@ export function BottomTabNav({ permissionKeys, storeType }: BottomTabNavProps) {
   return (
     <nav
       aria-label="เมนูหลัก"
-      className="pointer-events-none fixed bottom-0 left-0 right-0 z-20 w-full bg-white lg:left-1/2 lg:right-auto lg:max-w-[var(--app-shell-max-width)] lg:-translate-x-1/2"
+      className="pointer-events-none fixed bottom-0 left-0 right-0 z-20 w-full bg-white min-[1200px]:left-1/2 min-[1200px]:right-auto min-[1200px]:max-w-[var(--app-shell-max-width-desktop)] min-[1200px]:-translate-x-1/2"
       style={{
         paddingBottom: "env(safe-area-inset-bottom)",
       }}

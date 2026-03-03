@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type ColumnDef,
   flexRender,
@@ -12,6 +12,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { ScanLine } from "lucide-react";
 
 import { BarcodeScannerPanel } from "@/components/app/barcode-scanner-panel";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,15 @@ import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch } from "@/lib/auth/client-token";
 import { currencyLabel, parseStoreCurrency, vatModeLabel } from "@/lib/finance/store-financial";
 import { resolveLaosBankDisplayName } from "@/lib/payments/laos-banks";
-import { setNewOrderDraftFlag } from "@/lib/orders/new-order-draft";
+import {
+  NEW_ORDER_DRAFT_DEFAULT_MAX_AGE_MS,
+  clearNewOrderDraftPayload,
+  clearNewOrderDraftState,
+  getNewOrderDraftPayload,
+  setNewOrderDraftFlag,
+  setNewOrderDraftPayload,
+  type NewOrderDraftPayload,
+} from "@/lib/orders/new-order-draft";
 import type {
   OrderCatalog,
   OrderListItem,
@@ -90,7 +99,6 @@ const statusClass: Record<OrderListItem["status"], string> = {
 };
 
 type CreateOrderStep = "products" | "details";
-type QuickAddSort = "relevance" | "name" | "price_asc" | "price_desc";
 type QuickAddCategory = {
   id: string;
   name: string;
@@ -104,6 +112,12 @@ const checkoutFlowLabel: Record<CheckoutFlow, string> = {
   ONLINE_DELIVERY: "สั่งออนไลน์/จัดส่ง",
 };
 const SCANNER_PERMISSION_STORAGE_KEY = "scanner-permission-seen";
+const CREATE_ONLY_SEARCH_STICKY_TOP_REM = 3.8;
+const CREATE_ONLY_CART_STICKY_GAP_FALLBACK_PX = 13;
+const CREATE_ONLY_CART_STICKY_EXTRA_TOP_PX = 13;
+// Intentional: keep tablet threshold aligned with desktop so both use the same sticky behavior.
+const TABLET_MIN_WIDTH_PX = 1200;
+const DESKTOP_MIN_WIDTH_PX = 1200;
 
 const defaultValues = (catalog: OrderCatalog): CreateOrderFormInput => ({
   channel: "WALK_IN",
@@ -117,16 +131,7 @@ const defaultValues = (catalog: OrderCatalog): CreateOrderFormInput => ({
   paymentCurrency: catalog.storeCurrency as "LAK" | "THB" | "USD",
   paymentMethod: "CASH",
   paymentAccountId: "",
-  items:
-    catalog.products.length > 0
-      ? [
-          {
-            productId: catalog.products[0].productId,
-            unitId: catalog.products[0].units[0]?.unitId ?? "",
-            qty: 1,
-          },
-        ]
-      : [],
+  items: [],
 });
 
 export function OrdersManagement(props: OrdersManagementProps) {
@@ -149,11 +154,15 @@ export function OrdersManagement(props: OrdersManagementProps) {
   const [quickAddKeyword, setQuickAddKeyword] = useState("");
   const [quickAddCategoryId, setQuickAddCategoryId] = useState<string>("ALL");
   const [quickAddOnlyAvailable, setQuickAddOnlyAvailable] = useState(false);
-  const [quickAddSort, setQuickAddSort] = useState<QuickAddSort>("relevance");
   const [showCartSheet, setShowCartSheet] = useState(false);
   const [showCheckoutSheet, setShowCheckoutSheet] = useState(false);
+  const [showCheckoutCloseConfirm, setShowCheckoutCloseConfirm] = useState(false);
   const [createStep, setCreateStep] = useState<CreateOrderStep>("products");
   const [checkoutFlow, setCheckoutFlow] = useState<CheckoutFlow>("WALK_IN_NOW");
+  const [hasInitializedDraftRestore, setHasInitializedDraftRestore] = useState(!isCreateOnlyMode);
+  const [desktopCartStickyTop, setDesktopCartStickyTop] = useState("13.5rem");
+  const createOnlySearchStickyRef = useRef<HTMLDivElement | null>(null);
+  const createOnlyCartStickyRef = useRef<HTMLElement | null>(null);
 
   const form = useForm<CreateOrderFormInput, unknown, CreateOrderInput>({
     resolver: zodResolver(createOrderSchema),
@@ -170,8 +179,14 @@ export function OrdersManagement(props: OrdersManagementProps) {
   const watchedItems = useMemo(() => watchedItemsRaw ?? [], [watchedItemsRaw]);
   const watchedDiscount = Number(form.watch("discount") ?? 0);
   const watchedShippingFeeCharged = Number(form.watch("shippingFeeCharged") ?? 0);
+  const watchedShippingCost = Number(form.watch("shippingCost") ?? 0);
   const watchedPaymentCurrency = form.watch("paymentCurrency") ?? catalog.storeCurrency;
   const watchedPaymentMethod = form.watch("paymentMethod") ?? "CASH";
+  const watchedPaymentAccountId = form.watch("paymentAccountId") ?? "";
+  const watchedContactId = form.watch("contactId") ?? "";
+  const watchedCustomerName = form.watch("customerName") ?? "";
+  const watchedCustomerPhone = form.watch("customerPhone") ?? "";
+  const watchedCustomerAddress = form.watch("customerAddress") ?? "";
   const isOnlineCheckout = checkoutFlow === "ONLINE_DELIVERY";
   const isPickupLaterCheckout = checkoutFlow === "PICKUP_LATER";
   const requiresCustomerPhone = isOnlineCheckout || isPickupLaterCheckout;
@@ -196,6 +211,36 @@ export function OrdersManagement(props: OrdersManagementProps) {
     }
     return [];
   }, [bankPaymentAccounts, qrPaymentAccounts, watchedPaymentMethod]);
+  const hasCheckoutDraftInput = useMemo(() => {
+    const hasTextInput =
+      watchedCustomerName.trim().length > 0 ||
+      watchedCustomerPhone.trim().length > 0 ||
+      watchedCustomerAddress.trim().length > 0 ||
+      watchedContactId.trim().length > 0;
+    const hasAmountInput =
+      watchedDiscount > 0 || watchedShippingFeeCharged > 0 || watchedShippingCost > 0;
+    const hasPaymentSelectionChange =
+      watchedPaymentMethod !== "CASH" ||
+      watchedPaymentCurrency !== catalog.storeCurrency ||
+      watchedPaymentAccountId.trim().length > 0;
+    const hasOrderTypeChange = checkoutFlow !== "WALK_IN_NOW" || watchedChannel !== "WALK_IN";
+
+    return hasTextInput || hasAmountInput || hasPaymentSelectionChange || hasOrderTypeChange;
+  }, [
+    catalog.storeCurrency,
+    checkoutFlow,
+    watchedChannel,
+    watchedContactId,
+    watchedCustomerAddress,
+    watchedCustomerName,
+    watchedCustomerPhone,
+    watchedDiscount,
+    watchedPaymentAccountId,
+    watchedPaymentCurrency,
+    watchedPaymentMethod,
+    watchedShippingCost,
+    watchedShippingFeeCharged,
+  ]);
 
   const productsById = useMemo(
     () => new Map(catalog.products.map((product) => [product.productId, product])),
@@ -244,16 +289,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
       filtered = filtered.filter((product) => product.available > 0);
     }
 
-    if (quickAddSort === "name") {
-      filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name, "th"));
-    } else if (quickAddSort === "price_asc") {
-      filtered = [...filtered].sort((a, b) => a.priceBase - b.priceBase);
-    } else if (quickAddSort === "price_desc") {
-      filtered = [...filtered].sort((a, b) => b.priceBase - a.priceBase);
-    }
-
     return filtered.slice(0, 24);
-  }, [catalog.products, quickAddKeyword, quickAddCategoryId, quickAddOnlyAvailable, quickAddSort]);
+  }, [catalog.products, quickAddKeyword, quickAddCategoryId, quickAddOnlyAvailable]);
   const quickAddCategories = useMemo<QuickAddCategory[]>(() => {
     const categoryMap = new Map<string, QuickAddCategory>();
     for (const product of catalog.products) {
@@ -288,6 +325,94 @@ export function OrdersManagement(props: OrdersManagementProps) {
   const getProductDefaultUnitPrice = useCallback(
     (product: OrderCatalog["products"][number]) => product.units[0]?.pricePerUnit ?? product.priceBase,
     [],
+  );
+  const getProductAvailableQty = useCallback(
+    (productId: string) => {
+      const available = Number(productsById.get(productId)?.available ?? 0);
+      if (!Number.isFinite(available)) {
+        return 0;
+      }
+      return Math.max(0, Math.trunc(available));
+    },
+    [productsById],
+  );
+  const restoreDraftFormForCatalog = useCallback(
+    (draft: NewOrderDraftPayload) => {
+      const normalizedItems = draft.form.items
+        .map((item) => {
+          const product = productsById.get(item.productId);
+          if (!product) {
+            return null;
+          }
+
+          const hasUnit = product.units.some((unit) => unit.unitId === item.unitId);
+          const fallbackUnitId = product.units[0]?.unitId ?? "";
+          const unitId = hasUnit ? item.unitId : fallbackUnitId;
+          const maxQty = getProductAvailableQty(item.productId);
+          if (!unitId || maxQty <= 0) {
+            return null;
+          }
+          const qty = Math.min(maxQty, Math.max(1, Math.trunc(Number(item.qty) || 0)));
+
+          return {
+            productId: item.productId,
+            unitId,
+            qty,
+          };
+        })
+        .filter(
+          (
+            item,
+          ): item is {
+            productId: string;
+            unitId: string;
+            qty: number;
+          } => item !== null,
+        );
+
+      if (normalizedItems.length <= 0) {
+        return null;
+      }
+
+      const supportedCurrencySet = new Set(catalog.supportedCurrencies);
+      const allowedMethods = new Set(["CASH", "LAO_QR", "COD", "BANK_TRANSFER"]);
+      const allowedChannels = new Set(["WALK_IN", "FACEBOOK", "WHATSAPP"]);
+      const isKnownAccount = catalog.paymentAccounts.some(
+        (account) => account.id === draft.form.paymentAccountId,
+      );
+
+      const paymentCurrency = supportedCurrencySet.has(draft.form.paymentCurrency)
+        ? draft.form.paymentCurrency
+        : parseStoreCurrency(catalog.storeCurrency);
+      const paymentMethod = allowedMethods.has(draft.form.paymentMethod)
+        ? draft.form.paymentMethod
+        : "CASH";
+      const channel = allowedChannels.has(draft.form.channel)
+        ? draft.form.channel
+        : "WALK_IN";
+
+      return {
+        channel,
+        contactId: draft.form.contactId,
+        customerName: draft.form.customerName,
+        customerPhone: draft.form.customerPhone,
+        customerAddress: draft.form.customerAddress,
+        discount: Math.max(0, Math.trunc(Number(draft.form.discount) || 0)),
+        shippingFeeCharged: Math.max(0, Math.trunc(Number(draft.form.shippingFeeCharged) || 0)),
+        shippingCost: Math.max(0, Math.trunc(Number(draft.form.shippingCost) || 0)),
+        paymentCurrency,
+        paymentMethod,
+        paymentAccountId: isKnownAccount ? draft.form.paymentAccountId : "",
+        items: normalizedItems,
+      } satisfies CreateOrderFormInput;
+    },
+    [
+      catalog.paymentAccounts,
+      catalog.storeCurrency,
+      catalog.supportedCurrencies,
+      getProductAvailableQty,
+      productsById,
+    ],
   );
 
   const subtotal = useMemo(() => {
@@ -365,11 +490,22 @@ export function OrdersManagement(props: OrdersManagementProps) {
     if (!product) {
       return null;
     }
+    const availableQty = getProductAvailableQty(productId);
+    if (availableQty <= 0) {
+      setScanMessage(`สินค้า ${product.sku} - ${product.name} หมดสต็อก/ติดจอง เพิ่มไม่ได้`);
+      return null;
+    }
 
     const existingIndex = watchedItems.findIndex((item) => item.productId === productId);
     if (existingIndex >= 0) {
       const currentQty = Number(form.getValues(`items.${existingIndex}.qty`) ?? 0);
-      form.setValue(`items.${existingIndex}.qty`, Math.max(1, currentQty + 1), {
+      if (currentQty >= availableQty) {
+        setScanMessage(
+          `สินค้า ${product.sku} - ${product.name} เพิ่มได้สูงสุด ${availableQty.toLocaleString("th-TH")} ชิ้น`,
+        );
+        return null;
+      }
+      form.setValue(`items.${existingIndex}.qty`, Math.min(availableQty, Math.max(1, currentQty + 1)), {
         shouldDirty: true,
         shouldValidate: true,
       });
@@ -385,13 +521,24 @@ export function OrdersManagement(props: OrdersManagementProps) {
   };
   const setItemQty = useCallback(
     (index: number, nextQty: number) => {
+      const productId = String(form.getValues(`items.${index}.productId`) ?? "");
+      const availableQty = getProductAvailableQty(productId);
       const safeQty = Math.max(1, Math.trunc(nextQty) || 1);
-      form.setValue(`items.${index}.qty`, safeQty, {
+      const boundedQty = availableQty > 0 ? Math.min(safeQty, availableQty) : safeQty;
+      if (boundedQty < safeQty && availableQty > 0) {
+        const product = productsById.get(productId);
+        if (product) {
+          setScanMessage(
+            `สินค้า ${product.sku} - ${product.name} เพิ่มได้สูงสุด ${availableQty.toLocaleString("th-TH")} ชิ้น`,
+          );
+        }
+      }
+      form.setValue(`items.${index}.qty`, boundedQty, {
         shouldDirty: true,
         shouldValidate: true,
       });
     },
-    [form],
+    [form, getProductAvailableQty, productsById],
   );
   const increaseItemQty = useCallback(
     (index: number) => {
@@ -588,9 +735,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
     setCreateFormOpen(false);
     setShowCartSheet(false);
     setShowCheckoutSheet(false);
+    setShowCheckoutCloseConfirm(false);
     setCreateStep("products");
     setCheckoutFlow("WALK_IN_NOW");
-    setNewOrderDraftFlag(false);
+    clearNewOrderDraftState();
     setLoading(false);
 
     if (data?.orderId) {
@@ -605,6 +753,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
     setCreateFormOpen(true);
     setShowCartSheet(false);
     setShowCheckoutSheet(false);
+    setShowCheckoutCloseConfirm(false);
     setCreateStep("products");
     setCheckoutFlow("WALK_IN_NOW");
   };
@@ -613,6 +762,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
     setCreateFormOpen(false);
     setShowCartSheet(false);
     setShowCheckoutSheet(false);
+    setShowCheckoutCloseConfirm(false);
     setCreateStep("products");
     setCheckoutFlow("WALK_IN_NOW");
   };
@@ -623,25 +773,207 @@ export function OrdersManagement(props: OrdersManagementProps) {
     }
     setCreateStep("details");
     setShowCartSheet(false);
+    setShowCheckoutCloseConfirm(false);
     setShowCheckoutSheet(true);
   };
+  const closeCheckoutSheet = useCallback(() => {
+    setShowCheckoutCloseConfirm(false);
+    setShowCheckoutSheet(false);
+    setCreateStep("products");
+  }, []);
+  const requestCloseCheckoutSheet = useCallback(() => {
+    if (loading) {
+      return;
+    }
+
+    if (hasCheckoutDraftInput) {
+      setShowCheckoutCloseConfirm(true);
+      return;
+    }
+
+    closeCheckoutSheet();
+  }, [closeCheckoutSheet, hasCheckoutDraftInput, loading]);
 
   const isCreateFormOpen = isCreateOnlyMode ? false : createFormOpen;
 
   useEffect(() => {
-    if (!isCreateOnlyMode) return;
-    const hasDraft = form.formState.isDirty && watchedItems.length > 0;
+    if (!isCreateOnlyMode) {
+      setHasInitializedDraftRestore(true);
+      return;
+    }
+    if (hasInitializedDraftRestore) {
+      return;
+    }
+
+    const savedDraft = getNewOrderDraftPayload({
+      maxAgeMs: NEW_ORDER_DRAFT_DEFAULT_MAX_AGE_MS,
+    });
+    if (!savedDraft) {
+      setHasInitializedDraftRestore(true);
+      return;
+    }
+
+    const restored = restoreDraftFormForCatalog(savedDraft);
+    if (!restored) {
+      clearNewOrderDraftState();
+      setHasInitializedDraftRestore(true);
+      return;
+    }
+
+    form.reset(restored);
+    setCheckoutFlow(savedDraft.checkoutFlow);
+    setScanMessage("กู้คืนตะกร้าที่ค้างจากการรีเฟรชแล้ว");
+    setNewOrderDraftFlag(true);
+    setHasInitializedDraftRestore(true);
+  }, [
+    form,
+    hasInitializedDraftRestore,
+    isCreateOnlyMode,
+    restoreDraftFormForCatalog,
+  ]);
+
+  useEffect(() => {
+    if (!isCreateOnlyMode || !hasInitializedDraftRestore) {
+      return;
+    }
+
+    const normalizedItems = watchedItems
+      .map((item) => {
+        const productId = String(item.productId ?? "").trim();
+        const unitId = String(item.unitId ?? "").trim();
+        const qty = Math.max(1, Math.trunc(Number(item.qty) || 0));
+        if (!productId || !unitId || qty <= 0) {
+          return null;
+        }
+        return { productId, unitId, qty };
+      })
+      .filter(
+        (
+          item,
+        ): item is {
+          productId: string;
+          unitId: string;
+          qty: number;
+        } => item !== null,
+      );
+
+    const hasDraft = normalizedItems.length > 0;
     setNewOrderDraftFlag(hasDraft);
 
-    return () => {
-      setNewOrderDraftFlag(false);
+    if (!hasDraft) {
+      clearNewOrderDraftPayload();
+      return;
+    }
+
+    const draftPayload: NewOrderDraftPayload = {
+      checkoutFlow,
+      form: {
+        channel:
+          watchedChannel === "FACEBOOK" || watchedChannel === "WHATSAPP"
+            ? watchedChannel
+            : "WALK_IN",
+        contactId: watchedContactId,
+        customerName: watchedCustomerName,
+        customerPhone: watchedCustomerPhone,
+        customerAddress: watchedCustomerAddress,
+        discount: Math.max(0, Math.trunc(Number(watchedDiscount) || 0)),
+        shippingFeeCharged: Math.max(0, Math.trunc(Number(watchedShippingFeeCharged) || 0)),
+        shippingCost: Math.max(0, Math.trunc(Number(watchedShippingCost) || 0)),
+        paymentCurrency:
+          watchedPaymentCurrency === "THB" || watchedPaymentCurrency === "USD"
+            ? watchedPaymentCurrency
+            : "LAK",
+        paymentMethod:
+          watchedPaymentMethod === "LAO_QR" ||
+          watchedPaymentMethod === "COD" ||
+          watchedPaymentMethod === "BANK_TRANSFER"
+            ? watchedPaymentMethod
+            : "CASH",
+        paymentAccountId: watchedPaymentAccountId,
+        items: normalizedItems,
+      },
     };
-  }, [form.formState.isDirty, isCreateOnlyMode, watchedItems.length]);
+
+    setNewOrderDraftPayload(draftPayload);
+  }, [
+    checkoutFlow,
+    hasInitializedDraftRestore,
+    isCreateOnlyMode,
+    watchedChannel,
+    watchedContactId,
+    watchedCustomerAddress,
+    watchedCustomerName,
+    watchedCustomerPhone,
+    watchedDiscount,
+    watchedItems,
+    watchedPaymentAccountId,
+    watchedPaymentCurrency,
+    watchedPaymentMethod,
+    watchedShippingCost,
+    watchedShippingFeeCharged,
+  ]);
 
   useEffect(() => {
     const seen = window.localStorage.getItem(SCANNER_PERMISSION_STORAGE_KEY) === "1";
     setHasSeenScannerPermission(seen);
   }, []);
+
+  useEffect(() => {
+    if (!isCreateOnlyMode) {
+      return;
+    }
+
+    const searchStickyElement = createOnlySearchStickyRef.current;
+    const cartStickyElement = createOnlyCartStickyRef.current;
+    if (!searchStickyElement || !cartStickyElement) {
+      return;
+    }
+
+    const updateCartStickyTop = () => {
+      const rootFontSize = Number.parseFloat(
+        window.getComputedStyle(document.documentElement).fontSize,
+      );
+      const safeRootFontSize = Number.isFinite(rootFontSize) && rootFontSize > 0 ? rootFontSize : 16;
+      const stickyTopOffsetPx = CREATE_ONLY_SEARCH_STICKY_TOP_REM * safeRootFontSize;
+      const searchSectionHeightPx = searchStickyElement.offsetHeight;
+      const viewportWidth = window.innerWidth;
+      const isTabletViewport =
+        viewportWidth >= TABLET_MIN_WIDTH_PX && viewportWidth < DESKTOP_MIN_WIDTH_PX;
+      const layoutGapPx = cartStickyElement.offsetTop - (
+        searchStickyElement.offsetTop + searchSectionHeightPx
+      );
+      const safeLayoutGapPx =
+        Number.isFinite(layoutGapPx) && layoutGapPx >= 0
+          ? layoutGapPx
+          : CREATE_ONLY_CART_STICKY_GAP_FALLBACK_PX;
+      const nextTop = isTabletViewport
+        ? Math.round(stickyTopOffsetPx + searchSectionHeightPx)
+        : Math.round(
+            stickyTopOffsetPx +
+              searchSectionHeightPx +
+              safeLayoutGapPx +
+              CREATE_ONLY_CART_STICKY_EXTRA_TOP_PX,
+          );
+      setDesktopCartStickyTop((prev) => {
+        const nextTopValue = `${nextTop}px`;
+        return prev === nextTopValue ? prev : nextTopValue;
+      });
+    };
+
+    updateCartStickyTop();
+
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(updateCartStickyTop);
+      resizeObserver.observe(searchStickyElement);
+    }
+    window.addEventListener("resize", updateCartStickyTop);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", updateCartStickyTop);
+    };
+  }, [isCreateOnlyMode]);
 
   const openScannerSheet = useCallback(() => {
     if (hasSeenScannerPermission) {
@@ -893,28 +1225,6 @@ export function OrdersManagement(props: OrdersManagementProps) {
               >
                 {quickAddOnlyAvailable ? "เฉพาะมีสต็อก: เปิด" : "เฉพาะมีสต็อก"}
               </button>
-              <select
-                className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 outline-none ring-primary focus:ring-2"
-                value={quickAddSort}
-                onChange={(event) => {
-                  const nextSort = event.target.value;
-                  if (
-                    nextSort === "name" ||
-                    nextSort === "price_asc" ||
-                    nextSort === "price_desc"
-                  ) {
-                    setQuickAddSort(nextSort);
-                    return;
-                  }
-                  setQuickAddSort("relevance");
-                }}
-                disabled={loading || !hasCatalogProducts}
-              >
-                <option value="relevance">เรียง: แนะนำ</option>
-                <option value="name">ชื่อสินค้า A-Z</option>
-                <option value="price_asc">ราคาต่ำ-สูง</option>
-                <option value="price_desc">ราคาสูง-ต่ำ</option>
-              </select>
             </div>
             {!hasCatalogProducts ? (
               <p className="text-xs text-slate-500">ยังไม่มีสินค้าในระบบ</p>
@@ -935,17 +1245,21 @@ export function OrdersManagement(props: OrdersManagementProps) {
                         );
                       }
                     }}
-                    disabled={loading}
+                    disabled={loading || product.available <= 0}
                   >
                     <p className="text-xs text-slate-500">{product.sku}</p>
                     <p className="truncate text-sm font-medium text-slate-800">{product.name}</p>
                     <p className="text-xs text-slate-500">
                       คงเหลือ {product.available.toLocaleString("th-TH")}
                     </p>
-                    <p className="mt-1 text-xs font-medium text-blue-700">
-                      + เพิ่ม {getProductDefaultUnitPrice(product).toLocaleString("th-TH")}{" "}
-                      {catalog.storeCurrency}
-                    </p>
+                    {product.available > 0 ? (
+                      <p className="mt-1 text-xs font-medium text-blue-700">
+                        + เพิ่ม {getProductDefaultUnitPrice(product).toLocaleString("th-TH")}{" "}
+                        {catalog.storeCurrency}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-xs font-medium text-rose-600">หมดสต็อก/ติดจอง</p>
+                    )}
                   </button>
                 ))}
               </div>
@@ -1027,6 +1341,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 const selectedUnit = selectedProduct?.units.find(
                   (unit) => unit.unitId === item.unitId,
                 );
+                const availableQty = getProductAvailableQty(item.productId ?? "");
+                const currentQty = Number(item.qty ?? 0) || 0;
                 const lineTotal =
                   (Number(item.qty ?? 0) || 0) * (selectedUnit?.pricePerUnit ?? 0);
 
@@ -1074,7 +1390,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                           type="button"
                           className="h-9 w-9 rounded-md border text-base text-slate-700"
                           onClick={() => increaseItemQty(index)}
-                          disabled={loading}
+                          disabled={loading || availableQty <= 0 || currentQty >= availableQty}
                           aria-label="เพิ่มจำนวน"
                         >
                           +
@@ -1089,7 +1405,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                         type="button"
                         className="text-red-600"
                         onClick={() => remove(index)}
-                        disabled={loading || watchedItems.length <= 1}
+                        disabled={loading}
                       >
                         ลบ
                       </button>
@@ -1167,7 +1483,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                         type="button"
                         className="text-xs text-red-600"
                         onClick={() => remove(index)}
-                        disabled={loading || fields.length <= 1}
+                        disabled={loading}
                       >
                         ลบ
                       </button>
@@ -1186,7 +1502,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
           {showStickyCartButton ? (
             <button
               type="button"
-              className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-30 flex items-center justify-between rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-700 shadow-sm sm:hidden"
+              className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-30 flex items-center justify-between rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-700 shadow-sm sm:hidden"
               onClick={() => setShowCartSheet(true)}
               disabled={watchedItems.length === 0}
             >
@@ -1411,12 +1727,15 @@ export function OrdersManagement(props: OrdersManagementProps) {
 
   const renderCreateOnlyPosCatalog = () => {
     return (
-      <div className="space-y-3 pb-28 sm:pb-3">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
+      <div className="-mt-4 space-y-4 pb-28 md:pb-4">
+        <div
+          ref={createOnlySearchStickyRef}
+          className="sticky top-[3.8rem] z-[9] -mx-1 space-y-3 border-b border-slate-200 bg-slate-50/95 px-1 pt-4 pb-2 backdrop-blur-sm md:top-[3.8rem]"
+        >
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
             <input
               type="text"
-              className="h-10 flex-1 rounded-md border bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
+              className="h-10 min-w-0 w-full rounded-md border bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
               placeholder="ค้นหา SKU, ชื่อ หรือบาร์โค้ด"
               value={quickAddKeyword}
               onChange={(event) => setQuickAddKeyword(event.target.value)}
@@ -1425,17 +1744,18 @@ export function OrdersManagement(props: OrdersManagementProps) {
             <Button
               type="button"
               variant="outline"
-              className="h-10 px-3 text-xs"
+              className="h-10 w-10 p-0"
               disabled={loading || !hasCatalogProducts}
               onClick={openScannerSheet}
+              aria-label="สแกนบาร์โค้ด"
+              title="สแกนบาร์โค้ด"
             >
-              สแกน
+              <ScanLine className="h-4 w-4" />
+              <span className="sr-only">สแกนบาร์โค้ด</span>
             </Button>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              className={`h-8 rounded-md border px-2 text-xs ${
+              className={`h-10 shrink-0 whitespace-nowrap rounded-md border px-2.5 text-[11px] sm:px-3 sm:text-xs ${
                 quickAddOnlyAvailable
                   ? "border-blue-300 bg-blue-50 text-blue-700"
                   : "border-slate-300 bg-white text-slate-600"
@@ -1443,27 +1763,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
               onClick={() => setQuickAddOnlyAvailable((prev) => !prev)}
               disabled={loading || !hasCatalogProducts}
             >
-              {quickAddOnlyAvailable ? "เฉพาะมีสต็อก: เปิด" : "เฉพาะมีสต็อก"}
+              {quickAddOnlyAvailable ? "มีสต็อก✓" : "มีสต็อก"}
             </button>
-            <select
-              className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 outline-none ring-primary focus:ring-2"
-              value={quickAddSort}
-              onChange={(event) => {
-                const nextSort = event.target.value;
-                if (nextSort === "name" || nextSort === "price_asc" || nextSort === "price_desc") {
-                  setQuickAddSort(nextSort);
-                  return;
-                }
-                setQuickAddSort("relevance");
-              }}
-              disabled={loading || !hasCatalogProducts}
-            >
-              <option value="relevance">เรียง: แนะนำ</option>
-              <option value="name">ชื่อสินค้า A-Z</option>
-              <option value="price_asc">ราคาต่ำ-สูง</option>
-              <option value="price_desc">ราคาสูง-ต่ำ</option>
-            </select>
           </div>
+
           <div className="-mx-1 overflow-x-auto px-1">
             <div className="flex min-w-max items-center gap-2">
               <button
@@ -1495,193 +1798,281 @@ export function OrdersManagement(props: OrdersManagementProps) {
               ))}
             </div>
           </div>
-        </div>
 
-        {scanMessage ? <p className="text-xs text-emerald-700">{scanMessage}</p> : null}
+          {scanMessage ? <p className="text-xs text-emerald-700">{scanMessage}</p> : null}
 
-        {notFoundBarcode ? (
-          <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-2">
-            <p className="text-xs text-amber-700">
-              ไม่พบบาร์โค้ด <span className="font-semibold">{notFoundBarcode}</span> กรุณาค้นหาเอง
-            </p>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <input
-                type="text"
-                className="h-10 flex-1 rounded-md border border-amber-300 bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
-                placeholder="ค้นหาด้วยชื่อสินค้า, SKU หรือบาร์โค้ด"
-                value={manualSearchKeyword}
-                onChange={(event) => setManualSearchKeyword(event.target.value)}
-                disabled={loading}
-              />
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="h-10 rounded-md border border-amber-300 px-3 text-xs font-medium text-amber-700"
-                  onClick={openScannerSheet}
+          {notFoundBarcode ? (
+            <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-2">
+              <p className="text-xs text-amber-700">
+                ไม่พบบาร์โค้ด <span className="font-semibold">{notFoundBarcode}</span> กรุณาค้นหาเอง
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="text"
+                  className="h-10 flex-1 rounded-md border border-amber-300 bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
+                  placeholder="ค้นหาด้วยชื่อสินค้า, SKU หรือบาร์โค้ด"
+                  value={manualSearchKeyword}
+                  onChange={(event) => setManualSearchKeyword(event.target.value)}
                   disabled={loading}
-                >
-                  สแกนใหม่
-                </button>
-                <button
-                  type="button"
-                  className="h-10 rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-600"
-                  onClick={() => {
-                    setNotFoundBarcode(null);
-                    setManualSearchKeyword("");
-                  }}
-                  disabled={loading}
-                >
-                  ปิด
-                </button>
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="h-10 rounded-md border border-amber-300 px-3 text-xs font-medium text-amber-700"
+                    onClick={openScannerSheet}
+                    disabled={loading}
+                  >
+                    สแกนใหม่
+                  </button>
+                  <button
+                    type="button"
+                    className="h-10 rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-600"
+                    onClick={() => {
+                      setNotFoundBarcode(null);
+                      setManualSearchKeyword("");
+                    }}
+                    disabled={loading}
+                  >
+                    ปิด
+                  </button>
+                </div>
               </div>
-            </div>
-            {manualSearchKeyword.trim() ? (
-              manualSearchResults.length > 0 ? (
-                <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-amber-200 bg-white p-1">
-                  {manualSearchResults.map((product) => (
-                    <button
-                      key={product.productId}
-                      type="button"
-                      className="flex w-full items-center justify-between rounded px-2 py-2 text-left text-xs hover:bg-amber-100"
-                      onClick={() => pickProductFromManualSearch(product.productId)}
-                      disabled={loading}
-                    >
-                      <span className="font-medium text-slate-800">
-                        {product.sku} - {product.name}
-                      </span>
-                      <span className="text-slate-500">{product.barcode ?? "—"}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-amber-700">ไม่พบสินค้าจากคำค้นนี้</p>
-              )
-            ) : null}
-          </div>
-        ) : null}
-
-        {!hasCatalogProducts ? (
-          <p className="rounded-lg border border-dashed p-3 text-sm text-slate-500">
-            ยังไม่มีสินค้าในระบบ
-          </p>
-        ) : quickAddProducts.length === 0 ? (
-          <p className="rounded-lg border border-dashed p-3 text-sm text-slate-500">
-            ไม่พบสินค้าที่ตรงกับคำค้น
-          </p>
-        ) : (
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 sm:gap-2 lg:grid-cols-4">
-            {quickAddProducts.map((product) => (
-              <button
-                key={product.productId}
-                type="button"
-                className="space-y-1.5 rounded-md border bg-white px-2.5 py-2.5 text-left transition-colors hover:border-blue-300 hover:bg-blue-50"
-                onClick={() => {
-                  const addedProduct = addProductFromCatalog(product.productId);
-                  if (addedProduct) {
-                    setScanMessage(`เพิ่มสินค้า ${addedProduct.sku} - ${addedProduct.name} แล้ว`);
-                  }
-                }}
-                disabled={loading}
-              >
-                <div className="relative h-12 w-12 overflow-hidden rounded-md border border-slate-200 bg-slate-100 sm:h-14 sm:w-14">
-                  {product.imageUrl ? (
-                    <Image
-                      src={product.imageUrl}
-                      alt={product.name}
-                      fill
-                      sizes="(min-width: 640px) 56px, 48px"
-                      className="object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-[11px] text-slate-400">
-                      NO IMG
-                    </div>
-                  )}
-                </div>
-                <p className="truncate text-[11px] text-slate-500">{product.sku}</p>
-                <p className="line-clamp-2 text-[13px] font-medium text-slate-900 sm:text-sm">
-                  {product.name}
-                </p>
-                <p className="text-[11px] font-semibold text-blue-700 sm:text-xs">
-                  {getProductDefaultUnitPrice(product).toLocaleString("th-TH")} {catalog.storeCurrency}
-                </p>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[11px] text-slate-500">
-                    คงเหลือ {product.available.toLocaleString("th-TH")}
-                  </p>
-                  <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
-                    + เพิ่ม
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-medium">
-              ตะกร้า ({watchedItems.length.toLocaleString("th-TH")} รายการ)
-            </p>
-            <button
-              type="button"
-              className="text-xs font-medium text-blue-700"
-              onClick={() => setShowCartSheet(true)}
-              disabled={loading || watchedItems.length === 0}
-            >
-              ดูทั้งหมด
-            </button>
-          </div>
-          {watchedItems.length === 0 ? (
-            <p className="text-xs text-slate-500">ยังไม่มีรายการสินค้าในตะกร้า</p>
-          ) : (
-            <div className="space-y-1">
-              {watchedItems.slice(0, 3).map((item, index) => {
-                const selectedProduct = productsById.get(item.productId ?? "");
-                return (
-                  <div key={`${item.productId}-${index}`} className="flex items-center justify-between gap-2 text-xs">
-                    <span className="truncate text-slate-700">
-                      {selectedProduct?.name ?? "ไม่พบสินค้า"}
-                    </span>
-                    <span className="font-medium text-slate-900">
-                      {(Number(item.qty ?? 0) || 0).toLocaleString("th-TH")}
-                    </span>
+              {manualSearchKeyword.trim() ? (
+                manualSearchResults.length > 0 ? (
+                  <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-amber-200 bg-white p-1">
+                    {manualSearchResults.map((product) => (
+                      <button
+                        key={product.productId}
+                        type="button"
+                        className="flex w-full items-center justify-between rounded px-2 py-2 text-left text-xs hover:bg-amber-100"
+                        onClick={() => pickProductFromManualSearch(product.productId)}
+                        disabled={loading}
+                      >
+                        <span className="font-medium text-slate-800">
+                          {product.sku} - {product.name}
+                        </span>
+                        <span className="text-slate-500">{product.barcode ?? "—"}</span>
+                      </button>
+                    ))}
                   </div>
-                );
-              })}
+                ) : (
+                  <p className="text-xs text-amber-700">ไม่พบสินค้าจากคำค้นนี้</p>
+                )
+              ) : null}
             </div>
-          )}
-          <p className="text-xs text-slate-600">
-            รวม {cartQtyTotal.toLocaleString("th-TH")} ชิ้น •{" "}
-            {totals.total.toLocaleString("th-TH")} {catalog.storeCurrency}
-          </p>
-          <div className="hidden gap-2 sm:flex">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 flex-1"
-              onClick={() => setShowCartSheet(true)}
-              disabled={loading || watchedItems.length === 0}
-            >
-              เปิดตะกร้า
-            </Button>
-            <Button
-              type="button"
-              className="h-9 flex-1"
-              onClick={openCheckoutSheet}
-              disabled={loading || watchedItems.length === 0}
-            >
-              ชำระเงิน / กรอกรายละเอียด
-            </Button>
-          </div>
+          ) : null}
         </div>
 
-        <div className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-30 sm:hidden">
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_20rem] md:items-start">
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-slate-900">สินค้า</p>
+              <p className="text-xs text-slate-500">
+                {quickAddProducts.length.toLocaleString("th-TH")} รายการ
+              </p>
+            </div>
+            {!hasCatalogProducts ? (
+              <p className="rounded-lg border border-dashed p-3 text-sm text-slate-500">
+                ยังไม่มีสินค้าในระบบ
+              </p>
+            ) : quickAddProducts.length === 0 ? (
+              <p className="rounded-lg border border-dashed p-3 text-sm text-slate-500">
+                ไม่พบสินค้าที่ตรงกับคำค้น
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+                {quickAddProducts.map((product) => (
+                  <button
+                    key={product.productId}
+                    type="button"
+                    className="space-y-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2.5 text-left transition-colors hover:border-blue-300 hover:bg-blue-50"
+                    onClick={() => {
+                      const addedProduct = addProductFromCatalog(product.productId);
+                      if (addedProduct) {
+                        setScanMessage(`เพิ่มสินค้า ${addedProduct.sku} - ${addedProduct.name} แล้ว`);
+                      }
+                    }}
+                    disabled={loading || product.available <= 0}
+                  >
+                    <div className="relative h-12 w-12 overflow-hidden rounded-md border border-slate-200 bg-slate-100 sm:h-14 sm:w-14">
+                      {product.imageUrl ? (
+                        <Image
+                          src={product.imageUrl}
+                          alt={product.name}
+                          fill
+                          sizes="(min-width: 1280px) 56px, (min-width: 640px) 56px, 48px"
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[11px] text-slate-400">
+                          NO IMG
+                        </div>
+                      )}
+                    </div>
+                    <p className="truncate text-[11px] text-slate-500">{product.sku}</p>
+                    <p className="line-clamp-2 text-[13px] font-medium text-slate-900 sm:text-sm">
+                      {product.name}
+                    </p>
+                    <p className="text-[11px] font-semibold text-blue-700 sm:text-xs">
+                      {getProductDefaultUnitPrice(product).toLocaleString("th-TH")} {catalog.storeCurrency}
+                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] text-slate-500">
+                        คงเหลือ {product.available.toLocaleString("th-TH")}
+                      </p>
+                      {product.available > 0 ? (
+                        <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                          + เพิ่ม
+                        </span>
+                      ) : (
+                        <span className="rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-700">
+                          หมด
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <aside
+            ref={createOnlyCartStickyRef}
+            className="hidden rounded-2xl border border-slate-200 bg-white p-3 md:sticky md:flex md:min-h-[26rem] md:flex-col md:overflow-hidden"
+            style={{
+              top: desktopCartStickyTop,
+              height: `calc(100dvh - ${desktopCartStickyTop} - 2.5rem)`,
+            }}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-slate-900">
+                ตะกร้า ({watchedItems.length.toLocaleString("th-TH")})
+              </p>
+              <button
+                type="button"
+                className="text-xs font-medium text-blue-700 disabled:text-slate-400"
+                onClick={() => setShowCartSheet(true)}
+                disabled={loading || watchedItems.length === 0}
+              >
+                เปิดเต็ม
+              </button>
+            </div>
+
+            {watchedItems.length === 0 ? (
+              <p className="rounded-lg border border-dashed p-3 text-xs text-slate-500">
+                ยังไม่มีรายการสินค้าในตะกร้า
+              </p>
+            ) : (
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+                {watchedItems.map((item, index) => {
+                  const selectedProduct = productsById.get(item.productId ?? "");
+                  const selectedUnit = selectedProduct?.units.find((unit) => unit.unitId === item.unitId);
+                  const availableQty = getProductAvailableQty(item.productId ?? "");
+                  const currentQty = Number(item.qty ?? 0) || 0;
+                  const lineTotal = (Number(item.qty ?? 0) || 0) * (selectedUnit?.pricePerUnit ?? 0);
+
+                  return (
+                    <div
+                      key={`${item.productId}-${index}`}
+                      className="space-y-1.5 rounded-lg border border-slate-200 p-2"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-medium text-slate-900">
+                            {selectedProduct?.name ?? "ไม่พบสินค้า"}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            คงเหลือ {selectedProduct?.available.toLocaleString("th-TH") ?? 0}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="text-[11px] text-red-600"
+                          onClick={() => remove(index)}
+                          disabled={loading}
+                        >
+                          ลบ
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto_6.5rem] items-center gap-1.5">
+                        <select
+                          className="h-7 w-full min-w-0 rounded-md border px-2 text-[11px] outline-none ring-primary focus:ring-2"
+                          value={item.unitId ?? ""}
+                          onChange={(event) =>
+                            form.setValue(`items.${index}.unitId`, event.target.value, {
+                              shouldDirty: true,
+                              shouldValidate: true,
+                            })
+                          }
+                          disabled={loading}
+                        >
+                          {selectedProduct?.units.map((unit) => (
+                            <option key={unit.unitId} value={unit.unitId}>
+                              {unit.unitCode}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            className="h-7 w-7 rounded-md border text-xs text-slate-700"
+                            onClick={() => decreaseItemQty(index)}
+                            disabled={loading}
+                            aria-label="ลดจำนวน"
+                          >
+                            -
+                          </button>
+                          <div className="min-w-7 text-center text-xs font-medium text-slate-900">
+                            {(Number(item.qty ?? 0) || 0).toLocaleString("th-TH")}
+                          </div>
+                          <button
+                            type="button"
+                            className="h-7 w-7 rounded-md border text-xs text-slate-700"
+                            onClick={() => increaseItemQty(index)}
+                            disabled={loading || availableQty <= 0 || currentQty >= availableQty}
+                            aria-label="เพิ่มจำนวน"
+                          >
+                            +
+                          </button>
+                        </div>
+                        <span className="text-right text-xs font-semibold tabular-nums text-slate-900">
+                          {lineTotal.toLocaleString("th-TH")}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="mt-3 shrink-0 space-y-2 border-t border-slate-200 bg-white pt-3">
+              <div className="space-y-1 rounded-lg bg-slate-50 p-3 text-xs">
+                <p className="text-slate-600">
+                  {watchedItems.length.toLocaleString("th-TH")} รายการ • {cartQtyTotal.toLocaleString("th-TH")} ชิ้น
+                </p>
+                <p className="text-base font-semibold text-slate-900">
+                  {totals.total.toLocaleString("th-TH")} {catalog.storeCurrency}
+                </p>
+              </div>
+
+              <Button
+                type="button"
+                className="h-10 w-full"
+                onClick={openCheckoutSheet}
+                disabled={loading || watchedItems.length === 0}
+              >
+                ถัดไป: ชำระเงิน
+              </Button>
+            </div>
+          </aside>
+        </div>
+
+        <div className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-30 md:hidden">
           <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
             <div className="flex items-center justify-between gap-2 text-[11px] text-slate-600">
               <p>
-                {watchedItems.length.toLocaleString("th-TH")} รายการ •{" "}
-                {cartQtyTotal.toLocaleString("th-TH")} ชิ้น
+                {watchedItems.length.toLocaleString("th-TH")} รายการ • {cartQtyTotal.toLocaleString("th-TH")} ชิ้น
               </p>
               <button
                 type="button"
@@ -1951,31 +2342,35 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 const selectedUnit = selectedProduct?.units.find(
                   (unit) => unit.unitId === item.unitId,
                 );
+                const availableQty = getProductAvailableQty(item.productId ?? "");
+                const currentQty = Number(item.qty ?? 0) || 0;
                 const lineTotal =
                   (Number(item.qty ?? 0) || 0) * (selectedUnit?.pricePerUnit ?? 0);
 
                 return (
-                  <div key={`${item.productId}-${index}`} className="space-y-2 rounded-lg border p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-xs text-slate-500">{selectedProduct?.sku ?? "-"}</p>
-                        <p className="text-sm font-medium text-slate-900">
+                  <div key={`${item.productId}-${index}`} className="space-y-2 rounded-lg border p-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-slate-900">
                           {selectedProduct?.name ?? "ไม่พบสินค้า"}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          คงเหลือ {selectedProduct?.available.toLocaleString("th-TH") ?? 0}
                         </p>
                       </div>
                       <button
                         type="button"
                         className="text-xs text-red-600"
                         onClick={() => remove(index)}
-                        disabled={loading || watchedItems.length <= 1}
+                        disabled={loading}
                       >
                         ลบ
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto_8.5rem] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_auto_9.5rem]">
                       <select
-                        className="h-9 rounded-md border px-2 text-sm outline-none ring-primary focus:ring-2"
+                        className="h-8 w-full min-w-0 rounded-md border px-2 text-xs outline-none ring-primary focus:ring-2"
                         value={item.unitId ?? ""}
                         onChange={(event) =>
                           form.setValue(`items.${index}.unitId`, event.target.value, {
@@ -1994,33 +2389,29 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          className="h-9 w-9 rounded-md border text-base text-slate-700"
+                          className="h-8 w-8 rounded-md border text-sm text-slate-700"
                           onClick={() => decreaseItemQty(index)}
                           disabled={loading}
                           aria-label="ลดจำนวน"
                         >
                           -
                         </button>
-                        <div className="min-w-10 text-center text-sm font-medium text-slate-800">
+                        <div className="min-w-8 text-center text-xs font-medium text-slate-800">
                           {(Number(item.qty ?? 0) || 0).toLocaleString("th-TH")}
                         </div>
                         <button
                           type="button"
-                          className="h-9 w-9 rounded-md border text-base text-slate-700"
+                          className="h-8 w-8 rounded-md border text-sm text-slate-700"
                           onClick={() => increaseItemQty(index)}
-                          disabled={loading}
+                          disabled={loading || availableQty <= 0 || currentQty >= availableQty}
                           aria-label="เพิ่มจำนวน"
                         >
                           +
                         </button>
                       </div>
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs text-slate-500">
-                      <span>คงเหลือ {selectedProduct?.available.toLocaleString("th-TH") ?? 0}</span>
-                      <span>
-                        รวมรายการ {lineTotal.toLocaleString("th-TH")} {catalog.storeCurrency}
-                      </span>
+                      <p className="text-right text-sm font-semibold tabular-nums text-slate-900">
+                        {lineTotal.toLocaleString("th-TH")} {catalog.storeCurrency}
+                      </p>
                     </div>
                   </div>
                 );
@@ -2061,16 +2452,51 @@ export function OrdersManagement(props: OrdersManagementProps) {
       {isCreateOnlyMode ? (
         <SlideUpSheet
           isOpen={showCheckoutSheet}
-          onClose={() => {
-            setShowCheckoutSheet(false);
-            setCreateStep("products");
-          }}
+          onClose={requestCloseCheckoutSheet}
+          closeOnBackdrop={false}
           title="ชำระเงินและรายละเอียดออเดอร์"
           description="กรอกข้อมูลลูกค้า การชำระเงิน และยืนยันสร้างออเดอร์"
           disabled={loading}
         >
           {renderCreateOrderForm({ inSheet: true })}
         </SlideUpSheet>
+      ) : null}
+      {showCheckoutSheet && showCheckoutCloseConfirm ? (
+        <div
+          className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-900/40 px-4"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setShowCheckoutCloseConfirm(false);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="checkout-close-confirm-title"
+            className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-4 shadow-xl"
+          >
+            <h3 id="checkout-close-confirm-title" className="text-sm font-semibold text-slate-900">
+              ปิดหน้าชำระเงิน?
+            </h3>
+            <p className="mt-1 text-xs text-slate-600">
+              มีข้อมูลที่กรอกไว้ในขั้นตอนนี้ ต้องการปิดหน้าชำระเงินและกลับไปเลือกสินค้าหรือไม่
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9"
+                onClick={() => setShowCheckoutCloseConfirm(false)}
+              >
+                กลับไปแก้ไข
+              </Button>
+              <Button type="button" className="h-9" onClick={closeCheckoutSheet}>
+                ปิดหน้าชำระเงิน
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {successMessage ? <p className="text-sm text-emerald-700">{successMessage}</p> : null}

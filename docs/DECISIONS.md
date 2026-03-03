@@ -356,6 +356,42 @@
   - รายงานรายได้ยังอิง `order_items.line_total` เหมือนเดิม และฝั่ง COGS ยังอิง `qty_base x cost_base_at_sale`
   - ต้องคง fallback rule ให้ครบทั้ง UI และ API เพื่อลด regression กับข้อมูลเก่าที่ไม่มี `price_per_unit`
 
+## ADR-023: Layout Breakpoint Contract สำหรับ Tablet/Desktop
+
+- Date: March 3, 2026
+- Status: Accepted
+- Decision:
+  - กำหนดนิยาม breakpoint กลางของแอปเป็น `mobile <768`, `tablet 768-1199`, `desktop >=1200`
+  - app shell หลักและ system-admin shell จะถูก constrain เฉพาะ desktop (`>=1200`) และให้ tablet ใช้พื้นที่เต็มหน้าจอ
+  - `SlideUpSheet` ใช้ contract เดียวกันทั้งระบบ:
+    - mobile = bottom sheet
+    - tablet = centered sheet (`min(45rem, 100vw-2rem)`, สูงสุด `92dvh`)
+    - desktop = centered modal (desktop max-width คุมผ่าน `panelMaxWidthClass`)
+  - นโยบาย desktop-only UI (เช่นปุ่ม fullscreen บน navbar) ให้ยึด threshold `>=1200`
+- Reason:
+  - เดิมมีหลาย threshold ปนกัน (`sm`, `lg`, logic 1024) ทำให้ UX tablet/desktop ไม่สม่ำเสมอ
+  - ต้องการให้ tablet ได้พื้นที่ใช้งานเต็มจอ แต่ desktop ยังอ่านง่ายด้วย constrained width
+- Consequence:
+  - โค้ดใหม่ที่เกี่ยวกับ layout/overlay ต้องอิง contract เดียวกันนี้เพื่อลด drift
+  - การเปลี่ยน threshold มีผลต่อ interaction บางจุด (เช่น quick inbox/fullscreen) จึงต้องยืนยัน behavior ใน QA matrix ของ tablet และ desktop
+  - หากต้องการ desktop wide mode ในหน้าข้อมูลหนาแน่น ให้เพิ่มผ่าน token (`--app-shell-max-width-desktop-wide`) โดยไม่แก้ breakpoint หลัก
+
+## ADR-024: Overlay Standardization ใช้ SlideUpSheet เป็นค่าเริ่มต้น และ Migrate แบบเป็นเฟส
+
+- Date: March 3, 2026
+- Status: Accepted
+- Decision:
+  - กำหนดให้ modal/sheet ใหม่ในฝั่ง app ใช้ `components/ui/slide-up-sheet.tsx` เป็นค่าเริ่มต้น
+  - หน้าที่มี custom overlay เดิมให้ migrate แบบเป็นเฟส โดยเริ่มจาก flow ความเสี่ยงต่ำก่อน
+  - phase migration ปัจจุบัน complete แล้ว: `categories`, `units`, `store payment accounts`, `users`, `stores`, และ force-change password modal ใน `login`
+- Reason:
+  - โค้ด overlay กระจายหลายไฟล์ทำให้ปรับ behavior รายอุปกรณ์ได้ยากและเสี่ยง drift
+  - migrate ทั้งหมดในครั้งเดียวมีความเสี่ยง regression สูงสำหรับฟอร์มที่ซับซ้อน
+- Consequence:
+  - งานใหม่ที่มี overlay ต้อง reuse `SlideUpSheet` เพื่อลดต้นทุนดูแล
+  - backlog overlay legacy ฝั่ง settings ปิดครบแล้ว และทีมต้องยืนยัน parity ของ UX หลัง refactor ในรอบ regression test
+  - การ debug keyboard-aware/scroll-lock/escape-close จะรวมศูนย์มากขึ้นที่คอมโพเนนต์เดียว
+
 ## Template สำหรับ ADR ใหม่
 
 - Date: YYYY-MM-DD
