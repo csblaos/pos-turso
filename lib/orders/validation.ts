@@ -96,14 +96,26 @@ export const createOrderSchema = z
 
 export const updateOrderSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("submit_for_payment") }),
-  z.object({
-    action: z.literal("confirm_paid"),
-    codAmount: z.coerce
-      .number({ message: "ยอด COD ต้องเป็นตัวเลข" })
-      .int("ยอด COD ต้องเป็นจำนวนเต็ม")
-      .min(0, "ยอด COD ต้องไม่ติดลบ")
-      .optional(),
-  }),
+  z
+    .object({
+      action: z.literal("confirm_paid"),
+      codAmount: z.coerce
+        .number({ message: "ยอด COD ต้องเป็นตัวเลข" })
+        .int("ยอด COD ต้องเป็นจำนวนเต็ม")
+        .min(0, "ยอด COD ต้องไม่ติดลบ")
+        .optional(),
+      paymentMethod: z.enum(["CASH", "LAO_QR"]).optional(),
+      paymentAccountId: z.string().trim().optional().or(z.literal("")),
+    })
+    .superRefine((payload, ctx) => {
+      if (payload.paymentMethod === "LAO_QR" && !payload.paymentAccountId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["paymentAccountId"],
+          message: "กรุณาเลือกบัญชี QR สำหรับการรับชำระ",
+        });
+      }
+    }),
   z.object({ action: z.literal("mark_picked_up_unpaid") }),
   z.object({
     action: z.literal("submit_payment_slip"),

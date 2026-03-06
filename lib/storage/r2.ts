@@ -129,6 +129,15 @@ function normalizePathname(pathname: string) {
   return pathname.replace(/^\/+/, "").replace(/\/+$/, "");
 }
 
+function isHttpUrlLike(value: string) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function extractObjectKeyFromUrl(config: R2Config, logoUrl: string) {
   let parsed: URL;
   try {
@@ -170,6 +179,33 @@ function extractObjectKeyFromUrl(config: R2Config, logoUrl: string) {
       const objectKey = normalizedPath.slice(bucketPrefix.length);
       return objectKey.length > 0 ? objectKey : null;
     }
+  }
+
+  if (normalizedPath.startsWith(`${config.keyPrefix}/`)) {
+    return normalizedPath;
+  }
+
+  return null;
+}
+
+function normalizeObjectReferenceToKey(config: R2Config, value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const objectKey = extractObjectKeyFromUrl(config, trimmed);
+  if (objectKey) {
+    return objectKey;
+  }
+
+  if (isHttpUrlLike(trimmed)) {
+    return null;
+  }
+
+  const normalizedPath = normalizePathname(trimmed);
+  if (!normalizedPath) {
+    return null;
   }
 
   if (normalizedPath.startsWith(`${config.keyPrefix}/`)) {
@@ -365,7 +401,7 @@ export async function deletePaymentQrImageFromR2(params: { qrImageUrl: string })
     return false;
   }
 
-  const objectKey = extractObjectKeyFromUrl(config, params.qrImageUrl);
+  const objectKey = normalizeObjectReferenceToKey(config, params.qrImageUrl);
   if (!objectKey) {
     return false;
   }
@@ -379,6 +415,55 @@ export async function deletePaymentQrImageFromR2(params: { qrImageUrl: string })
   );
 
   return true;
+}
+
+export function normalizePaymentQrImageStorageValue(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) {
+    return null;
+  }
+
+  const config = loadPaymentQrR2Config();
+  if (!config) {
+    if (isHttpUrlLike(trimmed)) {
+      return trimmed;
+    }
+
+    const normalizedPath = normalizePathname(trimmed);
+    return normalizedPath.length > 0 ? normalizedPath : null;
+  }
+
+  const objectKey = normalizeObjectReferenceToKey(config, trimmed);
+  if (objectKey) {
+    return objectKey;
+  }
+
+  if (isHttpUrlLike(trimmed)) {
+    return trimmed;
+  }
+
+  return null;
+}
+
+export function resolvePaymentQrImageUrl(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) {
+    return null;
+  }
+
+  const config = loadPaymentQrR2Config();
+  if (config) {
+    const objectKey = normalizeObjectReferenceToKey(config, trimmed);
+    if (objectKey) {
+      return buildObjectUrl(config, objectKey);
+    }
+  }
+
+  if (isHttpUrlLike(trimmed)) {
+    return trimmed;
+  }
+
+  return null;
 }
 
 export async function uploadOrderShippingLabelToR2(params: {
@@ -530,7 +615,7 @@ export async function deleteProductImageFromR2(params: { imageUrl: string }) {
     return false;
   }
 
-  const objectKey = extractObjectKeyFromUrl(config, params.imageUrl);
+  const objectKey = normalizeObjectReferenceToKey(config, params.imageUrl);
   if (!objectKey) {
     return false;
   }
@@ -544,4 +629,53 @@ export async function deleteProductImageFromR2(params: { imageUrl: string }) {
   );
 
   return true;
+}
+
+export function normalizeProductImageStorageValue(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) {
+    return null;
+  }
+
+  const config = loadProductImageR2Config();
+  if (!config) {
+    if (isHttpUrlLike(trimmed)) {
+      return trimmed;
+    }
+
+    const normalizedPath = normalizePathname(trimmed);
+    return normalizedPath.length > 0 ? normalizedPath : null;
+  }
+
+  const objectKey = normalizeObjectReferenceToKey(config, trimmed);
+  if (objectKey) {
+    return objectKey;
+  }
+
+  if (isHttpUrlLike(trimmed)) {
+    return trimmed;
+  }
+
+  return null;
+}
+
+export function resolveProductImageUrl(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) {
+    return null;
+  }
+
+  const config = loadProductImageR2Config();
+  if (config) {
+    const objectKey = normalizeObjectReferenceToKey(config, trimmed);
+    if (objectKey) {
+      return buildObjectUrl(config, objectKey);
+    }
+  }
+
+  if (isHttpUrlLike(trimmed)) {
+    return trimmed;
+  }
+
+  return null;
 }

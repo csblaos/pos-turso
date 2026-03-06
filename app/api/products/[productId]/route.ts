@@ -15,8 +15,9 @@ import { normalizeProductPayload, updateProductSchema } from "@/lib/products/val
 import { buildAuditEventValues } from "@/server/services/audit.service";
 import {
   deleteProductImageFromR2,
-  uploadProductImageToR2,
   isProductImageR2Configured,
+  resolveProductImageUrl,
+  uploadProductImageToR2,
 } from "@/lib/storage/r2";
 import {
   buildVariantColumns,
@@ -61,7 +62,7 @@ export async function PATCH(
         );
       }
 
-      const { url: imageUrl } = await uploadProductImageToR2({
+      const { objectKey: imageKey } = await uploadProductImageToR2({
         storeId,
         productName: targetProduct.name,
         file,
@@ -78,10 +79,10 @@ export async function PATCH(
 
       await db
         .update(products)
-        .set({ imageUrl })
+        .set({ imageUrl: imageKey })
         .where(and(eq(products.id, productId), eq(products.storeId, storeId)));
 
-      return NextResponse.json({ ok: true, imageUrl });
+      return NextResponse.json({ ok: true, imageUrl: resolveProductImageUrl(imageKey) });
     }
 
     // ── JSON actions ──

@@ -12,7 +12,7 @@ import {
   FACEBOOK_INBOX_URL,
   isWithin24Hours,
 } from "@/lib/orders/messages";
-import { getOrderDetail } from "@/lib/orders/queries";
+import { getActiveQrPaymentAccountsForStore, getOrderDetail } from "@/lib/orders/queries";
 
 export default async function OrderDetailPage({
   params,
@@ -43,7 +43,10 @@ export default async function OrderDetailPage({
   }
 
   const { orderId } = await params;
-  const order = await getOrderDetail(session.activeStoreId, orderId);
+  const [order, qrPaymentAccounts] = await Promise.all([
+    getOrderDetail(session.activeStoreId, orderId),
+    getActiveQrPaymentAccountsForStore(session.activeStoreId),
+  ]);
 
   if (!order) {
     notFound();
@@ -81,6 +84,7 @@ export default async function OrderDetailPage({
           isPermissionGranted(permissionKeys, "orders.delete")
         }
         canSelfApproveCancel={canSelfApproveCancel}
+        qrPaymentAccounts={qrPaymentAccounts}
       />
     </section>
   );

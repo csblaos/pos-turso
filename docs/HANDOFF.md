@@ -2,9 +2,62 @@
 
 ## Snapshot Date
 
-- March 5, 2026
+- March 6, 2026
 
 ## Changed (ล่าสุด)
+
+- ปรับ storage ของรูป QR บัญชีรับเงินให้เก็บเป็น `object key/path` ใน DB:
+  - `POST/PATCH /api/settings/store/payment-accounts` จะเก็บค่า `upload.objectKey` แทน full public URL สำหรับไฟล์ที่อัปโหลดใหม่
+  - ถ้าส่ง `qrImageUrl` เข้ามาเป็น full URL เดิมของ R2/CDN หรือเป็น key/path ของไฟล์ ระบบจะ normalize ให้เป็น key ก่อนบันทึก
+  - ตอน query ออกหน้า settings, `/orders/new`, และ `/orders/[orderId]` จะ resolve key กลับเป็น public URL ด้วย `R2_PUBLIC_BASE_URL`
+  - ข้อมูลเก่าที่ยังเป็น full URL (`r2.dev`/CDN) ยังอ่านและลบไฟล์ได้เหมือนเดิม
+
+- ปรับ storage ของรูปสินค้าให้เก็บเป็น `object key/path` ใน DB เช่นกัน:
+  - `PATCH /api/products/[productId]` (multipart upload image) จะเก็บ `upload.objectKey` ลง `products.imageUrl`
+  - ตอน list product, create/update response, และ order catalog ของหน้า POS จะ resolve key กลับเป็น public URL ด้วย `R2_PUBLIC_BASE_URL`
+  - ข้อมูลเก่าที่เป็น full URL ยังแสดงรูปและลบไฟล์ได้เหมือนเดิม
+  - `next.config.ts` อ่าน `R2_PUBLIC_BASE_URL` แล้วเพิ่ม hostname/path เข้า `images.remotePatterns` อัตโนมัติ เพื่อให้ `next/image` โหลด custom CDN ได้
+
+- ปรับ badge สถานะในหน้า `/orders` สำหรับ online order:
+  - เลิกแปล `status=PENDING_PAYMENT` เป็น `ค้างจ่าย` แบบเหมารวมใน list
+  - badge หลักของ online จะเป็น `รอดำเนินการ` แทน เพื่อสื่อสถานะงาน
+  - badge รองอ่านจาก `paymentMethod/paymentStatus` เช่น `ยังไม่ชำระ`, `รอตรวจสลิป`, `COD`, `COD รอปิดยอด`, `ชำระแล้ว`
+  - ใช้ helper เดียวกันทั้ง mobile card list และ desktop table เพื่อลดความคลาดเคลื่อนของการแสดงผล
+
+- ปรับ UX เลือก `บัญชีรับเงิน (QR)` ใน modal checkout ของ `/orders/new`:
+  - หลังเลือกบัญชี QR จะมี section `แสดง QR` แบบพับ/เปิด (default ปิด)
+  - เมื่อเปิดจะแสดงรูป QR, ชื่อบัญชีที่แสดง, ธนาคาร, ชื่อเจ้าของบัญชี, และเลขบัญชีด้านล่าง พร้อมปุ่ม `คัดลอกเลขบัญชี`
+  - บนการ์ดรูป QR มีปุ่มไอคอน `เปิดรูปเต็ม` และ `ดาวน์โหลด`
+  - `เปิดรูปเต็ม` เปลี่ยนเป็น preview overlay ในหน้าเดิมเพื่อไม่หลุดจาก flow checkout; ภายใน overlay มี action รอง `เปิดแท็บใหม่`, `ดาวน์โหลด`, และ `ปิด`
+  - ปุ่มดาวน์โหลดเปลี่ยนไปเรียก route same-origin `GET /api/orders/payment-accounts/[accountId]/qr-image?download=1` ก่อน เพื่อลดปัญหา CORS/CDN download; ถ้าไม่สำเร็จจะ fallback ไปเปิดรูปในแท็บใหม่
+
+- ปรับ section `ชำระด้วย QR โอนเงิน` ในหน้า `/orders/[orderId]`:
+  - เคส `Walk-in + ชำระแล้ว` ตัด field/action `ลิงก์สลิปการโอน` ออก เหลือเฉพาะรูป QR + ชื่อบัญชี + ธนาคาร + เลขบัญชีแบบ read-only
+  - เคส `Pickup/Online` ที่ยังต้องส่งสลิป ใช้ label ใหม่ `ลิงก์หลักฐานการชำระ` + ปุ่ม `แนบหลักฐาน / ส่งรอตรวจสอบ`
+  - ถ้ามีสลิปแล้วและไม่อยู่ในขั้นต้องกรอกต่อ จะเปลี่ยนเป็นบล็อก read-only `หลักฐานการชำระ`
+  - reopen checkout modal แล้ว section นี้จะกลับไปปิดเสมอ เพื่อลดความยาวของฟอร์มในจอเล็ก
+
+- ปรับ UX modal `ชำระเงินและรายละเอียดออเดอร์` ในหน้า `/orders/new`:
+  - เพิ่ม option `scrollToTopOnOpen` ใน `SlideUpSheet` (default `false`)
+  - เปิดใช้กับ checkout sheet เพื่อให้ทุกครั้งที่เปิด modal จะเริ่มจากด้านบนของฟอร์มเสมอ (ไม่ค้างตำแหน่ง scroll เดิม)
+
+- ปรับบล็อก `การจัดส่ง` ในหน้า `/orders/[orderId]` (โหมดออนไลน์) เป็น manual upload-first:
+  - เอาช่องกรอก manual (`ขนส่ง/เลขพัสดุ/ลิงก์/ต้นทุน`) และ action เก่า (`สร้าง Shipping Label`, `ส่งข้อมูลจัดส่งให้ลูกค้า`) ออกจากบล็อกนี้
+  - คงเฉพาะสรุปข้อมูลจัดส่ง + preview รูปล่าสุด + ปุ่มเดียว `อัปโหลด/ถ่ายรูปป้าย`
+  - เมื่อกดปุ่มจะเปิด chooser ให้เลือก `เลือกรูปจากเครื่อง` หรือ `ถ่ายรูปจากกล้อง`; ถ้าเครื่อง/ browser ไม่รองรับกล้องจะ disable option กล้องแทน
+  - หลังอัปโหลดสำเร็จ ระบบจะ PATCH `update_shipping` ให้อัตโนมัติทันที (ไม่ต้องกดบันทึกซ้ำ)
+  - มือถือรองรับการเปิดกล้องโดยตรงผ่าน input `capture="environment"` เมื่อเลือกทาง `ถ่ายรูปจากกล้อง`
+  - ถ้ามีรูปป้ายอยู่แล้ว จะมีปุ่ม `ลบรูปป้าย` พร้อม custom confirm modal; การลบรอบนี้จะเคลียร์เฉพาะ `shippingLabelUrl` ออกจากออเดอร์และคงข้อมูลขนส่งอื่นไว้
+
+- ปรับการแสดง `ช่องทาง` ในหน้า `/orders`:
+  - desktop เพิ่มคอลัมน์ `ช่องทาง` ใหม่ (แสดงค่าในรูป `Facebook • LAK • COD`) และคอลัมน์ `ยอดรวม` เหลือเฉพาะยอดเงิน
+  - ใช้ข้อความเดียวกันทุกหน้าจอเป็น `Facebook` / `WhatsApp` / `Walk-in` / `Pickup`
+  - mobile คงรูปแบบบรรทัดเดียวเดิม และแสดงเป็น `Facebook • LAK • COD` (ไม่มี prefix `ช่องทาง`/`จ่าย`)
+
+- ปรับสถานะเริ่มต้นของการสร้างออเดอร์ `ONLINE_DELIVERY` ใน `POST /api/orders`:
+  - จากเดิม `DRAFT` เปลี่ยนเป็น `PENDING_PAYMENT` ทันที
+  - จองสต็อก (`RESERVE`) ตั้งแต่ตอนสร้างออเดอร์ออนไลน์ เพื่อไม่ต้องกด action เพิ่มในหน้า detail
+  - ไม่กระทบ flow เดิมของ `Walk-in` และ `Pickup later`
 
 - ปรับระบบพิมพ์ใน success modal ของหน้า `/orders/new` ให้รองรับ iOS ดีขึ้น:
   - เปลี่ยนจาก hidden iframe (`iframe.contentWindow.print()`) เป็น `window.print()` บนหน้าเดิม
@@ -39,6 +92,8 @@
   - รองรับทั้ง `ยืนยันรับชำระ -> ยืนยันรับสินค้า` และ `ยืนยันรับสินค้า (ค้างจ่าย) -> ยืนยันรับชำระ`
   - เพิ่ม action ใหม่ `mark_picked_up_unpaid` ใน `PATCH /api/orders/[orderId]` เพื่อรับสินค้าไปก่อน (ปล่อยจอง+ตัดสต็อก) แล้วเปลี่ยนสถานะเป็น `PICKED_UP_PENDING_PAYMENT`
   - ปรับ `confirm_paid` ให้รองรับสถานะ `PICKED_UP_PENDING_PAYMENT` (ปิดยอดโดยไม่ตัดสต็อกซ้ำ) และปรับเคส `READY_FOR_PICKUP + ยังไม่จ่าย` ให้เป็นยืนยันรับชำระอย่างเดียวก่อน
+  - ถ้าออเดอร์หน้าร้าน (`Walk-in/Pickup`) อยู่ในโหมด `ค้างจ่าย` (`paymentMethod=ON_CREDIT`) modal `ยืนยันรับชำระ` จะให้เลือกวิธีรับเงินจริงเป็น `เงินสด` หรือ `QR โอน`; ถ้าเลือก QR ต้องเลือกบัญชี QR ของร้านก่อนบันทึก และ modal จะแสดง preview QR พร้อมชื่อบัญชี/ธนาคาร/เลขบัญชี, ปุ่ม `คัดลอกเลขบัญชี`, ปุ่มไอคอน `ดูรูปเต็ม`, และปุ่มไอคอน `ดาวน์โหลด`
+  - ฝั่ง API `confirm_paid` จะรับ `paymentMethod/paymentAccountId` สำหรับ in-store credit settlement เท่านั้น และจะอัปเดตค่าบน order ให้ตรงกับการรับเงินจริง โดยไม่บังคับแนบสลิปสำหรับ QR ที่รับชำระหน้าเคาน์เตอร์
   - ปรับ `submit_payment_slip` ให้รองรับ `PICKED_UP_PENDING_PAYMENT`
   - ปรับ `cancel` ให้แยกการคืนสต็อกตาม movement จริง: เคสยังจองใช้ `RELEASE`, เคสรับสินค้าแล้วใช้ `RETURN`
   - หน้า detail เพิ่มปุ่ม `ยืนยันรับสินค้า (ค้างจ่าย)` พร้อม custom confirm modal และซ่อน `การทำงานเพิ่มเติม` สำหรับสถานะ `PICKED_UP_PENDING_PAYMENT`
@@ -261,7 +316,7 @@
   - ปรับ layout desktop ของ checkout ออนไลน์ให้ `ส่วนลด` และ `ค่าขนส่ง` อยู่บรรทัดเดียวแบบ 2 คอลัมน์เท่ากัน (1:1)
   - ดีไซน์ `วิธีรับชำระ` ใน checkout เปลี่ยนจาก dropdown เป็นปุ่มเลือกแบบ chips: หน้าร้าน/รับที่ร้าน = `เงินสด`, `QR`, `ค้างจ่าย`; ออนไลน์ = `เงินสด`, `QR`, `ค้างจ่าย`, `COD` และเพิ่ม enum ใหม่ `ON_CREDIT` สำหรับค้างจ่าย
   - validation ฝั่ง client ตาม flow: `Walk-in ทันที` และ `มารับที่ร้านภายหลัง` ไม่บังคับชื่อ/เบอร์ (แนะนำให้กรอกอย่างน้อย 1 อย่างถ้าทราบ), ส่วน `สั่งออนไลน์/จัดส่ง` ยังบังคับเบอร์โทร+ที่อยู่จัดส่ง และเปิด `COD` เฉพาะ flow ออนไลน์
-  - ฝั่ง API `POST /api/orders` รองรับ `checkoutFlow` (optional) พร้อม matrix ล่าสุด: `Walk-in จ่ายแล้ว => PAID+OUT`, `Walk-in ค้างจ่าย => PENDING_PAYMENT+RESERVE`, `Pickup later => READY_FOR_PICKUP+RESERVE` (จ่ายแล้วตั้ง `paymentStatus=PAID` แต่ยังไม่ OUT), ส่วนออนไลน์คงเริ่มที่ `DRAFT`
+  - ฝั่ง API `POST /api/orders` รองรับ `checkoutFlow` (optional) พร้อม matrix ล่าสุด: `Walk-in จ่ายแล้ว => PAID+OUT`, `Walk-in ค้างจ่าย => PENDING_PAYMENT+RESERVE`, `Pickup later => READY_FOR_PICKUP+RESERVE` (จ่ายแล้วตั้ง `paymentStatus=PAID` แต่ยังไม่ OUT), และออนไลน์เริ่มที่ `PENDING_PAYMENT+RESERVE`
   - ฝั่ง API `PATCH /api/orders/[orderId]` เปิดให้ `confirm_paid`/`submit_payment_slip` ใช้ได้กับสถานะ `READY_FOR_PICKUP`; `confirm_paid` รองรับเคสรับสินค้าหน้าร้านที่จ่ายล่วงหน้า (`READY_FOR_PICKUP + paymentStatus=PAID`) เพื่อปล่อยจอง+ตัดสต็อกโดยไม่บังคับสลิปซ้ำ, และการ `cancel` จากสถานะนี้จะปล่อยจองสต็อก (`RELEASE`) กลับ
   - อัปเดต flow COD ในหน้า detail/route:
     - `mark_packed` รองรับ COD จาก `PENDING_PAYMENT` และจะลง movement `RELEASE+OUT` ตอนแพ็ก (ไม่ต้องรอ paid)

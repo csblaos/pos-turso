@@ -288,7 +288,8 @@ export async function POST(request: Request) {
     const isOnCreditPayment = selectedPaymentMethod === "ON_CREDIT";
     const isPrepaidAtCreate =
       !isOnlineDelivery && !isOnCreditPayment && selectedPaymentMethod !== "COD";
-    const shouldReserveStockOnCreate = isPickupLater || (isWalkInNow && isOnCreditPayment);
+    const shouldReserveStockOnCreate =
+      isPickupLater || isOnlineDelivery || (isWalkInNow && isOnCreditPayment);
     const shouldStockOutOnCreate = isWalkInNow && isPrepaidAtCreate;
 
     if (shouldReserveStockOnCreate || shouldStockOutOnCreate) {

@@ -2,6 +2,22 @@
 
 ไฟล์นี้บันทึก "ทำไม" ของการออกแบบสำคัญ เพื่อให้ AI/คนทำงานต่อไม่เดาเอง
 
+## ADR-017: ไฟล์สื่อที่อยู่ใน R2 เก็บเป็น Object Key ไม่เก็บ Full URL
+
+- Date: March 6, 2026
+- Status: Accepted
+- Decision:
+  - ฟิลด์ media ที่เก็บไฟล์ใน R2/CDN เช่น `store_payment_accounts.qr_image_url` และ `products.image_url` ใช้เก็บ `object key/path` เป็นหลัก แทนการเก็บ full public URL
+  - ตอนอ่านข้อมูลออก API/query layer จะ resolve key เป็น public URL ด้วย `R2_PUBLIC_BASE_URL`
+  - ระบบยังรองรับข้อมูลเก่าที่เป็น full URL และ normalize กลับเป็น key ได้เมื่อมีการแก้ไขผ่าน API
+- Reason:
+  - ลดการผูกข้อมูลใน DB กับโดเมน CDN/runtime env
+  - เปลี่ยนโดเมนจาก `r2.dev` ไป custom CDN ได้โดยไม่ต้อง backfill ทุก record ทันที
+  - ทำให้ delete/cleanup ฝั่ง storage ใช้ object key ตรง ๆ ได้เสถียรกว่า
+- Consequence:
+  - query/page ที่แสดงรูปจาก R2 ต้องผ่าน helper resolve URL ไม่อ่านค่าจาก DB ตรง ๆ
+  - route ที่เขียนค่า media ลง DB ต้อง normalize ค่าเป็น key ก่อนบันทึก
+
 ## ADR-016: Pickup รองรับ 2 ลำดับด้วยสถานะกลาง `PICKED_UP_PENDING_PAYMENT`
 
 - Date: March 5, 2026

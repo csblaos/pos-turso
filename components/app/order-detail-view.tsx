@@ -2,7 +2,9 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { ArrowDownToLine, Expand, ExternalLink, X } from "lucide-react";
+import { toast } from "react-hot-toast";
 
 import {
   ManagerCancelApprovalModal,
@@ -16,7 +18,7 @@ import {
   parseStoreCurrency,
   vatModeLabel,
 } from "@/lib/finance/store-financial";
-import type { OrderDetail } from "@/lib/orders/queries";
+import type { OrderCatalogPaymentAccount, OrderDetail } from "@/lib/orders/queries";
 import { maskAccountValue } from "@/lib/payments/store-payment";
 
 type MessagingInfo = {
@@ -28,6 +30,7 @@ type MessagingInfo = {
 
 type OrderDetailViewProps = {
   order: OrderDetail;
+  qrPaymentAccounts: OrderCatalogPaymentAccount[];
   messaging: MessagingInfo;
   canUpdate: boolean;
   canMarkPaid: boolean;
@@ -90,6 +93,7 @@ const shippingLabelStatusLabel: Record<OrderDetail["shippingLabelStatus"], strin
 
 export function OrderDetailView({
   order,
+  qrPaymentAccounts,
   messaging,
   canUpdate,
   canMarkPaid,
@@ -102,10 +106,7 @@ export function OrderDetailView({
   const router = useRouter();
 
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
-  const [shippingCarrier, setShippingCarrier] = useState(order.shippingCarrier ?? "");
-  const [trackingNo, setTrackingNo] = useState(order.trackingNo ?? "");
   const [shippingLabelUrl, setShippingLabelUrl] = useState(order.shippingLabelUrl ?? "");
-  const [shippingCost, setShippingCost] = useState(String(order.shippingCost));
   const [codSettlementAmount, setCodSettlementAmount] = useState(
     String(order.codAmount > 0 ? order.codAmount : order.total),
   );
@@ -113,12 +114,16 @@ export function OrderDetailView({
   const [codReturnNoteInput, setCodReturnNoteInput] = useState(order.codReturnNote ?? "");
   const [paymentSlipUrl, setPaymentSlipUrl] = useState(order.paymentSlipUrl ?? "");
   const [messageText, setMessageText] = useState(messaging.template);
-  const [shippingTemplateOverride, setShippingTemplateOverride] = useState<string | null>(null);
   const [receiptPrintLoading, setReceiptPrintLoading] = useState(false);
   const [labelPrintLoading, setLabelPrintLoading] = useState(false);
   const [showConfirmPaidConfirmModal, setShowConfirmPaidConfirmModal] = useState(false);
   const [showConfirmPickupBeforePaidModal, setShowConfirmPickupBeforePaidModal] = useState(false);
   const [showCancelApprovalModal, setShowCancelApprovalModal] = useState(false);
+  const [showConfirmPaidQrImageViewer, setShowConfirmPaidQrImageViewer] = useState(false);
+  const [showShippingLabelSourcePicker, setShowShippingLabelSourcePicker] = useState(false);
+  const [showDeleteShippingLabelConfirm, setShowDeleteShippingLabelConfirm] = useState(false);
+  const [confirmPaidPaymentMethod, setConfirmPaidPaymentMethod] = useState<"CASH" | "LAO_QR">("CASH");
+  const [confirmPaidPaymentAccountId, setConfirmPaidPaymentAccountId] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const shippingLabelFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -133,6 +138,12 @@ export function OrderDetailView({
     order.paymentMethod !== "COD" &&
     order.status === "READY_FOR_PICKUP" &&
     order.paymentStatus === "PAID";
+  const isInStoreCreditSettlement =
+    isWalkInOrder &&
+    order.paymentMethod === "ON_CREDIT" &&
+    ((order.status === "PENDING_PAYMENT" && order.paymentStatus !== "PAID") ||
+      (order.status === "READY_FOR_PICKUP" && order.paymentStatus !== "PAID") ||
+      (order.status === "PICKED_UP_PENDING_PAYMENT" && order.paymentStatus !== "PAID"));
   const isPickupOrder =
     order.status === "READY_FOR_PICKUP" ||
     order.status === "PICKED_UP_PENDING_PAYMENT" ||
@@ -186,13 +197,6 @@ export function OrderDetailView({
       order.status === "SHIPPED");
   const cancelIsHighRisk =
     order.status === "PAID" || order.status === "PACKED" || order.status === "SHIPPED";
-  const canCreateShippingLabel =
-    !isWalkInPaidComplete && canShip && (order.status === "PACKED" || order.status === "SHIPPED");
-  const canSendShippingUpdate =
-    !isWalkInPaidComplete &&
-    canShip &&
-    (order.status === "PACKED" || order.status === "SHIPPED") &&
-    (Boolean(trackingNo.trim()) || Boolean(shippingLabelUrl.trim()));
   const showExtraActions = !(
     (isWalkInOrder && (order.status === "CANCELLED" || order.status === "PENDING_PAYMENT")) ||
     order.status === "READY_FOR_PICKUP" ||
@@ -212,7 +216,14 @@ export function OrderDetailView({
         order.shippingLabelUrl ||
         order.shippingCost > 0,
     );
+  const isLaoQrOrder = order.paymentMethod === "LAO_QR";
+  const qrSlipWorkflowEnabled = isLaoQrOrder && (isOnlineOrder || isPickupOrder);
+  const showQrSlipStatus = isLaoQrOrder && qrSlipWorkflowEnabled;
+  const showQrSlipInput = canSubmitSlip && qrSlipWorkflowEnabled;
+  const showQrProofReadOnly =
+    isLaoQrOrder && qrSlipWorkflowEnabled && Boolean(order.paymentSlipUrl) && !showQrSlipInput;
   const showLaoQrMessaging = order.paymentMethod === "LAO_QR" && isOnlineOrder;
+  const canOpenShippingLabelCamera = typeof window !== "undefined" && "mediaDevices" in navigator;
   const storeCurrencyDisplay = currencySymbol(parseStoreCurrency(order.storeCurrency));
   const paymentCurrencyDisplay = currencyLabel(order.paymentCurrency);
   const customerNameDisplay =
@@ -243,45 +254,39 @@ export function OrderDetailView({
           : 0
       : 0;
 
-  const shippingCostNumber = useMemo(() => Number(shippingCost || "0"), [shippingCost]);
   const codSettlementAmountNumber = useMemo(
     () => Number(codSettlementAmount || "0"),
     [codSettlementAmount],
   );
   const codReturnFeeNumber = useMemo(() => Number(codReturnFeeInput || "0"), [codReturnFeeInput]);
-  const shippingMessageTemplate = useMemo(() => {
-    const customerLabel = (order.customerName || order.contactDisplayName || "ลูกค้า").trim();
-    const carrierLabel = shippingCarrier.trim() || "ขนส่ง";
-    const trackingLabel = trackingNo.trim() || "-";
-    const labelLink = shippingLabelUrl.trim();
-
-    return [
-      `เรียน ${customerLabel}`,
-      `ออเดอร์ ${order.orderNo} ได้จัดส่งแล้ว`,
-      `ขนส่ง: ${carrierLabel}`,
-      `เลขพัสดุ: ${trackingLabel}`,
-      labelLink ? `ลิงก์ป้าย/บิลจัดส่ง: ${labelLink}` : null,
-      "ขอบคุณที่ใช้บริการค่ะ",
-    ]
-      .filter((line): line is string => Boolean(line))
-      .join("\n");
-  }, [
-    order.contactDisplayName,
-    order.customerName,
-    order.orderNo,
-    shippingCarrier,
-    shippingLabelUrl,
-    trackingNo,
-  ]);
-  const shippingMessageText = shippingTemplateOverride ?? shippingMessageTemplate;
-  const shippingWaDeepLink = useMemo(() => {
-    const phone = (order.customerPhone || order.contactPhone || "").replace(/[^0-9]/g, "");
-    if (!phone) {
-      return null;
+  const defaultPickupQrPaymentAccountId = useMemo(
+    () => qrPaymentAccounts.find((account) => account.isDefault)?.id ?? qrPaymentAccounts[0]?.id ?? "",
+    [qrPaymentAccounts],
+  );
+  const selectedConfirmPaidQrAccount = useMemo(
+    () => qrPaymentAccounts.find((account) => account.id === confirmPaidPaymentAccountId) ?? null,
+    [confirmPaidPaymentAccountId, qrPaymentAccounts],
+  );
+  const openConfirmPaidConfirmModal = useCallback(() => {
+    if (isInStoreCreditSettlement) {
+      setConfirmPaidPaymentMethod("CASH");
+      setConfirmPaidPaymentAccountId(defaultPickupQrPaymentAccountId);
     }
-    return `https://wa.me/${phone}?text=${encodeURIComponent(shippingMessageText)}`;
-  }, [order.contactPhone, order.customerPhone, shippingMessageText]);
-
+    setShowConfirmPaidQrImageViewer(false);
+    setShowConfirmPaidConfirmModal(true);
+    setErrorMessage(null);
+  }, [defaultPickupQrPaymentAccountId, isInStoreCreditSettlement]);
+  const getConfirmPaidQrImageActionUrl = useCallback(
+    (download = false) => {
+      if (!selectedConfirmPaidQrAccount?.id) {
+        return null;
+      }
+      return `/api/orders/payment-accounts/${selectedConfirmPaidQrAccount.id}/qr-image${
+        download ? "?download=1" : ""
+      }`;
+    },
+    [selectedConfirmPaidQrAccount],
+  );
   const runPatchAction = async (
     payload: Record<string, unknown>,
     key: string,
@@ -363,96 +368,71 @@ export function OrderDetailView({
     }
   };
 
-  const copyShippingMessage = async () => {
+  const openConfirmPaidQrImageFull = useCallback(() => {
+    if (!selectedConfirmPaidQrAccount?.qrImageUrl) {
+      return;
+    }
+    setShowConfirmPaidQrImageViewer(true);
+  }, [selectedConfirmPaidQrAccount]);
+
+  const openConfirmPaidQrImageInNewTab = useCallback(() => {
+    if (!selectedConfirmPaidQrAccount?.qrImageUrl) {
+      return;
+    }
+    const targetUrl =
+      getConfirmPaidQrImageActionUrl(false) ?? selectedConfirmPaidQrAccount.qrImageUrl;
+    window.open(targetUrl, "_blank", "noopener,noreferrer");
+  }, [getConfirmPaidQrImageActionUrl, selectedConfirmPaidQrAccount]);
+
+  const downloadConfirmPaidQrImage = useCallback(async () => {
+    if (!selectedConfirmPaidQrAccount?.qrImageUrl) {
+      return;
+    }
+
+    const safeFileName = selectedConfirmPaidQrAccount.displayName
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
     try {
-      await navigator.clipboard.writeText(shippingMessageText);
-      setSuccessMessage("คัดลอกข้อความจัดส่งแล้ว");
+      const response = await fetch(
+        getConfirmPaidQrImageActionUrl(true) ?? selectedConfirmPaidQrAccount.qrImageUrl,
+      );
+      if (!response.ok) {
+        throw new Error("DOWNLOAD_FAILED");
+      }
+
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `${safeFileName || "pickup-qr-payment"}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
+      toast.success("ดาวน์โหลดรูป QR แล้ว");
     } catch {
-      setErrorMessage("คัดลอกข้อความจัดส่งไม่สำเร็จ");
+      const fallbackUrl =
+        getConfirmPaidQrImageActionUrl(false) ?? selectedConfirmPaidQrAccount.qrImageUrl;
+      window.open(fallbackUrl, "_blank", "noopener,noreferrer");
+      toast("เปิดรูป QR ในแท็บใหม่แทน");
     }
-  };
+  }, [getConfirmPaidQrImageActionUrl, selectedConfirmPaidQrAccount]);
 
-  const createShippingLabel = async () => {
-    setLoadingKey("create-label");
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
-    const idempotencyKey =
-      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-        ? crypto.randomUUID()
-        : `label-${order.id}-${Date.now()}`;
-
-    const response = await fetch(`/api/orders/${order.id}/shipments/label`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Idempotency-Key": idempotencyKey,
-      },
-      body: JSON.stringify({
-        provider: shippingCarrier || order.shippingProvider || "MANUAL",
-      }),
-    });
-
-    const data = (await response.json().catch(() => null)) as
-      | {
-          message?: string;
-          reused?: boolean;
-          shipment?: {
-            trackingNo?: string;
-            labelUrl?: string;
-          };
-        }
-      | null;
-
-    if (!response.ok) {
-      setErrorMessage(data?.message ?? "สร้างป้ายจัดส่งไม่สำเร็จ");
-      setLoadingKey(null);
+  const copyConfirmPaidQrAccountNumber = useCallback(async () => {
+    if (!selectedConfirmPaidQrAccount?.accountNumber) {
       return;
     }
 
-    if (data?.shipment?.trackingNo) {
-      setTrackingNo(data.shipment.trackingNo);
+    try {
+      await navigator.clipboard.writeText(selectedConfirmPaidQrAccount.accountNumber);
+      toast.success("คัดลอกเลขบัญชีแล้ว");
+    } catch {
+      toast.error("คัดลอกเลขบัญชีไม่สำเร็จ");
     }
-    if (data?.shipment?.labelUrl) {
-      setShippingLabelUrl(data.shipment.labelUrl);
-    }
-    setShippingTemplateOverride(null);
-    setSuccessMessage(data?.reused ? "พบป้ายจัดส่งเดิมและนำกลับมาใช้งานแล้ว" : "สร้างป้ายจัดส่งสำเร็จ");
-    setLoadingKey(null);
-    router.refresh();
-  };
-
-  const sendShippingUpdate = async () => {
-    setLoadingKey("send-shipping");
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
-    const response = await fetch(`/api/orders/${order.id}/send-shipping`, {
-      method: "POST",
-    });
-
-    const data = (await response.json().catch(() => null)) as
-      | {
-          message?: string;
-          mode?: string;
-          template?: string;
-        }
-      | null;
-
-    if (!response.ok) {
-      setErrorMessage(data?.message ?? "ส่งข้อมูลจัดส่งไม่สำเร็จ");
-      setLoadingKey(null);
-      return;
-    }
-
-    if (data?.mode === "AUTO") {
-      setSuccessMessage("ส่งข้อมูลจัดส่งอัตโนมัติแล้ว (โหมดจำลอง)");
-    } else {
-      setErrorMessage(data?.message ?? "ต้องส่งข้อมูลจัดส่งแบบแมนนวล");
-      setShippingTemplateOverride(data?.template ?? shippingMessageTemplate);
-    }
-    setLoadingKey(null);
-  };
+  }, [selectedConfirmPaidQrAccount]);
 
   const uploadShippingLabelImage = async (file: File, source: "file" | "camera") => {
     setLoadingKey(source === "camera" ? "upload-label-camera" : "upload-label-file");
@@ -487,18 +467,90 @@ export function OrderDetailView({
       }
 
       setShippingLabelUrl(data.labelUrl);
-      setShippingTemplateOverride(null);
+      const patchResponse = await fetch(`/api/orders/${order.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "update_shipping",
+          shippingCarrier: order.shippingCarrier ?? "",
+          trackingNo: order.trackingNo ?? "",
+          shippingLabelUrl: data.labelUrl,
+          shippingCost: order.shippingCost,
+        }),
+      });
+      const patchData = (await patchResponse.json().catch(() => null)) as
+        | {
+            message?: string;
+          }
+        | null;
+
+      if (!patchResponse.ok) {
+        setErrorMessage(patchData?.message ?? "อัปโหลดรูปสำเร็จ แต่บันทึกข้อมูลจัดส่งไม่สำเร็จ");
+        return;
+      }
+
       setSuccessMessage(
         source === "camera"
-          ? "อัปโหลดรูปจากกล้องแล้ว กรุณากดบันทึกข้อมูลจัดส่ง"
-          : "อัปโหลดรูปจากเครื่องแล้ว กรุณากดบันทึกข้อมูลจัดส่ง",
+          ? "ถ่ายรูปและบันทึกป้ายจัดส่งแล้ว"
+          : "อัปโหลดและบันทึกป้ายจัดส่งแล้ว",
       );
+      router.refresh();
     } catch {
       setErrorMessage("อัปโหลดรูปบิล/ป้ายจัดส่งไม่สำเร็จ");
     } finally {
       setLoadingKey(null);
     }
   };
+
+  const removeShippingLabelImage = useCallback(async () => {
+    const result = await runPatchAction(
+      {
+        action: "update_shipping",
+        shippingCarrier: order.shippingCarrier ?? "",
+        trackingNo: order.trackingNo ?? "",
+        shippingLabelUrl: "",
+        shippingCost: order.shippingCost,
+      },
+      "remove-shipping-label",
+      "ลบรูปป้ายจัดส่งแล้ว",
+    );
+    if (result.ok) {
+      setShippingLabelUrl("");
+      setShowDeleteShippingLabelConfirm(false);
+    }
+    return result;
+  }, [order.shippingCarrier, order.shippingCost, order.trackingNo, runPatchAction]);
+
+  const openShippingLabelSourcePicker = useCallback(() => {
+    if (!canUpdate || loadingKey !== null) {
+      return;
+    }
+    setShowShippingLabelSourcePicker(true);
+  }, [canUpdate, loadingKey]);
+
+  const closeShippingLabelSourcePicker = useCallback(() => {
+    if (loadingKey !== null) {
+      return;
+    }
+    setShowShippingLabelSourcePicker(false);
+  }, [loadingKey]);
+
+  const pickShippingLabelFromDevice = useCallback(
+    (source: "file" | "camera") => {
+      if (loadingKey !== null) {
+        return;
+      }
+      setShowShippingLabelSourcePicker(false);
+      if (source === "camera") {
+        shippingLabelCameraInputRef.current?.click();
+        return;
+      }
+      shippingLabelFileInputRef.current?.click();
+    },
+    [loadingKey],
+  );
 
   const handleShippingLabelFileChange = async (
     event: ChangeEvent<HTMLInputElement>,
@@ -713,10 +765,21 @@ export function OrderDetailView({
     !canConfirmPaid ||
     loadingKey !== null ||
     (isCodPendingAfterShipped &&
-      (!Number.isFinite(codSettlementAmountNumber) || codSettlementAmountNumber < 0));
+      (!Number.isFinite(codSettlementAmountNumber) || codSettlementAmountNumber < 0)) ||
+    (isInStoreCreditSettlement &&
+      confirmPaidPaymentMethod === "LAO_QR" &&
+      !selectedConfirmPaidQrAccount);
   const shouldConfirmReceivePaymentAction = !isCodPendingAfterShipped && !isPickupReadyPrepaid;
   const shouldConfirmPickupReceiveAction = isPickupReadyPrepaid;
   const runConfirmPaidAction = async () => {
+    const pickupSettlementPayload =
+      isInStoreCreditSettlement
+        ? {
+            paymentMethod: confirmPaidPaymentMethod,
+            paymentAccountId:
+              confirmPaidPaymentMethod === "LAO_QR" ? confirmPaidPaymentAccountId : undefined,
+          }
+        : {};
     const result = await runPatchAction(
       {
         action: "confirm_paid",
@@ -724,6 +787,7 @@ export function OrderDetailView({
           isCodPendingAfterShipped && Number.isFinite(codSettlementAmountNumber)
             ? Math.max(0, Math.trunc(codSettlementAmountNumber))
             : undefined,
+        ...pickupSettlementPayload,
       },
       "confirm-paid",
       confirmPaidSuccessText,
@@ -773,6 +837,27 @@ export function OrderDetailView({
     setShowCancelApprovalModal(false);
     return { ok: true };
   };
+
+  const selectedConfirmPaidQrBankDisplay = selectedConfirmPaidQrAccount?.bankName?.trim() || "-";
+
+  useEffect(() => {
+    if (!showConfirmPaidQrImageViewer) {
+      return;
+    }
+    if (!selectedConfirmPaidQrAccount?.qrImageUrl) {
+      setShowConfirmPaidQrImageViewer(false);
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowConfirmPaidQrImageViewer(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedConfirmPaidQrAccount, showConfirmPaidQrImageViewer]);
 
   const timelineSteps = useMemo(() => {
     if (isOnlineOrder) {
@@ -865,8 +950,7 @@ export function OrderDetailView({
           label: confirmPaidButtonLabel,
           onClick: () => {
             if (shouldConfirmReceivePaymentAction || shouldConfirmPickupReceiveAction) {
-              setShowConfirmPaidConfirmModal(true);
-              setErrorMessage(null);
+              openConfirmPaidConfirmModal();
               return;
             }
             return runConfirmPaidAction();
@@ -1166,7 +1250,7 @@ export function OrderDetailView({
                   {maskAccountValue(order.paymentAccountNumber)}
                 </p>
               ) : null}
-              {order.paymentMethod === "LAO_QR" ? (
+              {showQrSlipStatus ? (
                 <p className="text-xs text-slate-500">
                   สถานะสลิป: {order.paymentSlipUrl ? "แนบแล้ว (รอตรวจสอบ)" : "ยังไม่แนบ"}
                 </p>
@@ -1186,7 +1270,7 @@ export function OrderDetailView({
             </div>
           </article>
 
-          {order.paymentMethod === "LAO_QR" ? (
+          {isLaoQrOrder ? (
             <article className="space-y-3 border-b border-slate-200 pb-4">
               <h2 className="text-sm font-semibold text-slate-900">ชำระด้วย QR โอนเงิน</h2>
               {order.paymentAccountQrImageUrl ? (
@@ -1206,32 +1290,75 @@ export function OrderDetailView({
                 </p>
               )}
 
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground" htmlFor="payment-slip-url">
-                  ลิงก์สลิปการโอน (สำหรับรอตรวจสอบ)
-                </label>
-                <input
-                  id="payment-slip-url"
-                  className="h-10 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
-                  value={paymentSlipUrl}
-                  onChange={(event) => setPaymentSlipUrl(event.target.value)}
-                  disabled={!canSubmitSlip || loadingKey !== null}
-                  placeholder="https://..."
-                />
-                <Button
-                  className="h-10 w-full sm:w-auto"
-                  onClick={() =>
-                    runPatchAction(
-                      { action: "submit_payment_slip", paymentSlipUrl },
-                      "submit-slip",
-                      "แนบสลิปแล้ว รอตรวจสอบการชำระ",
-                    )
-                  }
-                  disabled={!canSubmitSlip || loadingKey !== null}
-                >
-                  {loadingKey === "submit-slip" ? "กำลังบันทึก..." : "แนบสลิป / ส่งรอตรวจสอบ"}
-                </Button>
+              <div className="space-y-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600">
+                <p>
+                  ชื่อบัญชี:{" "}
+                  <span className="font-medium text-slate-900">
+                    {order.paymentAccountDisplayName || "-"}
+                  </span>
+                </p>
+                <p>
+                  ธนาคาร:{" "}
+                  <span className="font-medium text-slate-900">
+                    {order.paymentAccountBankName || "-"}
+                  </span>
+                </p>
+                <p>
+                  เลขบัญชี:{" "}
+                  <span className="font-medium text-slate-900">
+                    {order.paymentAccountNumber || "-"}
+                  </span>
+                </p>
               </div>
+
+              {showQrSlipInput ? (
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground" htmlFor="payment-slip-url">
+                    ลิงก์หลักฐานการชำระ
+                  </label>
+                  <input
+                    id="payment-slip-url"
+                    className="h-10 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
+                    value={paymentSlipUrl}
+                    onChange={(event) => setPaymentSlipUrl(event.target.value)}
+                    disabled={!showQrSlipInput || loadingKey !== null}
+                    placeholder="https://..."
+                  />
+                  <Button
+                    className="h-10 w-full sm:w-auto"
+                    onClick={() =>
+                      runPatchAction(
+                        { action: "submit_payment_slip", paymentSlipUrl },
+                        "submit-slip",
+                        "แนบหลักฐานแล้ว รอตรวจสอบการชำระ",
+                      )
+                    }
+                    disabled={!showQrSlipInput || loadingKey !== null}
+                  >
+                    {loadingKey === "submit-slip" ? "กำลังบันทึก..." : "แนบหลักฐาน / ส่งรอตรวจสอบ"}
+                  </Button>
+                </div>
+              ) : null}
+
+              {showQrProofReadOnly ? (
+                <div className="space-y-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600">
+                  <p className="font-medium text-slate-900">หลักฐานการชำระ</p>
+                  <p>
+                    สถานะ:{" "}
+                    <span className="font-medium text-slate-900">
+                      {order.paymentStatus === "PENDING_PROOF" ? "แนบแล้ว (รอตรวจสอบ)" : "บันทึกไว้ในออเดอร์"}
+                    </span>
+                  </p>
+                  <a
+                    href={order.paymentSlipUrl ?? "#"}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex w-fit font-medium text-blue-700 hover:underline"
+                  >
+                    เปิดหลักฐานการชำระ
+                  </a>
+                </div>
+              ) : null}
             </article>
           ) : null}
 
@@ -1244,9 +1371,12 @@ export function OrderDetailView({
                 <p>ผู้ให้บริการ: {order.shippingProvider || "-"}</p>
                 <p>สถานะป้าย: {shippingLabelStatusLabel[order.shippingLabelStatus]}</p>
                 <p>เลขติดตามล่าสุด: {order.trackingNo || "-"}</p>
-                {order.shippingLabelUrl ? (
+                <p>
+                  ต้นทุนค่าส่ง: {order.shippingCost.toLocaleString("th-TH")} {storeCurrencyDisplay}
+                </p>
+                {shippingLabelUrl ? (
                   <a
-                    href={order.shippingLabelUrl}
+                    href={shippingLabelUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="font-medium text-blue-700 hover:underline"
@@ -1256,50 +1386,47 @@ export function OrderDetailView({
                 ) : null}
               </div>
 
+              {shippingLabelUrl ? (
+                <div className="overflow-hidden rounded-md border border-slate-200 bg-slate-50 p-2">
+                  <Image
+                    src={shippingLabelUrl}
+                    alt="ตัวอย่างป้ายจัดส่ง"
+                    width={960}
+                    height={720}
+                    className="h-auto max-h-80 w-full rounded object-contain"
+                    unoptimized
+                  />
+                </div>
+              ) : (
+                <p className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  ยังไม่มีรูปป้ายจัดส่งในออเดอร์นี้
+                </p>
+              )}
+
               <div className="grid grid-cols-1 gap-2">
-                <input
-                  value={shippingCarrier}
-                  onChange={(event) => setShippingCarrier(event.target.value)}
-                  placeholder="ขนส่ง (เช่น J&T, Flash)"
-                  className="h-10 rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
-                  disabled={!canUpdate || loadingKey !== null}
-                />
-                <input
-                  value={trackingNo}
-                  onChange={(event) => setTrackingNo(event.target.value)}
-                  placeholder="เลขพัสดุ"
-                  className="h-10 rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
-                  disabled={!canUpdate || loadingKey !== null}
-                />
-                <input
-                  value={shippingLabelUrl}
-                  onChange={(event) => {
-                    setShippingLabelUrl(event.target.value);
-                    setShippingTemplateOverride(null);
-                  }}
-                  placeholder="ลิงก์รูปบิล/ป้ายจัดส่ง (https://...)"
-                  className="h-10 rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
-                  disabled={!canUpdate || loadingKey !== null}
-                />
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-2">
                   <Button
                     type="button"
                     variant="outline"
                     className="h-10"
-                    onClick={() => shippingLabelFileInputRef.current?.click()}
+                    onClick={openShippingLabelSourcePicker}
                     disabled={!canUpdate || loadingKey !== null}
                   >
-                    {loadingKey === "upload-label-file" ? "กำลังอัปโหลด..." : "อัปโหลดรูปจากเครื่อง"}
+                    {loadingKey === "upload-label-file" || loadingKey === "upload-label-camera"
+                      ? "กำลังอัปโหลด..."
+                      : "อัปโหลด/ถ่ายรูปป้าย"}
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-10"
-                    onClick={() => shippingLabelCameraInputRef.current?.click()}
-                    disabled={!canUpdate || loadingKey !== null}
-                  >
-                    {loadingKey === "upload-label-camera" ? "กำลังอัปโหลด..." : "ถ่ายรูปจากกล้อง"}
-                  </Button>
+                  {shippingLabelUrl ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                      onClick={() => setShowDeleteShippingLabelConfirm(true)}
+                      disabled={!canUpdate || loadingKey !== null}
+                    >
+                      {loadingKey === "remove-shipping-label" ? "กำลังลบ..." : "ลบรูปป้าย"}
+                    </Button>
+                  ) : null}
                   <input
                     ref={shippingLabelFileInputRef}
                     type="file"
@@ -1323,90 +1450,9 @@ export function OrderDetailView({
                   />
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  อัปโหลดเสร็จแล้วให้กด “บันทึกข้อมูลจัดส่ง” เพื่อยืนยันลงออเดอร์
+                  ระบบจะบันทึกรูปป้ายจัดส่งให้อัตโนมัติทันทีหลังเลือกรูปหรือถ่ายรูปเสร็จ
                 </p>
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={shippingCost}
-                  onChange={(event) => setShippingCost(event.target.value)}
-                  placeholder="ต้นทุนค่าส่ง"
-                  className="h-10 rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
-                  disabled={!canUpdate || loadingKey !== null}
-                />
               </div>
-
-              <Button
-                className="h-10 w-full sm:w-auto"
-                onClick={() =>
-                  runPatchAction(
-                    {
-                      action: "update_shipping",
-                      shippingCarrier,
-                      trackingNo,
-                      shippingLabelUrl,
-                      shippingCost: Number.isFinite(shippingCostNumber) ? shippingCostNumber : 0,
-                    },
-                    "update-shipping",
-                    "บันทึกข้อมูลการจัดส่งแล้ว",
-                  )
-                }
-                disabled={!canUpdate || loadingKey !== null}
-              >
-                {loadingKey === "update-shipping" ? "กำลังบันทึก..." : "บันทึกข้อมูลจัดส่ง"}
-              </Button>
-
-              <Button
-                className="h-10 w-full sm:w-auto"
-                onClick={createShippingLabel}
-                disabled={!canCreateShippingLabel || loadingKey !== null}
-              >
-                {loadingKey === "create-label" ? "กำลังสร้างป้าย..." : "สร้าง Shipping Label"}
-              </Button>
-
-              <div className="space-y-2 border border-slate-200 p-3">
-                <p className="text-xs font-medium text-slate-700">ข้อความแจ้งจัดส่ง (Manual fallback)</p>
-                <textarea
-                  className="min-h-20 w-full rounded-md border px-3 py-2 text-sm outline-none ring-primary focus:ring-2"
-                  value={shippingMessageText}
-                  onChange={(event) => setShippingTemplateOverride(event.target.value)}
-                  disabled={loadingKey !== null}
-                />
-                <div className="grid grid-cols-3 gap-2">
-                  <Button type="button" className="h-9" onClick={copyShippingMessage}>
-                    คัดลอกข้อความ
-                  </Button>
-                  <a
-                    href={shippingWaDeepLink ?? "#"}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={`flex h-9 items-center justify-center rounded-md border text-xs font-medium ${
-                      shippingWaDeepLink
-                        ? "border-green-400 text-green-700"
-                        : "pointer-events-none border-slate-200 text-slate-400"
-                    }`}
-                  >
-                    เปิด WhatsApp
-                  </a>
-                  <a
-                    href={messaging.facebookInboxUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex h-9 items-center justify-center rounded-md border border-blue-400 text-xs font-medium text-blue-700"
-                  >
-                    เปิด Facebook
-                  </a>
-                </div>
-              </div>
-
-              <Button
-                className="h-10 w-full sm:w-auto"
-                onClick={sendShippingUpdate}
-                disabled={!canSendShippingUpdate || loadingKey !== null}
-              >
-                {loadingKey === "send-shipping" ? "กำลังส่ง..." : "ส่งข้อมูลจัดส่งให้ลูกค้า"}
-              </Button>
             </article>
           ) : null}
 
@@ -1770,8 +1816,162 @@ export function OrderDetailView({
               <p className="mt-1 text-xs text-slate-600">
                 {isPickupReadyPrepaid
                   ? "เมื่อยืนยันแล้วระบบจะตัดสต็อกจากรายการจองและปิดงานรับสินค้าทันที"
-                  : "เมื่อยืนยันแล้วออเดอร์จะถูกอัปเดตเป็นสถานะชำระแล้วทันที"}
+                  : isInStoreCreditSettlement
+                    ? "เลือกวิธีรับเงินจริงก่อนบันทึก เพื่อให้ข้อมูลชำระตรงกับหน้าร้าน"
+                    : "เมื่อยืนยันแล้วออเดอร์จะถูกอัปเดตเป็นสถานะชำระแล้วทันที"}
               </p>
+              {isInStoreCreditSettlement ? (
+                <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-slate-700">รับเงินจริงด้วยวิธีใด</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        className={`rounded-md border px-3 py-2 text-sm ${
+                          confirmPaidPaymentMethod === "CASH"
+                            ? "border-slate-900 bg-slate-900 text-white"
+                            : "border-slate-200 bg-white text-slate-700"
+                        }`}
+                        onClick={() => setConfirmPaidPaymentMethod("CASH")}
+                        disabled={loadingKey !== null}
+                      >
+                        เงินสด
+                      </button>
+                      <button
+                        type="button"
+                        className={`rounded-md border px-3 py-2 text-sm ${
+                          confirmPaidPaymentMethod === "LAO_QR"
+                            ? "border-slate-900 bg-slate-900 text-white"
+                            : "border-slate-200 bg-white text-slate-700"
+                        } disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400`}
+                        onClick={() => setConfirmPaidPaymentMethod("LAO_QR")}
+                        disabled={loadingKey !== null || qrPaymentAccounts.length === 0}
+                      >
+                        QR โอน
+                      </button>
+                    </div>
+                  </div>
+                  {confirmPaidPaymentMethod === "LAO_QR" ? (
+                    qrPaymentAccounts.length > 0 ? (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-slate-700">เลือกบัญชีรับเงิน (QR)</p>
+                        <div className="space-y-2">
+                          {qrPaymentAccounts.map((account) => {
+                            const isSelected = account.id === confirmPaidPaymentAccountId;
+                            return (
+                              <button
+                                key={account.id}
+                                type="button"
+                                className={`w-full rounded-md border px-3 py-2 text-left ${
+                                  isSelected
+                                    ? "border-blue-300 bg-blue-50"
+                                    : "border-slate-200 bg-white"
+                                }`}
+                                onClick={() => setConfirmPaidPaymentAccountId(account.id)}
+                                disabled={loadingKey !== null}
+                              >
+                                <p className="text-sm font-medium text-slate-900">
+                                  {account.displayName}
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  {account.bankName || "-"} • {maskAccountValue(account.accountNumber)}
+                                </p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {selectedConfirmPaidQrAccount ? (
+                          <div className="space-y-2">
+                            <p className="text-[11px] text-slate-500">
+                              บันทึกเป็น {selectedConfirmPaidQrAccount.displayName} •{" "}
+                              {maskAccountValue(selectedConfirmPaidQrAccount.accountNumber)}
+                            </p>
+                            <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3">
+                              {selectedConfirmPaidQrAccount.qrImageUrl ? (
+                                <div className="relative overflow-hidden rounded-md border border-slate-200 bg-slate-50 p-2">
+                                  <div className="absolute right-3 top-3 flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 shadow-sm hover:border-slate-400"
+                                      onClick={openConfirmPaidQrImageFull}
+                                      disabled={loadingKey !== null}
+                                      aria-label="เปิดรูป QR เต็ม"
+                                      title="เปิดรูป QR เต็ม"
+                                    >
+                                      <Expand className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 shadow-sm hover:border-slate-400"
+                                      onClick={() => {
+                                        void downloadConfirmPaidQrImage();
+                                      }}
+                                      disabled={loadingKey !== null}
+                                      aria-label="ดาวน์โหลดรูป QR"
+                                      title="ดาวน์โหลดรูป QR"
+                                    >
+                                      <ArrowDownToLine className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                  <Image
+                                    src={selectedConfirmPaidQrAccount.qrImageUrl}
+                                    alt={`QR ${selectedConfirmPaidQrAccount.displayName}`}
+                                    width={240}
+                                    height={240}
+                                    className="mx-auto h-44 w-44 rounded object-contain"
+                                    unoptimized
+                                  />
+                                </div>
+                              ) : (
+                                <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                                  บัญชีนี้ยังไม่มีรูป QR กรุณาใช้เลขบัญชีหรืออัปเดตรูปที่ตั้งค่าร้าน
+                                </p>
+                              )}
+                              <div className="space-y-1.5 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600">
+                                <p>
+                                  ชื่อบัญชี:{" "}
+                                  <span className="font-medium text-slate-900">
+                                    {selectedConfirmPaidQrAccount.accountName}
+                                  </span>
+                                </p>
+                                <p>
+                                  ธนาคาร:{" "}
+                                  <span className="font-medium text-slate-900">
+                                    {selectedConfirmPaidQrBankDisplay}
+                                  </span>
+                                </p>
+                                <p>
+                                  เลขบัญชี:{" "}
+                                  <span className="font-medium text-slate-900">
+                                    {selectedConfirmPaidQrAccount.accountNumber || "-"}
+                                  </span>
+                                </p>
+                              </div>
+                              {selectedConfirmPaidQrAccount.accountNumber ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-9 w-full text-xs"
+                                  onClick={() => {
+                                    void copyConfirmPaidQrAccountNumber();
+                                  }}
+                                  disabled={loadingKey !== null}
+                                >
+                                  คัดลอกเลขบัญชี
+                                </Button>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                        ยังไม่มีบัญชี QR ที่เปิดใช้งานในร้านนี้ จึงยังรับชำระแบบ QR ไม่ได้
+                      </p>
+                    )
+                  ) : null}
+                </div>
+              ) : null}
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <Button
                   type="button"
@@ -1795,6 +1995,178 @@ export function OrderDetailView({
                     : isPickupReadyPrepaid
                       ? "ยืนยันรับสินค้า"
                       : "ยืนยันรับชำระ"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {showConfirmPaidQrImageViewer && selectedConfirmPaidQrAccount?.qrImageUrl ? (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/85 px-3 py-6 sm:px-6"
+          onClick={() => setShowConfirmPaidQrImageViewer(false)}
+        >
+          <div
+            className="relative w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-3 py-2.5 text-slate-100">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{selectedConfirmPaidQrAccount.displayName}</p>
+                <p className="truncate text-xs text-slate-400">ดู QR เต็มในหน้าเดิม</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-100 hover:border-slate-500"
+                  onClick={openConfirmPaidQrImageInNewTab}
+                  aria-label="เปิดรูป QR ในแท็บใหม่"
+                  title="เปิดรูป QR ในแท็บใหม่"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-100 hover:border-slate-500"
+                  onClick={() => {
+                    void downloadConfirmPaidQrImage();
+                  }}
+                  aria-label="ดาวน์โหลดรูป QR"
+                  title="ดาวน์โหลดรูป QR"
+                >
+                  <ArrowDownToLine className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-100 hover:border-slate-500"
+                  onClick={() => setShowConfirmPaidQrImageViewer(false)}
+                  aria-label="ปิดรูป QR"
+                  title="ปิดรูป QR"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex max-h-[calc(100dvh-9rem)] items-center justify-center bg-[radial-gradient(circle_at_center,_rgba(148,163,184,0.14),_transparent_60%)] p-4 sm:p-6">
+              <Image
+                src={selectedConfirmPaidQrAccount.qrImageUrl}
+                alt={`QR ${selectedConfirmPaidQrAccount.displayName}`}
+                width={1200}
+                height={1200}
+                className="h-auto max-h-[calc(100dvh-13rem)] w-auto max-w-full rounded-lg object-contain"
+                unoptimized
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {showShippingLabelSourcePicker ? (
+        <div className="fixed inset-0 z-[95]">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-900/55"
+            aria-label="ปิดตัวเลือกอัปโหลดรูปป้ายจัดส่ง"
+            onClick={closeShippingLabelSourcePicker}
+            disabled={loadingKey !== null}
+          />
+          <div className="relative flex min-h-full items-end justify-center p-4 sm:items-center">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="shipping-label-source-title"
+              className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-4 shadow-xl"
+            >
+              <h3 id="shipping-label-source-title" className="text-sm font-semibold text-slate-900">
+                เพิ่มรูปป้ายจัดส่ง
+              </h3>
+              <p className="mt-1 text-xs text-slate-600">
+                เลือกวิธีที่ต้องการ ถ้าเครื่องนี้เปิดกล้องไม่ได้ ให้ใช้เลือกรูปจากเครื่องแทน
+              </p>
+              <div className="mt-4 space-y-2">
+                <Button
+                  type="button"
+                  className="h-10 w-full"
+                  onClick={() => pickShippingLabelFromDevice("file")}
+                  disabled={loadingKey !== null}
+                >
+                  เลือกรูปจากเครื่อง
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 w-full"
+                  onClick={() => pickShippingLabelFromDevice("camera")}
+                  disabled={loadingKey !== null || !canOpenShippingLabelCamera}
+                >
+                  ถ่ายรูปจากกล้อง
+                </Button>
+                {!canOpenShippingLabelCamera ? (
+                  <p className="text-[11px] text-slate-500">
+                    เครื่องหรือ browser นี้ไม่รองรับการเรียกกล้องโดยตรง
+                  </p>
+                ) : null}
+              </div>
+              <div className="mt-4">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-9 w-full"
+                  onClick={closeShippingLabelSourcePicker}
+                  disabled={loadingKey !== null}
+                >
+                  ปิด
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {showDeleteShippingLabelConfirm ? (
+        <div className="fixed inset-0 z-[96]">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-900/55"
+            aria-label="ปิดหน้าต่างยืนยันลบรูปป้ายจัดส่ง"
+            onClick={() => {
+              if (loadingKey !== null) {
+                return;
+              }
+              setShowDeleteShippingLabelConfirm(false);
+            }}
+            disabled={loadingKey !== null}
+          />
+          <div className="relative flex min-h-full items-center justify-center p-4">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-shipping-label-title"
+              className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-4 shadow-xl"
+            >
+              <h3 id="delete-shipping-label-title" className="text-sm font-semibold text-slate-900">
+                ลบรูปป้ายจัดส่ง?
+              </h3>
+              <p className="mt-1 text-xs text-slate-600">
+                ระบบจะลบรูปป้ายออกจากออเดอร์นี้ แต่จะไม่ลบข้อมูลขนส่งอื่น เช่น ผู้ให้บริการและเลขติดตาม
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9"
+                  onClick={() => setShowDeleteShippingLabelConfirm(false)}
+                  disabled={loadingKey !== null}
+                >
+                  ยกเลิก
+                </Button>
+                <Button
+                  type="button"
+                  className="h-9 bg-rose-600 text-white hover:bg-rose-700"
+                  onClick={() => {
+                    void removeShippingLabelImage();
+                  }}
+                  disabled={loadingKey !== null}
+                >
+                  {loadingKey === "remove-shipping-label" ? "กำลังลบ..." : "ลบรูปป้าย"}
                 </Button>
               </div>
             </div>

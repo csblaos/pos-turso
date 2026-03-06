@@ -17,6 +17,8 @@ type SlideUpSheetProps = {
   closeOnBackdrop?: boolean;
   /** Prevent closing while an async operation is in progress */
   disabled?: boolean;
+  /** Scroll content to top every time the sheet opens. */
+  scrollToTopOnOpen?: boolean;
 };
 
 /**
@@ -41,6 +43,7 @@ export function SlideUpSheet({
   panelMaxWidthClass = "min-[1200px]:max-w-2xl",
   closeOnBackdrop = true,
   disabled = false,
+  scrollToTopOnOpen = false,
 }: SlideUpSheetProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragY, setDragY] = useState(0);
@@ -209,6 +212,25 @@ export function SlideUpSheet({
       window.scrollTo(0, scrollYRef.current);
     };
   }, [isOpen, disabled, close]);
+
+  useEffect(() => {
+    if (!isOpen || !scrollToTopOnOpen) {
+      return;
+    }
+
+    const contentEl = contentRef.current;
+    if (!contentEl) {
+      return;
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      contentEl.scrollTop = 0;
+    });
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [isOpen, scrollToTopOnOpen]);
 
   // ── Touch drag handlers (mobile swipe-to-close) ──
   const handleTouchStart = (event: React.TouchEvent) => {

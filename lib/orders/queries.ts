@@ -20,6 +20,7 @@ import {
 import { getInventoryBalancesByStore } from "@/lib/inventory/queries";
 import { timeDbQuery } from "@/lib/perf/server";
 import { DEFAULT_SHIPPING_PROVIDER_SEEDS } from "@/lib/shipping/provider-master";
+import { resolvePaymentQrImageUrl, resolveProductImageUrl } from "@/lib/storage/r2";
 import { getStoreFinancialConfig } from "@/lib/stores/financial";
 import { getGlobalPaymentPolicy } from "@/lib/system-config/policy";
 
@@ -213,6 +214,28 @@ export type OrderCatalog = {
   products: OrderCatalogProduct[];
   contacts: OrderCatalogContact[];
 };
+
+const mapOrderCatalogPaymentAccount = (row: {
+  id: string;
+  displayName: string;
+  accountType: string;
+  bankName: string | null;
+  accountName: string;
+  accountNumber: string | null;
+  qrImageUrl: string | null;
+  isDefault: boolean;
+  isActive: boolean;
+}): OrderCatalogPaymentAccount => ({
+  id: row.id,
+  displayName: row.displayName,
+  accountType: String(row.accountType) === "LAO_QR" ? "LAO_QR" : "BANK",
+  bankName: row.bankName,
+  accountName: row.accountName,
+  accountNumber: row.accountNumber,
+  qrImageUrl: resolvePaymentQrImageUrl(row.qrImageUrl),
+  isDefault: row.isDefault,
+  isActive: row.isActive,
+});
 
 const parseShippingProviderAliases = (raw: string | null | undefined) => {
   if (!raw) {
@@ -747,6 +770,7 @@ export async function getOrderDetail(storeId: string, orderId: string): Promise<
 
   return {
     ...order,
+    paymentAccountQrImageUrl: resolvePaymentQrImageUrl(order.paymentAccountQrImageUrl),
     cancelApproval,
     items: itemRows,
   };
@@ -925,7 +949,7 @@ export async function getOrderCatalogForStore(storeId: string): Promise<OrderCat
       productId: product.productId,
       sku: product.sku,
       barcode: product.barcode,
-      imageUrl: product.imageUrl,
+      imageUrl: resolveProductImageUrl(product.imageUrl),
       categoryId: product.categoryId,
       categoryName: product.categoryName,
       name: product.name,
@@ -945,17 +969,7 @@ export async function getOrderCatalogForStore(storeId: string): Promise<OrderCat
     vatEnabled: financial?.vatEnabled ?? false,
     vatRate: financial?.vatRate ?? 0,
     vatMode: financial?.vatMode ?? defaultStoreVatMode,
-    paymentAccounts: paymentAccountRows.map((row) => ({
-      id: row.id,
-      displayName: row.displayName,
-      accountType: String(row.accountType) === "LAO_QR" ? "LAO_QR" : "BANK",
-      bankName: row.bankName,
-      accountName: row.accountName,
-      accountNumber: row.accountNumber,
-      qrImageUrl: row.qrImageUrl,
-      isDefault: row.isDefault,
-      isActive: row.isActive,
-    })),
+    paymentAccounts: paymentAccountRows.map(mapOrderCatalogPaymentAccount),
     shippingProviders:
       shippingProviderRows.length > 0
         ? shippingProviderRows.map((row) => ({
@@ -976,6 +990,40 @@ export async function getOrderCatalogForStore(storeId: string): Promise<OrderCat
     products: productsPayload,
     contacts: contactRows,
   };
+}
+
+export async function getActiveQrPaymentAccountsForStore(
+  storeId: string,
+): Promise<OrderCatalogPaymentAccount[]> {
+  try {
+    const rows = await timeDbQuery("orders.detail.qrPaymentAccounts", async () =>
+      db
+        .select({
+          id: storePaymentAccounts.id,
+          displayName: storePaymentAccounts.displayName,
+          accountType: storePaymentAccounts.accountType,
+          bankName: storePaymentAccounts.bankName,
+          accountName: storePaymentAccounts.accountName,
+          accountNumber: storePaymentAccounts.accountNumber,
+          qrImageUrl: storePaymentAccounts.qrImageUrl,
+          isDefault: storePaymentAccounts.isDefault,
+          isActive: storePaymentAccounts.isActive,
+        })
+        .from(storePaymentAccounts)
+        .where(
+          and(
+            eq(storePaymentAccounts.storeId, storeId),
+            eq(storePaymentAccounts.isActive, true),
+            eq(storePaymentAccounts.accountType, "LAO_QR"),
+          ),
+        )
+        .orderBy(desc(storePaymentAccounts.isDefault), asc(storePaymentAccounts.createdAt)),
+    );
+
+    return rows.map(mapOrderCatalogPaymentAccount);
+  } catch {
+    return [];
+  }
 }
 
 export async function generateOrderNo(storeId: string) {

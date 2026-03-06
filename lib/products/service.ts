@@ -15,6 +15,7 @@ import {
   parseVariantOptions,
   type ProductVariantOption,
 } from "@/lib/products/variant-options";
+import { resolveProductImageUrl } from "@/lib/storage/r2";
 
 export type UnitOption = {
   id: string;
@@ -155,7 +156,7 @@ const mapProductRows = (rows: ProductRowWithConversion[]): ProductListItem[] => 
         variantOptionsJson: row.variantOptionsJson,
         variantOptions: parseVariantOptions(row.variantOptionsJson),
         variantSortOrder: row.variantSortOrder,
-        imageUrl: row.imageUrl,
+        imageUrl: resolveProductImageUrl(row.imageUrl),
         categoryId: row.categoryId,
         categoryName: row.categoryName,
         baseUnitId: row.baseUnitId,

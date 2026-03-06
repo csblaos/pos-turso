@@ -8,6 +8,7 @@ import {
   inventoryMovements,
   orders,
   roles,
+  storePaymentAccounts,
   storeMembers,
   users,
 } from "@/lib/db/schema";
@@ -698,6 +699,12 @@ export async function PATCH(
         order.paymentMethod !== "COD" &&
         order.status === "PICKED_UP_PENDING_PAYMENT" &&
         order.paymentStatus !== "PAID";
+      const isInStoreCreditSettlement =
+        order.channel === "WALK_IN" &&
+        order.paymentMethod === "ON_CREDIT" &&
+        ((order.status === "PENDING_PAYMENT" && order.paymentStatus !== "PAID") ||
+          (order.status === "READY_FOR_PICKUP" && order.paymentStatus !== "PAID") ||
+          (order.status === "PICKED_UP_PENDING_PAYMENT" && order.paymentStatus !== "PAID"));
       const isCodSettlementAfterShipped =
         order.paymentMethod === "COD" &&
         order.status === "SHIPPED" &&
@@ -716,7 +723,63 @@ export async function PATCH(
         });
       }
 
-      if (!isCodSettlementAfterShipped && !isPickupCompleteAfterPrepaid && order.paymentMethod === "LAO_QR") {
+      let effectivePaymentMethod = order.paymentMethod;
+      let effectivePaymentAccountId = order.paymentAccountId;
+
+      if (isInStoreCreditSettlement) {
+        effectivePaymentMethod = confirmPaidPayload.paymentMethod ?? "CASH";
+        if (effectivePaymentMethod === "LAO_QR") {
+          if (!confirmPaidPayload.paymentAccountId) {
+            return failAction(
+              "PAYMENT_ACCOUNT_REQUIRED",
+              "กรุณาเลือกบัญชี QR สำหรับการรับชำระ",
+              400,
+              {
+                orderNo: order.orderNo,
+                paymentMethod: effectivePaymentMethod,
+              },
+            );
+          }
+
+          const [paymentAccount] = await db
+            .select({
+              id: storePaymentAccounts.id,
+            })
+            .from(storePaymentAccounts)
+            .where(
+              and(
+                eq(storePaymentAccounts.id, confirmPaidPayload.paymentAccountId),
+                eq(storePaymentAccounts.storeId, storeId),
+                eq(storePaymentAccounts.accountType, "LAO_QR"),
+                eq(storePaymentAccounts.isActive, true),
+              ),
+            )
+            .limit(1);
+
+          if (!paymentAccount) {
+            return failAction(
+              "PAYMENT_ACCOUNT_NOT_FOUND",
+              "ไม่พบบัญชี QR ที่เลือก หรือบัญชีนี้ไม่ได้เปิดใช้งาน",
+              400,
+              {
+                orderNo: order.orderNo,
+                paymentMethod: effectivePaymentMethod,
+              },
+            );
+          }
+
+          effectivePaymentAccountId = paymentAccount.id;
+        } else {
+          effectivePaymentAccountId = null;
+        }
+      }
+
+      if (
+        !isCodSettlementAfterShipped &&
+        !isPickupCompleteAfterPrepaid &&
+        !isInStoreCreditSettlement &&
+        effectivePaymentMethod === "LAO_QR"
+      ) {
         const paymentPolicy = await getGlobalPaymentPolicy();
         if (paymentPolicy.requireSlipForLaoQr && !order.paymentSlipUrl) {
           return failAction(
@@ -762,6 +825,12 @@ export async function PATCH(
             .update(orders)
             .set({
               paymentStatus: "PAID",
+              paymentMethod: effectivePaymentMethod,
+              paymentAccountId: effectivePaymentAccountId,
+              paymentSlipUrl: isInStoreCreditSettlement ? null : order.paymentSlipUrl,
+              paymentProofSubmittedAt: isInStoreCreditSettlement
+                ? null
+                : order.paymentProofSubmittedAt,
               paidAt: order.paidAt ?? nowIso(),
             })
             .where(and(eq(orders.id, order.id), eq(orders.storeId, storeId)));
@@ -771,6 +840,12 @@ export async function PATCH(
             .set({
               status: "PAID",
               paymentStatus: "PAID",
+              paymentMethod: effectivePaymentMethod,
+              paymentAccountId: effectivePaymentAccountId,
+              paymentSlipUrl: isInStoreCreditSettlement ? null : order.paymentSlipUrl,
+              paymentProofSubmittedAt: isInStoreCreditSettlement
+                ? null
+                : order.paymentProofSubmittedAt,
               paidAt: order.paidAt ?? nowIso(),
             })
             .where(and(eq(orders.id, order.id), eq(orders.storeId, storeId)));
@@ -811,6 +886,8 @@ export async function PATCH(
             .set({
               status: "PAID",
               paymentStatus: "PAID",
+              paymentMethod: effectivePaymentMethod,
+              paymentAccountId: effectivePaymentAccountId,
               paidAt: order.paidAt ?? nowIso(),
             })
             .where(and(eq(orders.id, order.id), eq(orders.storeId, storeId)));
@@ -840,6 +917,10 @@ export async function PATCH(
               pickupCompletion: isPickupCompleteAfterPrepaid,
               pickupPaymentOnly: isPickupPaymentConfirm,
               postPickupSettlement: shouldOnlyUpdatePaymentAfterReceived,
+              fromPaymentMethod: order.paymentMethod,
+              toPaymentMethod: effectivePaymentMethod,
+              fromPaymentAccountId: order.paymentAccountId,
+              toPaymentAccountId: effectivePaymentAccountId,
               codAmount:
                 isCodSettlementAfterShipped && typeof confirmPaidPayload.codAmount === "number"
                   ? confirmPaidPayload.codAmount

@@ -8,7 +8,7 @@ import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { storePaymentAccounts, stores } from "@/lib/db/schema";
 import { getUserPermissionsForCurrentSession, isPermissionGranted } from "@/lib/rbac/access";
-import { isPaymentQrR2Configured } from "@/lib/storage/r2";
+import { isPaymentQrR2Configured, resolvePaymentQrImageUrl } from "@/lib/storage/r2";
 import { getGlobalPaymentPolicy } from "@/lib/system-config/policy";
 
 export default async function SettingsStorePaymentsPage() {
@@ -99,7 +99,7 @@ export default async function SettingsStorePaymentsPage() {
         : account.accountType === "PROMPTPAY"
           ? "LAO_QR"
         : "BANK",
-    qrImageUrl: account.qrImageUrl ?? account.promptpayId ?? null,
+    qrImageUrl: resolvePaymentQrImageUrl(account.qrImageUrl ?? account.promptpayId ?? null),
   }));
 
   return (

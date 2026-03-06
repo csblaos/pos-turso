@@ -10,6 +10,8 @@ import { enforcePermission, toRBACErrorResponse } from "@/lib/rbac/access";
 import {
   deletePaymentQrImageFromR2,
   isPaymentQrR2Configured,
+  normalizePaymentQrImageStorageValue,
+  resolvePaymentQrImageUrl,
   uploadPaymentQrImageToR2,
 } from "@/lib/storage/r2";
 import { getGlobalPaymentPolicy } from "@/lib/system-config/policy";
@@ -124,19 +126,6 @@ const normalizeBankNameForStorage = (value: string | null | undefined) => {
   return { value: normalized, error: null as string | null };
 };
 
-const isHttpUrl = (value: string | null) => {
-  if (!value) {
-    return false;
-  }
-
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-};
-
 const normalizeAccountType = (value: unknown): PaymentAccountType => {
   if (value === "LAO_QR" || value === "PROMPTPAY") {
     return "LAO_QR";
@@ -160,8 +149,12 @@ const validateByType = (params: {
   if (params.accountType === "LAO_QR" && !params.qrImageUrl && !params.hasQrImageFile) {
     return "กรุณาอัปโหลดรูป QR";
   }
-  if (params.accountType === "LAO_QR" && params.qrImageUrl && !isHttpUrl(params.qrImageUrl)) {
-    return "ลิงก์รูป QR ต้องเป็น http/https";
+  if (
+    params.accountType === "LAO_QR" &&
+    params.qrImageUrl &&
+    !normalizePaymentQrImageStorageValue(params.qrImageUrl)
+  ) {
+    return "รูป QR ต้องเป็นลิงก์ http/https หรือ path ของไฟล์ในระบบ";
   }
   return null;
 };
@@ -415,7 +408,7 @@ async function listPaymentAccounts(storeId: string) {
     bankName: row.bankName,
     accountName: row.accountName,
     accountNumber: row.accountNumber,
-    qrImageUrl: row.qrImageUrl ?? row.promptpayId ?? null,
+    qrImageUrl: resolvePaymentQrImageUrl(row.qrImageUrl ?? row.promptpayId ?? null),
     isDefault: row.isDefault,
     isActive: row.isActive,
     createdAt: row.createdAt,
@@ -515,7 +508,7 @@ export async function POST(request: Request) {
     }
     const bankName = bankNameNormalizedResult.value;
     const accountNumber = normalizeOptionalText(payload.accountNumber ?? null);
-    const qrImageUrl = normalizeOptionalText(payload.qrImageUrl ?? null);
+    const qrImageUrl = normalizePaymentQrImageStorageValue(payload.qrImageUrl ?? null);
     const validationError = validateByType({
       accountType: payload.accountType,
       bankName,
@@ -527,7 +520,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: validationError }, { status: 400 });
     }
 
-    let uploadedQrImageUrl: string | null = null;
+    let uploadedQrImageRef: string | null = null;
     if (payload.accountType === "LAO_QR" && payload.qrImageFile) {
       if (!isPaymentQrR2Configured()) {
         return NextResponse.json(
@@ -542,13 +535,13 @@ export async function POST(request: Request) {
           accountLabel: payload.displayName,
           file: payload.qrImageFile,
         });
-        uploadedQrImageUrl = upload.url;
+        uploadedQrImageRef = upload.objectKey;
       } catch (error) {
         return toQrUploadErrorResponse(error);
       }
     }
 
-    const nextQrImageUrl = payload.accountType === "LAO_QR" ? uploadedQrImageUrl ?? qrImageUrl : null;
+    const nextQrImageUrl = payload.accountType === "LAO_QR" ? uploadedQrImageRef ?? qrImageUrl : null;
 
     try {
       const [policy, countRows] = await Promise.all([
@@ -561,9 +554,9 @@ export async function POST(request: Request) {
 
       const currentCount = Number(countRows[0]?.value ?? 0);
       if (currentCount >= policy.maxAccountsPerStore) {
-        if (uploadedQrImageUrl) {
+        if (uploadedQrImageRef) {
           try {
-            await deletePaymentQrImageFromR2({ qrImageUrl: uploadedQrImageUrl });
+            await deletePaymentQrImageFromR2({ qrImageUrl: uploadedQrImageRef });
           } catch {
             // ignore cleanup error
           }
@@ -582,9 +575,9 @@ export async function POST(request: Request) {
       }
 
       if (nextIsDefault && !nextIsActive) {
-        if (uploadedQrImageUrl) {
+        if (uploadedQrImageRef) {
           try {
-            await deletePaymentQrImageFromR2({ qrImageUrl: uploadedQrImageUrl });
+            await deletePaymentQrImageFromR2({ qrImageUrl: uploadedQrImageRef });
           } catch {
             // ignore cleanup error
           }
@@ -652,9 +645,9 @@ export async function POST(request: Request) {
 
       return NextResponse.json({ ok: true, accounts, policy });
     } catch (error) {
-      if (uploadedQrImageUrl) {
+      if (uploadedQrImageRef) {
         try {
-          await deletePaymentQrImageFromR2({ qrImageUrl: uploadedQrImageUrl });
+          await deletePaymentQrImageFromR2({ qrImageUrl: uploadedQrImageRef });
         } catch {
           // ignore cleanup error
         }
@@ -734,7 +727,7 @@ export async function PATCH(request: Request) {
     }
 
     const payload = parsedPayload.value;
-    let uploadedQrImageUrl: string | null = null;
+    let uploadedQrImageRef: string | null = null;
     let didPersistUpdate = false;
 
     try {
@@ -795,7 +788,7 @@ export async function PATCH(request: Request) {
 
       let nextQrImageUrl =
         payload.qrImageUrl !== undefined
-          ? normalizeOptionalText(payload.qrImageUrl)
+          ? normalizePaymentQrImageStorageValue(payload.qrImageUrl)
           : previousQrImageUrl;
 
       if (payload.removeQrImage) {
@@ -816,8 +809,8 @@ export async function PATCH(request: Request) {
             accountLabel: payload.displayName?.trim() || target.displayName,
             file: payload.qrImageFile,
           });
-          uploadedQrImageUrl = upload.url;
-          nextQrImageUrl = uploadedQrImageUrl;
+          uploadedQrImageRef = upload.objectKey;
+          nextQrImageUrl = uploadedQrImageRef;
         } catch (error) {
           return toQrUploadErrorResponse(error);
         }
@@ -835,9 +828,9 @@ export async function PATCH(request: Request) {
         hasQrImageFile: false,
       });
       if (validationError) {
-        if (uploadedQrImageUrl) {
+        if (uploadedQrImageRef) {
           try {
-            await deletePaymentQrImageFromR2({ qrImageUrl: uploadedQrImageUrl });
+            await deletePaymentQrImageFromR2({ qrImageUrl: uploadedQrImageRef });
           } catch {
             // ignore cleanup error
           }
@@ -850,9 +843,9 @@ export async function PATCH(request: Request) {
       const nextIsDefault = payload.isDefault ?? target.isDefault;
 
       if (nextIsDefault && !nextIsActive) {
-        if (uploadedQrImageUrl) {
+        if (uploadedQrImageRef) {
           try {
-            await deletePaymentQrImageFromR2({ qrImageUrl: uploadedQrImageUrl });
+            await deletePaymentQrImageFromR2({ qrImageUrl: uploadedQrImageRef });
           } catch {
             // ignore cleanup error
           }
@@ -937,9 +930,9 @@ export async function PATCH(request: Request) {
       });
       return NextResponse.json({ ok: true, accounts, policy });
     } catch (error) {
-      if (uploadedQrImageUrl && !didPersistUpdate) {
+      if (uploadedQrImageRef && !didPersistUpdate) {
         try {
-          await deletePaymentQrImageFromR2({ qrImageUrl: uploadedQrImageUrl });
+          await deletePaymentQrImageFromR2({ qrImageUrl: uploadedQrImageRef });
         } catch {
           // ignore cleanup error
         }

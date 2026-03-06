@@ -12,7 +12,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Clock3, ScanLine } from "lucide-react";
+import { ArrowDownToLine, Clock3, Expand, ExternalLink, ScanLine, X } from "lucide-react";
 import { toast } from "react-hot-toast";
 
 import { BarcodeScannerPanel } from "@/components/app/barcode-scanner-panel";
@@ -75,10 +75,19 @@ const tabOptions: Array<{ key: TabKey; label: string }> = [
   { key: "SHIPPED", label: "ส่งแล้ว" },
 ];
 
-const channelLabel: Record<"WALK_IN" | "FACEBOOK" | "WHATSAPP", string> = {
-  WALK_IN: "Walk-in",
-  FACEBOOK: "Facebook",
-  WHATSAPP: "WhatsApp",
+const channelSummaryLabel = (
+  order: Pick<OrderListItem, "channel" | "status">,
+): "Facebook" | "WhatsApp" | "Walk-in" | "Pickup" => {
+  if (order.channel === "FACEBOOK") {
+    return "Facebook";
+  }
+  if (order.channel === "WHATSAPP") {
+    return "WhatsApp";
+  }
+  if (order.status === "READY_FOR_PICKUP" || order.status === "PICKED_UP_PENDING_PAYMENT") {
+    return "Pickup";
+  }
+  return "Walk-in";
 };
 
 const paymentMethodLabel: Record<OrderListItem["paymentMethod"], string> = {
@@ -111,6 +120,91 @@ const statusClass: Record<OrderListItem["status"], string> = {
   SHIPPED: "bg-indigo-100 text-indigo-700",
   COD_RETURNED: "bg-orange-100 text-orange-700",
   CANCELLED: "bg-rose-100 text-rose-700",
+};
+
+type OrderStatusBadge = {
+  label: string;
+  className: string;
+};
+
+const buildOrderStatusBadges = (order: Pick<OrderListItem, "channel" | "status" | "paymentMethod" | "paymentStatus">) => {
+  const badges: OrderStatusBadge[] = [];
+  const isOnlineOrder = order.channel !== "WALK_IN";
+
+  if (isOnlineOrder && order.status === "PENDING_PAYMENT") {
+    badges.push({
+      label: "รอดำเนินการ",
+      className: "bg-amber-100 text-amber-700",
+    });
+  } else {
+    badges.push({
+      label: statusLabel[order.status],
+      className: statusClass[order.status],
+    });
+  }
+
+  if (order.status === "READY_FOR_PICKUP") {
+    const pickupBadge = pickupPaymentBadge(order);
+    if (pickupBadge) {
+      badges.push(pickupBadge);
+    }
+    return badges;
+  }
+
+  if (!isOnlineOrder) {
+    return badges;
+  }
+
+  if (order.paymentMethod === "COD") {
+    if (order.paymentStatus === "COD_SETTLED") {
+      badges.push({
+        label: "ชำระแล้ว",
+        className: "bg-emerald-100 text-emerald-700",
+      });
+    } else if (order.paymentStatus === "FAILED") {
+      badges.push({
+        label: "ชำระไม่สำเร็จ",
+        className: "bg-rose-100 text-rose-700",
+      });
+    } else if (order.paymentStatus === "COD_PENDING_SETTLEMENT") {
+      badges.push({
+        label: order.status === "SHIPPED" ? "COD รอปิดยอด" : "COD",
+        className: "bg-indigo-100 text-indigo-700",
+      });
+    }
+    return badges;
+  }
+
+  if (order.paymentStatus === "PAID") {
+    badges.push({
+      label: "ชำระแล้ว",
+      className: "bg-emerald-100 text-emerald-700",
+    });
+    return badges;
+  }
+
+  if (order.paymentStatus === "PENDING_PROOF") {
+    badges.push({
+      label: "รอตรวจสลิป",
+      className: "bg-violet-100 text-violet-700",
+    });
+    return badges;
+  }
+
+  if (order.paymentStatus === "FAILED") {
+    badges.push({
+      label: "ชำระไม่สำเร็จ",
+      className: "bg-rose-100 text-rose-700",
+    });
+    return badges;
+  }
+
+  badges.push({
+    label: order.paymentMethod === "ON_CREDIT" ? "ค้างจ่าย" : "ยังไม่ชำระ",
+    className: "bg-amber-100 text-amber-700",
+  });
+
+  return badges;
 };
 
 const pickupPaymentBadge = (
@@ -336,6 +430,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
   const [onlineCustomProviderOpen, setOnlineCustomProviderOpen] = useState(false);
   const [onlineContactPickerOpen, setOnlineContactPickerOpen] = useState(false);
   const [onlineQuickFillInput, setOnlineQuickFillInput] = useState("");
+  const [showQrAccountPreview, setShowQrAccountPreview] = useState(false);
+  const [showQrImageViewer, setShowQrImageViewer] = useState(false);
   const [discountEnabled, setDiscountEnabled] = useState(false);
   const [shippingFeeEnabled, setShippingFeeEnabled] = useState(false);
   const [discountInputMode, setDiscountInputMode] = useState<DiscountInputMode>("AMOUNT");
@@ -430,6 +526,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
   const qrPaymentAccounts = useMemo(
     () => catalog.paymentAccounts.filter((account) => account.accountType === "LAO_QR"),
     [catalog.paymentAccounts],
+  );
+  const selectedQrPaymentAccount = useMemo(
+    () => qrPaymentAccounts.find((account) => account.id === watchedPaymentAccountId) ?? null,
+    [qrPaymentAccounts, watchedPaymentAccountId],
   );
   const paymentMethodOptions = useMemo<Array<{ key: CheckoutPaymentMethod; label: string }>>(
     () =>
@@ -734,6 +834,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
 
   const setCheckoutPaymentMethod = useCallback(
     (nextMethod: CheckoutPaymentMethod) => {
+      setShowQrAccountPreview(false);
       form.setValue("paymentMethod", nextMethod, { shouldDirty: true, shouldValidate: true });
       if (nextMethod === "LAO_QR") {
         const currentPaymentAccountId = form.getValues("paymentAccountId");
@@ -751,6 +852,110 @@ export function OrdersManagement(props: OrdersManagementProps) {
     },
     [form, qrPaymentAccounts],
   );
+
+  const copyQrAccountNumber = useCallback(async () => {
+    if (!selectedQrPaymentAccount?.accountNumber) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(selectedQrPaymentAccount.accountNumber);
+      toast.success("คัดลอกเลขบัญชีแล้ว");
+    } catch {
+      toast.error("คัดลอกเลขบัญชีไม่สำเร็จ");
+    }
+  }, [selectedQrPaymentAccount]);
+
+  const getSelectedQrImageActionUrl = useCallback(
+    (download = false) => {
+      if (!selectedQrPaymentAccount?.id) {
+        return null;
+      }
+      const search = download ? "?download=1" : "";
+      return `/api/orders/payment-accounts/${selectedQrPaymentAccount.id}/qr-image${search}`;
+    },
+    [selectedQrPaymentAccount],
+  );
+
+  const openQrImageFull = useCallback(() => {
+    if (!selectedQrPaymentAccount?.qrImageUrl) {
+      return;
+    }
+    setShowQrImageViewer(true);
+  }, [selectedQrPaymentAccount]);
+
+  const openQrImageInNewTab = useCallback(() => {
+    if (!selectedQrPaymentAccount?.qrImageUrl) {
+      return;
+    }
+
+    const targetUrl = getSelectedQrImageActionUrl(false) ?? selectedQrPaymentAccount.qrImageUrl;
+    window.open(targetUrl, "_blank", "noopener,noreferrer");
+  }, [getSelectedQrImageActionUrl, selectedQrPaymentAccount]);
+
+  const downloadQrImage = useCallback(async () => {
+    if (!selectedQrPaymentAccount?.qrImageUrl) {
+      return;
+    }
+
+    const safeFileName = selectedQrPaymentAccount.displayName
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+    try {
+      const response = await fetch(
+        getSelectedQrImageActionUrl(true) ?? selectedQrPaymentAccount.qrImageUrl,
+      );
+      if (!response.ok) {
+        throw new Error("DOWNLOAD_FAILED");
+      }
+
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `${safeFileName || "qr-payment"}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
+      toast.success("ดาวน์โหลดรูป QR แล้ว");
+    } catch {
+      const fallbackUrl = getSelectedQrImageActionUrl(false) ?? selectedQrPaymentAccount.qrImageUrl;
+      window.open(fallbackUrl, "_blank", "noopener,noreferrer");
+      toast("เปิดรูป QR ในแท็บใหม่แทน");
+    }
+  }, [getSelectedQrImageActionUrl, selectedQrPaymentAccount]);
+
+  useEffect(() => {
+    if (showCheckoutSheet) {
+      setShowQrAccountPreview(false);
+    }
+  }, [showCheckoutSheet]);
+
+  useEffect(() => {
+    if (watchedPaymentMethod !== "LAO_QR" || !selectedQrPaymentAccount) {
+      setShowQrAccountPreview(false);
+      setShowQrImageViewer(false);
+    }
+  }, [selectedQrPaymentAccount, watchedPaymentMethod]);
+
+  useEffect(() => {
+    if (!showQrImageViewer) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowQrImageViewer(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showQrImageViewer]);
 
   const onChangeProduct = (index: number, productId: string) => {
     const product = productsById.get(productId);
@@ -1029,28 +1234,30 @@ export function OrdersManagement(props: OrdersManagementProps) {
         accessorKey: "status",
         header: "สถานะ",
         cell: ({ row }) => {
-          const pickupBadge = pickupPaymentBadge(row.original);
+          const badges = buildOrderStatusBadges(row.original);
           return (
             <div className="flex flex-wrap items-center gap-1">
-              <span className={`rounded-full px-2 py-1 text-xs ${statusClass[row.original.status]}`}>
-                {statusLabel[row.original.status]}
-              </span>
-              {pickupBadge ? (
-                <span className={`rounded-full px-2 py-1 text-xs ${pickupBadge.className}`}>
-                  {pickupBadge.label}
+              {badges.map((badge) => (
+                <span key={`${badge.label}-${badge.className}`} className={`rounded-full px-2 py-1 text-xs ${badge.className}`}>
+                  {badge.label}
                 </span>
-              ) : null}
+              ))}
             </div>
           );
         },
       },
       {
-        accessorKey: "total",
-        header: "ยอดรวม",
+        id: "channel",
+        header: "ช่องทาง",
         cell: ({ row }) =>
-          `${row.original.total.toLocaleString("th-TH")} ${catalog.storeCurrency} • จ่าย ${row.original.paymentCurrency} • ${
+          `${channelSummaryLabel(row.original)} • ${row.original.paymentCurrency} • ${
             paymentMethodLabel[row.original.paymentMethod]
           }`,
+      },
+      {
+        accessorKey: "total",
+        header: "ยอดรวม",
+        cell: ({ row }) => `${row.original.total.toLocaleString("th-TH")} ${catalog.storeCurrency}`,
       },
     ],
     [catalog.storeCurrency],
@@ -3116,6 +3323,101 @@ export function OrdersManagement(props: OrdersManagementProps) {
                   ))}
                 </select>
                 <p className="text-xs text-red-600">{form.formState.errors.paymentAccountId?.message}</p>
+                {selectedQrPaymentAccount ? (
+                  <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-slate-700">ดู QR และข้อมูลบัญชี</p>
+                        <p className="text-[11px] text-slate-500">
+                          เปิดเมื่อจำเป็นเพื่อเช็ก QR กับเลขบัญชีให้ตรงก่อนรับชำระ
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className={`h-8 shrink-0 rounded-md border px-2 text-xs font-medium ${
+                          showQrAccountPreview
+                            ? "border-blue-300 bg-blue-50 text-blue-700"
+                            : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
+                        }`}
+                        onClick={() => setShowQrAccountPreview((current) => !current)}
+                        disabled={loading}
+                      >
+                        {showQrAccountPreview ? "ซ่อน QR" : "แสดง QR"}
+                      </button>
+                    </div>
+
+	                    {showQrAccountPreview ? (
+	                      <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3">
+	                        {selectedQrPaymentAccount.qrImageUrl ? (
+	                          <div className="relative overflow-hidden rounded-md border border-slate-200 bg-slate-50 p-2">
+	                            <div className="absolute right-3 top-3 flex items-center gap-2">
+	                              <button
+	                                type="button"
+	                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 shadow-sm hover:border-slate-400"
+	                                onClick={openQrImageFull}
+	                                disabled={loading}
+	                                aria-label="เปิดรูป QR เต็ม"
+	                                title="เปิดรูป QR เต็ม"
+	                              >
+	                                <Expand className="h-4 w-4" />
+	                              </button>
+	                              <button
+	                                type="button"
+	                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 shadow-sm hover:border-slate-400"
+	                                onClick={() => {
+	                                  void downloadQrImage();
+	                                }}
+	                                disabled={loading}
+	                                aria-label="ดาวน์โหลดรูป QR"
+	                                title="ดาวน์โหลดรูป QR"
+	                              >
+	                                <ArrowDownToLine className="h-4 w-4" />
+	                              </button>
+	                            </div>
+	                            <Image
+	                              src={selectedQrPaymentAccount.qrImageUrl}
+	                              alt={`QR ${selectedQrPaymentAccount.displayName}`}
+                              width={240}
+                              height={240}
+                              className="mx-auto h-48 w-48 rounded object-contain"
+                              unoptimized
+                            />
+                          </div>
+                        ) : (
+                          <p className="rounded-md border border-dashed border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                            บัญชีนี้ยังไม่มีรูป QR
+                          </p>
+                        )}
+
+                        <div className="space-y-1.5 text-xs text-slate-600">
+                          <p className="font-medium text-slate-800">{selectedQrPaymentAccount.displayName}</p>
+                          <p>ธนาคาร: {resolveLaosBankDisplayName(selectedQrPaymentAccount.bankName)}</p>
+                          <p>ชื่อบัญชี: {selectedQrPaymentAccount.accountName}</p>
+                          <div className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
+                            <div className="min-w-0">
+                              <p className="text-[11px] text-slate-500">เลขบัญชี</p>
+                              <p className="truncate font-medium text-slate-900">
+                                {selectedQrPaymentAccount.accountNumber || "-"}
+                              </p>
+                            </div>
+                            {selectedQrPaymentAccount.accountNumber ? (
+                              <button
+                                type="button"
+                                className="h-8 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs font-medium text-slate-700 hover:border-slate-400"
+                                onClick={() => {
+                                  void copyQrAccountNumber();
+                                }}
+                                disabled={loading}
+                              >
+                                คัดลอกเลขบัญชี
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 <p className="text-xs text-slate-500">
                   {catalog.requireSlipForLaoQr
                     ? "นโยบายร้าน: ต้องแนบสลิปก่อนยืนยันชำระ"
@@ -3659,7 +3961,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
               <>
                 <div className="space-y-2 md:hidden">
                   {visibleOrders.map((order) => {
-                    const pickupBadge = pickupPaymentBadge(order);
+                    const badges = buildOrderStatusBadges(order);
                     return (
                       <Link
                         key={order.id}
@@ -3673,19 +3975,19 @@ export function OrdersManagement(props: OrdersManagementProps) {
                               {order.customerName || order.contactDisplayName || "ลูกค้าทั่วไป"}
                             </h3>
                             <p className="text-xs text-muted-foreground">
-                              ช่องทาง {channelLabel[order.channel]} • จ่าย {order.paymentCurrency} •{" "}
+                              {channelSummaryLabel(order)} • {order.paymentCurrency} •{" "}
                               {paymentMethodLabel[order.paymentMethod]}
                             </p>
                           </div>
                           <div className="flex flex-col items-end gap-1">
-                            <span className={`rounded-full px-2 py-1 text-xs ${statusClass[order.status]}`}>
-                              {statusLabel[order.status]}
-                            </span>
-                            {pickupBadge ? (
-                              <span className={`rounded-full px-2 py-1 text-xs ${pickupBadge.className}`}>
-                                {pickupBadge.label}
+                            {badges.map((badge) => (
+                              <span
+                                key={`${order.id}-${badge.label}-${badge.className}`}
+                                className={`rounded-full px-2 py-1 text-xs ${badge.className}`}
+                              >
+                                {badge.label}
                               </span>
-                            ) : null}
+                            ))}
                           </div>
                         </div>
                         <p className="mt-2 text-sm font-medium">
@@ -4086,6 +4388,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
           isOpen={showCheckoutSheet}
           onClose={requestCloseCheckoutSheet}
           closeOnBackdrop={false}
+          scrollToTopOnOpen
           title="ชำระเงินและรายละเอียดออเดอร์"
           description="กรอกข้อมูลลูกค้า การชำระเงิน และยืนยันสร้างออเดอร์"
           disabled={loading}
@@ -4136,6 +4439,65 @@ export function OrdersManagement(props: OrdersManagementProps) {
               <Button type="button" className="h-9" onClick={closeCheckoutSheet}>
                 ปิดหน้าชำระเงิน
               </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {showQrImageViewer && selectedQrPaymentAccount?.qrImageUrl ? (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/85 px-3 py-6 sm:px-6"
+          onClick={() => setShowQrImageViewer(false)}
+        >
+          <div
+            className="relative w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-3 py-2.5 text-slate-100">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{selectedQrPaymentAccount.displayName}</p>
+                <p className="truncate text-xs text-slate-400">ดู QR เต็มในหน้าเดิม</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-100 hover:border-slate-500"
+                  onClick={openQrImageInNewTab}
+                  aria-label="เปิดรูป QR ในแท็บใหม่"
+                  title="เปิดรูป QR ในแท็บใหม่"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-100 hover:border-slate-500"
+                  onClick={() => {
+                    void downloadQrImage();
+                  }}
+                  aria-label="ดาวน์โหลดรูป QR"
+                  title="ดาวน์โหลดรูป QR"
+                >
+                  <ArrowDownToLine className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-100 hover:border-slate-500"
+                  onClick={() => setShowQrImageViewer(false)}
+                  aria-label="ปิดรูป QR"
+                  title="ปิดรูป QR"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex max-h-[calc(100dvh-9rem)] items-center justify-center bg-[radial-gradient(circle_at_center,_rgba(148,163,184,0.14),_transparent_60%)] p-4 sm:p-6">
+              <Image
+                src={selectedQrPaymentAccount.qrImageUrl}
+                alt={`QR ${selectedQrPaymentAccount.displayName}`}
+                width={1200}
+                height={1200}
+                className="h-auto max-h-[calc(100dvh-13rem)] w-auto max-w-full rounded-lg object-contain"
+                unoptimized
+              />
             </div>
           </div>
         </div>
