@@ -194,10 +194,9 @@ npm run db:migrate
       - summary ยอดเงินจัดเป็นแถว label ซ้าย-ตัวเลขขวา พร้อม `tabular-nums` เพื่อสแกนตัวเลขเร็วขึ้น
       - บนจอกว้าง (`lg+`, รวม tablet แนวนอน) แสดงเป็นตารางแนวบิล `รายการ | จำนวน | รวม` เพื่อให้ desktop/tablet landscape อ่านแบบเดียวกัน
     - หน้า `/orders/[orderId]` ปรับ breakpoint layout หลักให้โหมด 2 คอลัมน์ (เนื้อหา + action rail) เริ่มที่ `lg` เพื่อให้ tablet แนวนอนใช้งานเหมือน desktop
-    - หน้า `/orders/[orderId]` รวม action พิมพ์ใบเสร็จให้เหลือจุดเดียวใน action rail (ตัดปุ่มซ้ำบน header) และเปลี่ยนการพิมพ์ใบเสร็จ/ป้ายเป็น hidden iframe ในหน้าเดิม (ไม่เปิดแท็บใหม่) พร้อม cleanup iframe เก่าก่อนพิมพ์รอบใหม่เพื่อลดปัญหาพิมพ์ซ้ำ
-    - หน้า `/orders/[orderId]` ปรับกลไกพิมพ์ใหม่สำหรับ iOS: จาก hidden iframe เป็น `window.print()` บนหน้าเดิม โดย inject print-root เฉพาะเอกสาร (`ใบเสร็จ`/`ป้ายจัดส่ง`) แล้วใช้ print CSS ซ่อนคอนเทนต์อื่นทั้งหน้า
+    - หน้า `/orders/[orderId]` รวม action พิมพ์ใบเสร็จให้เหลือจุดเดียวใน action rail (ตัดปุ่มซ้ำบน header) และใช้ `window.print()` บนหน้าเดิม โดย inject print-root เฉพาะเอกสาร (`ใบเสร็จ`/`ป้ายจัดส่ง`) พร้อม print CSS ซ่อนคอนเทนต์อื่นทั้งหน้า (ไม่เปิดแท็บใหม่)
     - หน้า `/orders/[orderId]` เอา text link `กลับไปหน้ารายการขาย` ออกแล้ว เพื่อลด action ซ้ำกับ navigation หลักของแอป
-    - แก้เคสพิมพ์รอบแรกข้อมูลว่างใน `/orders/[orderId]`: iframe เปลี่ยนจากสั่ง `print()` จาก parent ทันที เป็นโหลดหน้า print พร้อม `autoprint=1` ให้หน้าปลายทางสั่งพิมพ์เองหลัง render เสร็จ
+    - หน้า print (`/orders/[orderId]/print/receipt` และ `/orders/[orderId]/print/label`) ยังรองรับ query `autoprint=1` สำหรับการเปิดพิมพ์ตรงจาก URL
     - ปรับการแสดงสกุลเงินในหน้ารายละเอียด/หน้าพิมพ์ออเดอร์ให้ใช้สัญลักษณ์แล้ว (`LAK -> ₭`, `THB -> ฿`, `USD -> $`) โดยเฉพาะยอดเงินที่เคยต่อท้ายด้วยรหัส `LAK`
     - flow เป็น `เลือกสินค้าในหน้า POS` -> `เปิดตะกร้า/กดชำระเงิน` -> `Checkout sheet` เพื่อกรอกลูกค้า/ชำระเงิน/ที่อยู่ แล้วค่อยบันทึก
     - เพิ่มหน้า `/orders/cod-reconcile` สำหรับ `COD Reconcile Panel (MVP)`:
@@ -208,10 +207,10 @@ npm run db:migrate
       - ปิดยอดแบบ batch ผ่าน `POST /api/orders/cod-reconcile` (ใช้สิทธิ์ `orders.mark_paid`) พร้อมบันทึก audit action `order.confirm_paid.bulk_cod_reconcile`
       - endpoint ปิดยอด COD รองรับ `Idempotency-Key` เพื่อกันการกดยืนยันซ้ำ/เน็ตหน่วง และ replay response เดิมได้
     - หลังสร้างออเดอร์สำเร็จทุกหน้าจอ (`mobile/tablet/desktop`) แสดง success action sheet ในหน้าเดิม
-    - success action sheet แสดงตัวอย่างบิลและปุ่มพิมพ์ผ่าน hidden iframe เหมือนกันทุกหน้าจอ (ไม่เปลี่ยนหน้า)
+    - success action sheet แสดงตัวอย่างบิลและปุ่มพิมพ์ในหน้าเดิมผ่าน `window.print()` + print-root เฉพาะเอกสาร (ไม่เปลี่ยนหน้า/ไม่เปิดแท็บใหม่)
     - success action sheet ของ flow `ออนไลน์/จัดส่ง` เพิ่มบล็อก `ข้อมูลสติ๊กเกอร์จัดส่ง` (ผู้รับ/โทร/ที่อยู่/ขนส่ง/tracking/ต้นทุนค่าส่ง) และปุ่ม `พิมพ์สติ๊กเกอร์จัดส่ง`
     - success action sheet ของ flow `มารับที่ร้านภายหลัง` และ `ออนไลน์/จัดส่ง` มีปุ่ม `ออเดอร์ใหม่ต่อ` แล้ว เพื่อกลับไปเริ่มออเดอร์ถัดไปได้ทันทีหลังพิมพ์เอกสาร
-    - ปุ่ม `พิมพ์สติ๊กเกอร์จัดส่ง` ใช้ hidden iframe เหมือนพิมพ์บิลแล้วทุกหน้าจอ (ไม่เปิดแท็บใหม่)
+    - ปุ่ม `พิมพ์สติ๊กเกอร์จัดส่ง` ใน success action sheet ใช้ `window.print()` โครงเดียวกับพิมพ์บิลแล้วทุกหน้าจอ และเพิ่ม guard ให้ปุ่มพิมพ์รอจน preview โหลดเสร็จก่อน (ลดปัญหา iOS)
     - หน้า `/orders/new` เพิ่มปุ่ม `ล่าสุด` ใต้แถบค้นหา เปิด `SlideUpSheet` รายการออเดอร์ล่าสุด 8 รายการ (ดึงจาก `GET /api/orders?page=1&pageSize=8`) พร้อมปุ่ม `เปิดสรุป` เพื่อ reopen success action sheet ของออเดอร์เก่า
     - ในรายการ `ออเดอร์ล่าสุด` ของหน้า `/orders/new` เพิ่มปุ่ม `ยกเลิก` แล้ว (แสดงเฉพาะผู้มีสิทธิ์ส่งคำขอยกเลิก) โดยใช้ modal กลางตัวเดียวกับหน้า `/orders/[orderId]`:
       - `Owner/Manager` ใช้โหมดสไลด์ยืนยัน

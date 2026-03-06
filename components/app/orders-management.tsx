@@ -1499,78 +1499,133 @@ export function OrdersManagement(props: OrdersManagementProps) {
 </html>`;
   }, []);
 
-  const printReceiptViaIframe = useCallback((html: string) => {
-    const iframe = document.createElement("iframe");
-    iframe.setAttribute("aria-hidden", "true");
-    iframe.style.position = "fixed";
-    iframe.style.right = "0";
-    iframe.style.bottom = "0";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
-    iframe.style.border = "0";
-    iframe.style.opacity = "0";
-    iframe.style.pointerEvents = "none";
-
-    document.body.appendChild(iframe);
-    const doc = iframe.contentWindow?.document;
-    if (!doc) {
-      iframe.remove();
-      throw new Error("ไม่สามารถสร้างหน้าพิมพ์ได้");
+  const printDocumentViaWindow = useCallback((html: string, kind: "receipt" | "label") => {
+    if (typeof window === "undefined") {
+      return;
     }
 
-    doc.open();
-    doc.write(html);
-    doc.close();
+    const printRootId = "orders-create-inline-print-root";
+    const printStyleId = "orders-create-inline-print-style";
+    document.getElementById(printRootId)?.remove();
+    document.getElementById(printStyleId)?.remove();
+    document
+      .querySelectorAll<HTMLIFrameElement>('iframe[data-order-print-frame="true"]')
+      .forEach((existingFrame) => existingFrame.remove());
+
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    const bodyMarkup = parsed.body?.innerHTML?.trim() || html;
+    const collectedStyles = Array.from(parsed.querySelectorAll("style"))
+      .map((styleNode) => styleNode.textContent ?? "")
+      .filter((styleText) => styleText.trim().length > 0)
+      .join("\n");
+
+    const printRoot = document.createElement("div");
+    printRoot.id = printRootId;
+    printRoot.setAttribute("aria-hidden", "true");
+    printRoot.innerHTML = bodyMarkup;
+
+    const printStyle = document.createElement("style");
+    printStyle.id = printStyleId;
+    printStyle.textContent = `
+      ${collectedStyles}
+      @media screen {
+        #${printRootId} {
+          display: none !important;
+        }
+      }
+      @media print {
+        html, body {
+          margin: 0 !important;
+          padding: 0 !important;
+          background: #ffffff !important;
+        }
+        body > *:not(#${printRootId}) {
+          display: none !important;
+        }
+        #${printRootId} {
+          display: block !important;
+        }
+      }
+    `;
+
+    document.head.appendChild(printStyle);
+    document.body.appendChild(printRoot);
 
     const cleanup = () => {
-      if (iframe.parentNode) {
-        iframe.parentNode.removeChild(iframe);
+      printRoot.remove();
+      printStyle.remove();
+    };
+
+    let settled = false;
+    const settleLoading = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (kind === "receipt") {
+        setReceiptPrintLoading(false);
+      } else {
+        setShippingLabelPrintLoading(false);
       }
     };
 
-    const tryPrint = () => {
-      try {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-      } finally {
-        window.setTimeout(cleanup, 3000);
-      }
+    const handleAfterPrint = () => {
+      settleLoading();
+      cleanup();
     };
+    window.addEventListener("afterprint", handleAfterPrint, { once: true });
 
-    iframe.addEventListener("load", () => {
-      window.setTimeout(tryPrint, 80);
+    window.setTimeout(() => {
+      settleLoading();
+    }, 1200);
+
+    window.setTimeout(() => {
+      cleanup();
+    }, 20000);
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        try {
+          window.focus();
+          window.print();
+        } catch {
+          window.removeEventListener("afterprint", handleAfterPrint);
+          setErrorMessage(
+            kind === "receipt" ? "ไม่สามารถพิมพ์ใบเสร็จได้" : "ไม่สามารถพิมพ์สติ๊กเกอร์จัดส่งได้",
+          );
+          settleLoading();
+          cleanup();
+        }
+      });
     });
   }, []);
 
   const openOrderReceiptPrint = useCallback(
-    async (orderId: string) => {
+    (orderId: string) => {
       if (typeof window === "undefined") {
         return;
       }
 
-      setReceiptPrintLoading(true);
       setErrorMessage(null);
+      setReceiptPrintLoading(true);
+
+      const order = receiptPreviewOrder && receiptPreviewOrder.id === orderId ? receiptPreviewOrder : null;
+      if (!order) {
+        setReceiptPrintLoading(false);
+        setErrorMessage("กำลังโหลดตัวอย่างใบเสร็จ กรุณากดพิมพ์อีกครั้ง");
+        return;
+      }
 
       try {
-        const order =
-          receiptPreviewOrder && receiptPreviewOrder.id === orderId
-            ? receiptPreviewOrder
-            : await fetchOrderReceiptPreview(orderId);
-        printReceiptViaIframe(buildReceiptPrintHtml(order));
+        printDocumentViaWindow(buildReceiptPrintHtml(order), "receipt");
       } catch (error) {
         const message =
           error instanceof Error && error.message ? error.message : "ไม่สามารถพิมพ์ใบเสร็จได้";
         setErrorMessage(message);
-      } finally {
         setReceiptPrintLoading(false);
       }
     },
-    [
-      buildReceiptPrintHtml,
-      fetchOrderReceiptPreview,
-      printReceiptViaIframe,
-      receiptPreviewOrder,
-    ],
+    [buildReceiptPrintHtml, printDocumentViaWindow, receiptPreviewOrder],
   );
 
   const openCreatedOrderDetail = useCallback(
@@ -1588,32 +1643,33 @@ export function OrdersManagement(props: OrdersManagementProps) {
   );
 
   const openOrderShippingLabelPrint = useCallback(
-    async (orderId: string) => {
+    (orderId: string) => {
       if (typeof window === "undefined") {
         return;
       }
-      setShippingLabelPrintLoading(true);
       setErrorMessage(null);
+      setShippingLabelPrintLoading(true);
+      const order = receiptPreviewOrder && receiptPreviewOrder.id === orderId ? receiptPreviewOrder : null;
+      if (!order) {
+        setShippingLabelPrintLoading(false);
+        setErrorMessage("กำลังโหลดตัวอย่างสติ๊กเกอร์ กรุณากดพิมพ์อีกครั้ง");
+        return;
+      }
+
       try {
-        const order =
-          receiptPreviewOrder && receiptPreviewOrder.id === orderId
-            ? receiptPreviewOrder
-            : await fetchOrderReceiptPreview(orderId);
-        printReceiptViaIframe(buildShippingLabelPrintHtml(order));
+        printDocumentViaWindow(buildShippingLabelPrintHtml(order), "label");
       } catch (error) {
         const message =
           error instanceof Error && error.message
             ? error.message
             : "ไม่สามารถเปิดหน้าพิมพ์สติ๊กเกอร์ได้";
         setErrorMessage(message);
-      } finally {
         setShippingLabelPrintLoading(false);
       }
     },
     [
       buildShippingLabelPrintHtml,
-      fetchOrderReceiptPreview,
-      printReceiptViaIframe,
+      printDocumentViaWindow,
       receiptPreviewOrder,
     ],
   );
@@ -4198,7 +4254,12 @@ export function OrdersManagement(props: OrdersManagementProps) {
             <Button
               type="button"
               className="h-10 w-full"
-              disabled={receiptPrintLoading}
+              disabled={
+                receiptPrintLoading ||
+                receiptPreviewLoading ||
+                !receiptPreviewOrder ||
+                receiptPreviewOrder.id !== createdOrderSuccess.orderId
+              }
               onClick={() => openOrderReceiptPrint(createdOrderSuccess.orderId)}
             >
               {receiptPrintLoading
@@ -4212,7 +4273,12 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 type="button"
                 variant="outline"
                 className="h-10 w-full"
-                disabled={shippingLabelPrintLoading}
+                disabled={
+                  shippingLabelPrintLoading ||
+                  receiptPreviewLoading ||
+                  !receiptPreviewOrder ||
+                  receiptPreviewOrder.id !== createdOrderSuccess.orderId
+                }
                 onClick={() => openOrderShippingLabelPrint(createdOrderSuccess.orderId)}
               >
                 {shippingLabelPrintLoading ? "กำลังเปิดหน้าพิมพ์..." : "พิมพ์สติ๊กเกอร์จัดส่ง"}
