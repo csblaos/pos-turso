@@ -1538,6 +1538,12 @@ export function OrdersManagement(props: OrdersManagementProps) {
           margin: 0 !important;
           padding: 0 !important;
           background: #ffffff !important;
+          position: static !important;
+          top: 0 !important;
+          left: 0 !important;
+          right: auto !important;
+          width: auto !important;
+          overflow: visible !important;
         }
         body > *:not(#${printRootId}) {
           display: none !important;
