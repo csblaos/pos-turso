@@ -7,6 +7,7 @@ import { buildSessionForUser, getUserMembershipFlags } from "@/lib/auth/session-
 import { createSessionCookie, SessionStoreUnavailableError } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
+import { UI_LOCALE_COOKIE_NAME, uiLocaleCookieOptions } from "@/lib/i18n/ui-locale-cookie";
 import { getUserPermissions } from "@/lib/rbac/access";
 import { getStorefrontEntryRoute } from "@/lib/storefront/routing";
 
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
       id: users.id,
       email: users.email,
       name: users.name,
+      uiLocale: users.uiLocale,
       passwordHash: users.passwordHash,
       mustChangePassword: users.mustChangePassword,
       systemRole: users.systemRole,
@@ -122,6 +124,7 @@ export async function POST(request: Request) {
     id: user.id,
     email: user.email,
     name: user.name,
+    uiLocale: user.uiLocale,
   });
 
   let sessionCookie;
@@ -159,6 +162,7 @@ export async function POST(request: Request) {
     sessionCookie.value,
     sessionCookie.options,
   );
+  response.cookies.set(UI_LOCALE_COOKIE_NAME, user.uiLocale, uiLocaleCookieOptions);
 
   return response;
 }

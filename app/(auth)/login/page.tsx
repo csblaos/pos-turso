@@ -4,10 +4,13 @@ import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/app/login-form";
 import { getSession } from "@/lib/auth/session";
 import { getUserSystemRole } from "@/lib/auth/system-admin";
+import { getRequestUiLocale } from "@/lib/i18n/request-locale";
+import { t } from "@/lib/i18n/messages";
 import { getUserPermissionsForCurrentSession } from "@/lib/rbac/access";
 import { getStorefrontEntryRoute } from "@/lib/storefront/routing";
 
 export default async function LoginPage() {
+  const uiLocale = await getRequestUiLocale();
   const session = await getSession();
   if (session) {
     const systemRole = await getUserSystemRole(session.userId);
@@ -27,16 +30,18 @@ export default async function LoginPage() {
     <div className="space-y-6">
       <div className="space-y-2 text-center">
         <p className="text-sm font-medium text-blue-600">SaaS POS</p>
-        <h1 className="text-2xl font-semibold tracking-tight">เข้าสู่ระบบร้านค้า</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {t(uiLocale, "auth.login.title")}
+        </h1>
         <p className="text-sm text-muted-foreground">
-          กรอกข้อมูลเพื่อเริ่มใช้งานหน้าขาย
+          {t(uiLocale, "auth.login.description")}
         </p>
       </div>
       <LoginForm />
       <p className="text-center text-sm text-muted-foreground">
-        ยังไม่มีบัญชี?{" "}
+        {t(uiLocale, "auth.login.noAccount")}{" "}
         <Link href="/signup" className="font-medium text-blue-700 hover:underline">
-          สมัครสมาชิก
+          {t(uiLocale, "auth.login.signup")}
         </Link>
       </p>
     </div>

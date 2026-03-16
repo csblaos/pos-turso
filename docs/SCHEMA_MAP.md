@@ -4,9 +4,11 @@
 
 ## Migration Status
 
-- journal entries: `38`
-- latest migration tag: `0037_bouncy_leper_queen`
+- journal entries: `39`
+- latest migration tag: `0038_foamy_the_hood`
 - latest focus:
+  - เพิ่มภาษา UI ต่อผู้ใช้:
+    - `users.ui_locale` (`th|lo|en`, default `th`)
   - โครงสร้างสินค้าแบบ Variant (Phase 1):
     - `product_models`
     - `product_model_attributes`

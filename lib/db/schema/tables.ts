@@ -20,6 +20,7 @@ export const storeTypeEnum = [
   "CAFE",
   "OTHER",
 ] as const;
+export const uiLocaleEnum = ["th", "lo", "en"] as const;
 export const storeCurrencyEnum = ["LAK", "THB", "USD"] as const;
 export const storeVatModeEnum = ["EXCLUSIVE", "INCLUSIVE"] as const;
 export const paymentAccountTypeEnum = ["BANK", "LAO_QR"] as const;
@@ -109,6 +110,7 @@ export const users = sqliteTable(
     id: id(),
     email: text("email").notNull(),
     name: text("name").notNull(),
+    uiLocale: text("ui_locale", { enum: uiLocaleEnum }).notNull().default("th"),
     passwordHash: text("password_hash").notNull(),
     createdBy: text("created_by"),
     mustChangePassword: integer("must_change_password", { mode: "boolean" })

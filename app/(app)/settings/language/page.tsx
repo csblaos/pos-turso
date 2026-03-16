@@ -1,0 +1,97 @@
+import Link from "next/link";
+import { ChevronRight, Globe } from "lucide-react";
+import { redirect } from "next/navigation";
+
+import { AccountLanguageSettings } from "@/components/app/account-language-settings";
+import { getSession } from "@/lib/auth/session";
+import { t } from "@/lib/i18n/messages";
+import { getUserPermissionsForCurrentSession, isPermissionGranted } from "@/lib/rbac/access";
+
+export default async function SettingsLanguagePage() {
+  const session = await getSession();
+  if (!session) {
+    redirect("/login");
+  }
+
+  if (!session.activeStoreId) {
+    redirect("/onboarding");
+  }
+
+  const permissionKeys = await getUserPermissionsForCurrentSession();
+  const canViewSettings = isPermissionGranted(permissionKeys, "settings.view");
+
+  if (!canViewSettings) {
+    return (
+      <section className="space-y-3">
+        <h1 className="text-xl font-semibold">{t(session.uiLocale, "settings.language.title")}</h1>
+        <p className="text-sm text-red-600">คุณไม่มีสิทธิ์ดูหน้านี้</p>
+        <Link href="/settings" className="text-sm font-medium text-blue-700 hover:underline">
+          กลับไปหน้าตั้งค่า
+        </Link>
+      </section>
+    );
+  }
+
+  const uiLocale = session.uiLocale;
+
+  return (
+    <section className="space-y-5">
+      <header className="space-y-1 px-1">
+        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
+          {t(uiLocale, "settings.language.title")}
+        </h1>
+        <p className="text-sm text-slate-500">{t(uiLocale, "settings.language.description")}</p>
+      </header>
+
+      <div className="space-y-2">
+        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          {t(uiLocale, "settings.section.display")}
+        </p>
+        <AccountLanguageSettings locale={uiLocale} initialUiLocale={uiLocale} />
+      </div>
+
+      <div className="space-y-2">
+        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          {t(uiLocale, "settings.section.navigate")}
+        </p>
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <Link
+            href="/settings"
+            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
+          >
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+              <Globe className="h-4 w-4" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-slate-900">
+                {t(uiLocale, "settings.language.nav.backToSettings.title")}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-slate-500">
+                {t(uiLocale, "settings.language.nav.backToSettings.description")}
+              </span>
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
+          </Link>
+
+          <Link
+            href="/settings/profile"
+            className="group flex min-h-14 items-center gap-3 px-4 py-3 transition-colors hover:bg-slate-50"
+          >
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+              <Globe className="h-4 w-4" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-slate-900">
+                {t(uiLocale, "settings.language.nav.profile.title")}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-slate-500">
+                {t(uiLocale, "settings.language.nav.profile.description")}
+              </span>
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}

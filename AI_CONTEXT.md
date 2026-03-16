@@ -46,6 +46,7 @@ npm run db:migrate
 - `app/api/` API endpoints
 - `components/` React UI components
 - `lib/` shared logic และ query helper
+- `lib/i18n/` โครง i18n/ข้อความ UI (ไทย/ລາວ/English) และ helper locale
 - `lib/db/schema/tables.ts` DB schema หลัก (Drizzle)
 - `server/services/` business service layer
 - `server/repositories/` data access layer

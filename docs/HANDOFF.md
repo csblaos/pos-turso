@@ -2,9 +2,15 @@
 
 ## Snapshot Date
 
-- March 6, 2026
+- March 16, 2026
 
 ## Changed (ล่าสุด)
+
+- เพิ่มตั้งค่า “ภาษา” (ไทย/ລາວ/English) แบบผูกกับบัญชีผู้ใช้:
+  - เพิ่มคอลัมน์ `users.ui_locale` (default `th`)
+  - หน้า `/settings/language` เพิ่ม language picker และบันทึกผ่าน `PATCH /api/settings/account` action `update_locale`
+  - session จะ sync locale จาก DB เพื่อให้ข้ามอุปกรณ์เห็นค่าเดียวกัน โดยไม่ต้อง logout
+  - เมื่อเลือกภาษาเป็นลาว (`lo`) UI จะใช้ฟอนต์ `GoogleSans` (อ่านภาษาลาวชัดขึ้น) จากไฟล์ใน `public/fonts`
 
 - ปรับ UX action rail ของ online order ในหน้า `/orders/[orderId]`:
   - ปุ่มหลักเหลือเฉพาะ next step เดียวตามสถานะจริง (`ยืนยันชำระแล้ว/ตรวจสลิปและยืนยันชำระ` -> `แพ็กสินค้า` -> `จัดส่งแล้ว` -> `ยืนยันรับเงินปลายทาง (COD)`)

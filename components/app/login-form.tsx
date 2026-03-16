@@ -9,6 +9,8 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { clearClientAuthToken, setClientAuthToken } from "@/lib/auth/client-token";
+import { t } from "@/lib/i18n/messages";
+import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 
 const loginSchema = z.object({
   email: z.string().email("กรอกอีเมลให้ถูกต้อง"),
@@ -62,6 +64,7 @@ const demoAccounts = [
 ] as const;
 
 export function LoginForm() {
+  const uiLocale = useUiLocale();
   const [serverError, setServerError] = useState<string | null>(null);
   const [copiedAccountId, setCopiedAccountId] = useState<string | null>(null);
 
@@ -116,7 +119,7 @@ export function LoginForm() {
     const data = (await response.json().catch(() => null)) as LoginResponse | null;
 
     if (!response.ok) {
-      setServerError(data?.message ?? "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่");
+      setServerError(data?.message ?? (uiLocale === "en" ? "Sign in failed. Please try again." : "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่"));
       return;
     }
 
@@ -218,7 +221,7 @@ export function LoginForm() {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <div className="space-y-2">
           <label htmlFor="email" className="text-sm font-medium">
-            อีเมล
+            {t(uiLocale, "auth.form.email")}
           </label>
           <input
             id="email"
@@ -232,7 +235,7 @@ export function LoginForm() {
 
         <div className="space-y-2">
           <label htmlFor="password" className="text-sm font-medium">
-            รหัสผ่าน
+            {t(uiLocale, "auth.form.password")}
           </label>
           <input
             id="password"
@@ -247,13 +250,13 @@ export function LoginForm() {
         {serverError ? <p className="text-sm text-red-600">{serverError}</p> : null}
 
         <Button className="h-11 w-full" type="submit" disabled={form.formState.isSubmitting}>
-          {form.formState.isSubmitting ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
+          {form.formState.isSubmitting ? t(uiLocale, "auth.form.signingIn") : t(uiLocale, "auth.form.signIn")}
         </Button>
 
         <section className="space-y-2 rounded-xl border bg-slate-50 p-3">
           <div>
-            <p className="text-sm font-semibold text-slate-900">บัญชีสำหรับเข้าสู่ระบบ</p>
-            <p className="text-xs text-slate-600">กด Fill เพื่อกรอกอัตโนมัติ หรือกด Copy เพื่อคัดลอกอีเมลและรหัสผ่าน</p>
+            <p className="text-sm font-semibold text-slate-900">{t(uiLocale, "auth.form.demoAccounts.title")}</p>
+            <p className="text-xs text-slate-600">{t(uiLocale, "auth.form.demoAccounts.description")}</p>
           </div>
 
           <ul className="space-y-2">
@@ -297,19 +300,19 @@ export function LoginForm() {
       <SlideUpSheet
         isOpen={isForceChangeOpen}
         onClose={closeForceChangeModal}
-        title="ตั้งรหัสผ่านใหม่ก่อนใช้งาน"
+        title={t(uiLocale, "auth.form.forceChange.title")}
         description={forceChangeEmail}
         panelMaxWidthClass="min-[1200px]:max-w-md"
         disabled={isForceChanging}
       >
         <div className="space-y-3">
           <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            รหัสผ่านปัจจุบันเป็นรหัสชั่วคราว กรุณาตั้งรหัสใหม่เพื่อเข้าใช้งานระบบ
+            {t(uiLocale, "auth.form.forceChange.hint")}
           </p>
 
           <div className="space-y-1.5">
             <label className="text-xs text-slate-500" htmlFor="force-change-password">
-              รหัสผ่านใหม่
+              {t(uiLocale, "auth.form.forceChange.newPassword")}
             </label>
             <input
               id="force-change-password"
@@ -323,7 +326,7 @@ export function LoginForm() {
 
           <div className="space-y-1.5">
             <label className="text-xs text-slate-500" htmlFor="force-change-confirm-password">
-              ยืนยันรหัสผ่านใหม่
+              {t(uiLocale, "auth.form.forceChange.confirmPassword")}
             </label>
             <input
               id="force-change-confirm-password"
@@ -349,7 +352,7 @@ export function LoginForm() {
               onClick={closeForceChangeModal}
               disabled={isForceChanging}
             >
-              ภายหลัง
+              {t(uiLocale, "auth.form.forceChange.later")}
             </Button>
             <Button
               type="button"
@@ -360,10 +363,10 @@ export function LoginForm() {
               {isForceChanging ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  กำลังบันทึก...
+                  {t(uiLocale, "auth.form.forceChange.saving")}
                 </>
               ) : (
-                "บันทึกรหัสใหม่"
+                t(uiLocale, "auth.form.forceChange.save")
               )}
             </Button>
           </div>

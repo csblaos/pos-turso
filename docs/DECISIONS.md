@@ -506,6 +506,21 @@
   - ทีมตรวจย้อนหลังเหตุยกเลิกได้ชัดขึ้นจาก audit metadata
   - การตั้งสิทธิ์ role ในร้านต้องมีอย่างน้อย Owner/Manager ที่พร้อมอนุมัติในรอบงาน
 
+## ADR-029: ภาษา UI แบบผูกกับบัญชีผู้ใช้ (th/lo/en)
+
+- Date: March 16, 2026
+- Status: Accepted
+- Decision:
+  - เพิ่ม `users.ui_locale` เพื่อเก็บภาษาที่ผู้ใช้เลือก (`th|lo|en`, default `th`)
+  - หน้า `/settings/profile` เพิ่มการตั้งค่าภาษา และอัปเดตผ่าน `PATCH /api/settings/account` action `update_locale`
+  - การอ่าน session (`getSession()`) จะ sync ค่า `uiLocale` จาก DB เพื่อให้หลายอุปกรณ์เห็นค่าตรงกัน โดยไม่ต้องออกจากระบบ
+- Reason:
+  - ต้องการให้ภาษาเปลี่ยนตามผู้ใช้ (ไม่ผูกกับเครื่อง/เบราว์เซอร์) และซิงก์ได้ข้ามอุปกรณ์
+  - เลี่ยงการต้องเปลี่ยนโครง URL เป็นแบบ `/en/...` ซึ่งกระทบ routing และ refactor ใหญ่
+- Consequence:
+  - มี DB query เพิ่มตอนอ่าน session เพื่อ sync locale (แต่ทำให้หลายอุปกรณ์เห็นค่าล่าสุดเสมอ)
+  - token/session อาจมีค่า locale เดิม แต่ runtime จะ override ด้วยค่าจาก DB เพื่อความสอดคล้อง
+
 ## Template สำหรับ ADR ใหม่
 
 - Date: YYYY-MM-DD

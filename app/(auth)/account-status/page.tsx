@@ -2,28 +2,8 @@ import Link from "next/link";
 
 type AccountStatus = "INVITED" | "SUSPENDED" | "NO_ACTIVE_STORE";
 
-const statusContent: Record<
-  AccountStatus,
-  { title: string; description: string; badgeClassName: string }
-> = {
-  INVITED: {
-    title: "บัญชีของคุณอยู่สถานะ INVITED",
-    description:
-      "บัญชีนี้ยังอยู่ระหว่างรอเปิดใช้งาน คุณยังไม่สามารถเข้าใช้งานระบบได้ กรุณาติดต่อแอดมินร้าน",
-    badgeClassName: "border-amber-300 bg-amber-50 text-amber-700",
-  },
-  SUSPENDED: {
-    title: "บัญชีของคุณอยู่สถานะ SUSPENDED",
-    description:
-      "บัญชีนี้ถูกระงับการใช้งาน คุณยังไม่สามารถเข้าใช้งานระบบได้ กรุณาติดต่อแอดมินร้าน",
-    badgeClassName: "border-rose-300 bg-rose-50 text-rose-700",
-  },
-  NO_ACTIVE_STORE: {
-    title: "บัญชีนี้ยังไม่มีสิทธิ์เข้าใช้งานระบบ",
-    description: "กรุณาติดต่อแอดมินร้านเพื่อเปิดสิทธิ์การใช้งาน",
-    badgeClassName: "border-slate-300 bg-slate-50 text-slate-700",
-  },
-};
+import { getRequestUiLocale } from "@/lib/i18n/request-locale";
+import { t } from "@/lib/i18n/messages";
 
 const normalizeStatus = (
   rawStatus: string | string[] | undefined,
@@ -40,27 +20,50 @@ export default async function AccountStatusPage({
 }: {
   searchParams: Promise<{ status?: string | string[] }>;
 }) {
+  const uiLocale = await getRequestUiLocale();
   const params = await searchParams;
   const status = normalizeStatus(params.status);
-  const content = statusContent[status];
+  const badgeClassName =
+    status === "INVITED"
+      ? "border-amber-300 bg-amber-50 text-amber-700"
+      : status === "SUSPENDED"
+        ? "border-rose-300 bg-rose-50 text-rose-700"
+        : "border-slate-300 bg-slate-50 text-slate-700";
+  const content =
+    status === "INVITED"
+      ? {
+          title: t(uiLocale, "auth.accountStatus.invited.title"),
+          description: t(uiLocale, "auth.accountStatus.invited.description"),
+        }
+      : status === "SUSPENDED"
+        ? {
+            title: t(uiLocale, "auth.accountStatus.suspended.title"),
+            description: t(uiLocale, "auth.accountStatus.suspended.description"),
+          }
+        : {
+            title: t(uiLocale, "auth.accountStatus.noActiveStore.title"),
+            description: t(uiLocale, "auth.accountStatus.noActiveStore.description"),
+          };
 
   return (
     <div className="space-y-5">
       <div className="space-y-2 text-center">
         <p className="text-sm font-medium text-blue-600">SaaS POS</p>
-        <h1 className="text-2xl font-semibold tracking-tight">ไม่สามารถเข้าใช้งานระบบ</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {t(uiLocale, "auth.accountStatus.headerTitle")}
+        </h1>
         <p className="text-sm text-muted-foreground">
-          เปลี่ยนรหัสผ่านสำเร็จแล้ว แต่บัญชีนี้ยังไม่สามารถเข้าใช้งานได้
+          {t(uiLocale, "auth.accountStatus.headerDescription")}
         </p>
       </div>
 
-      <div className={`rounded-xl border p-4 ${content.badgeClassName}`}>
+      <div className={`rounded-xl border p-4 ${badgeClassName}`}>
         <p className="text-sm font-semibold">{content.title}</p>
         <p className="mt-2 text-sm">{content.description}</p>
       </div>
 
       <div className="text-center text-sm text-muted-foreground">
-        หากต้องการความช่วยเหลือ กรุณาติดต่อผู้ดูแลระบบของร้าน
+        {t(uiLocale, "auth.accountStatus.help")}
       </div>
 
       <div className="flex justify-center">
@@ -68,7 +71,7 @@ export default async function AccountStatusPage({
           href="/login"
           className="inline-flex h-10 items-center justify-center rounded-md border px-4 text-sm font-medium hover:bg-slate-50"
         >
-          กลับไปหน้าเข้าสู่ระบบ
+          {t(uiLocale, "common.backToLogin")}
         </Link>
       </div>
     </div>

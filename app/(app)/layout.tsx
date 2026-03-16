@@ -59,6 +59,7 @@ export default async function AppLayout({
           activeStoreLogoUrl={activeStoreProfile?.logoUrl ?? null}
           activeBranchName={session.activeBranchName}
           shellTitle={layoutPreset.shellTitle}
+          uiLocale={session.uiLocale}
           canViewNotifications={
             permissionKeys.includes("*") || permissionKeys.includes("settings.view")
           }
@@ -72,7 +73,11 @@ export default async function AppLayout({
       <main className="flex-1 px-4 pb-[calc(var(--bottom-tab-nav-height)+env(safe-area-inset-bottom)+1rem)] pt-4 md:px-6 min-[1200px]:px-8 min-[1200px]:pb-[calc(var(--bottom-tab-nav-height)+1.5rem)]">
         {children}
       </main>
-      <BottomTabNav permissionKeys={permissionKeys} storeType={activeStoreType} />
+      <BottomTabNav
+        permissionKeys={permissionKeys}
+        storeType={activeStoreType}
+        uiLocale={session.uiLocale}
+      />
     </div>
   );
 }

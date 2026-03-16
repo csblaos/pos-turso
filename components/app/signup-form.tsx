@@ -9,6 +9,8 @@ import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { setClientAuthToken } from "@/lib/auth/client-token";
+import { t } from "@/lib/i18n/messages";
+import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 
 const signupSchema = z
   .object({
@@ -26,6 +28,7 @@ type SignupInput = z.infer<typeof signupSchema>;
 
 export function SignupForm() {
   const router = useRouter();
+  const uiLocale = useUiLocale();
   const [serverError, setServerError] = useState<string | null>(null);
 
   const form = useForm<SignupInput>({
@@ -59,7 +62,7 @@ export function SignupForm() {
       | null;
 
     if (!response.ok) {
-      setServerError(data?.message ?? "สมัครสมาชิกไม่สำเร็จ กรุณาลองใหม่");
+      setServerError(data?.message ?? (uiLocale === "en" ? "Sign up failed. Please try again." : "สมัครสมาชิกไม่สำเร็จ กรุณาลองใหม่"));
       return;
     }
 
@@ -75,7 +78,7 @@ export function SignupForm() {
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
       <div className="space-y-2">
         <label htmlFor="name" className="text-sm font-medium">
-          ชื่อผู้ใช้งาน
+          {t(uiLocale, "auth.form.name")}
         </label>
         <input
           id="name"
@@ -87,7 +90,7 @@ export function SignupForm() {
 
       <div className="space-y-2">
         <label htmlFor="email" className="text-sm font-medium">
-          อีเมล
+          {t(uiLocale, "auth.form.email")}
         </label>
         <input
           id="email"
@@ -101,7 +104,7 @@ export function SignupForm() {
 
       <div className="space-y-2">
         <label htmlFor="password" className="text-sm font-medium">
-          รหัสผ่าน
+          {t(uiLocale, "auth.form.password")}
         </label>
         <input
           id="password"
@@ -115,7 +118,7 @@ export function SignupForm() {
 
       <div className="space-y-2">
         <label htmlFor="confirmPassword" className="text-sm font-medium">
-          ยืนยันรหัสผ่าน
+          {t(uiLocale, "auth.form.confirmPassword")}
         </label>
         <input
           id="confirmPassword"
@@ -132,13 +135,13 @@ export function SignupForm() {
       {serverError ? <p className="text-sm text-red-600">{serverError}</p> : null}
 
       <Button className="h-11 w-full" type="submit" disabled={form.formState.isSubmitting}>
-        {form.formState.isSubmitting ? "กำลังสมัครสมาชิก..." : "สมัครสมาชิก"}
+        {form.formState.isSubmitting ? t(uiLocale, "auth.form.signingUp") : t(uiLocale, "auth.form.signUp")}
       </Button>
 
       <p className="text-center text-sm text-muted-foreground">
-        มีบัญชีแล้ว?{" "}
+        {t(uiLocale, "auth.form.alreadyHaveAccount")}{" "}
         <Link href="/login" className="font-medium text-blue-700 hover:underline">
-          เข้าสู่ระบบ
+          {t(uiLocale, "auth.form.signIn")}
         </Link>
       </p>
     </form>

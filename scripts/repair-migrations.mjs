@@ -391,6 +391,13 @@ async function ensureSchemaCompatForLatestAuthChanges() {
     console.info("[db:repair] added column users.password_updated_at");
   }
 
+  if (!(await columnExists("users", "ui_locale"))) {
+    await client.execute(
+      "alter table `users` add `ui_locale` text not null default 'th'",
+    );
+    console.info("[db:repair] added column users.ui_locale");
+  }
+
   if (!(await columnExists("stores", "out_stock_threshold"))) {
     await client.execute(
       "alter table `stores` add `out_stock_threshold` integer not null default 0",
@@ -472,6 +479,15 @@ async function ensureSchemaCompatForLatestAuthChanges() {
     "update `users` set `password_updated_at` = coalesce(`created_at`, CURRENT_TIMESTAMP) where `password_updated_at` is null",
   );
   console.info("[db:repair] normalized users.password_updated_at");
+
+  await client.execute(`
+    update \`users\`
+    set \`ui_locale\` = 'th'
+    where \`ui_locale\` is null
+      or trim(\`ui_locale\`) = ''
+      or \`ui_locale\` not in ('th', 'lo', 'en')
+  `);
+  console.info("[db:repair] normalized users.ui_locale");
 
   await client.execute(
     "create index if not exists `users_created_by_idx` on `users` (`created_by`)",

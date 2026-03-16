@@ -6,6 +6,7 @@ import {
   ChevronRight,
   ClipboardList,
   FileText,
+  Globe,
   Lock,
   Package,
   PackageCheck,
@@ -26,6 +27,8 @@ import { getSession } from "@/lib/auth/session";
 import { getUserSystemRole } from "@/lib/auth/system-admin";
 import { db } from "@/lib/db/client";
 import { fbConnections, stores, waConnections } from "@/lib/db/schema";
+import { DEFAULT_UI_LOCALE, type UiLocale } from "@/lib/i18n/locales";
+import { type MessageKey, t } from "@/lib/i18n/messages";
 import {
   getUserPermissionsForCurrentSession,
   isPermissionGranted,
@@ -39,13 +42,7 @@ const storeTypeLabels = {
   OTHER: "Other POS",
 } as const;
 
-const channelStatusLabels = {
-  DISCONNECTED: "ยังไม่เชื่อมต่อ",
-  CONNECTED: "เชื่อมต่อแล้ว",
-  ERROR: "พบปัญหา",
-} as const;
-
-type ChannelStatus = keyof typeof channelStatusLabels;
+type ChannelStatus = "DISCONNECTED" | "CONNECTED" | "ERROR";
 
 type SettingsLinkItem = {
   id: string;
@@ -57,7 +54,7 @@ type SettingsLinkItem = {
   badgeText?: string;
 };
 
-function ChannelStatusPill({ status }: { status: ChannelStatus }) {
+function ChannelStatusPill({ status, uiLocale }: { status: ChannelStatus; uiLocale: UiLocale }) {
   const toneClassName =
     status === "CONNECTED"
       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -69,7 +66,7 @@ function ChannelStatusPill({ status }: { status: ChannelStatus }) {
     <span
       className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${toneClassName}`}
     >
-      {channelStatusLabels[status]}
+      {t(uiLocale, `settings.channelStatus.${status}` as MessageKey)}
     </span>
   );
 }
@@ -108,6 +105,7 @@ export default async function SettingsPage() {
     getSession(),
     getUserPermissionsForCurrentSession(),
   ]);
+  const uiLocale = session?.uiLocale ?? DEFAULT_UI_LOCALE;
   const systemRole = session ? await getUserSystemRole(session.userId) : "USER";
   const isSuperadmin = systemRole === "SUPERADMIN";
   const canViewSettings = isPermissionGranted(permissionKeys, "settings.view");
@@ -124,7 +122,7 @@ export default async function SettingsPage() {
   if (!canViewSettings) {
     return (
       <section className="space-y-3">
-        <h1 className="text-xl font-semibold">ตั้งค่า</h1>
+        <h1 className="text-xl font-semibold">{t(uiLocale, "settings.page.title")}</h1>
         <p className="text-sm text-red-600">คุณไม่มีสิทธิ์เข้าถึงหน้าตั้งค่า</p>
       </section>
     );
@@ -174,76 +172,88 @@ export default async function SettingsPage() {
   const fbStatus: ChannelStatus = fbConnection?.status ?? "DISCONNECTED";
   const waStatus: ChannelStatus = waConnection?.status ?? "DISCONNECTED";
 
+  const formatGrantedCapabilities = (count: number) => {
+    if (uiLocale === "en") {
+      return `${count.toLocaleString("en-US")} items`;
+    }
+
+    if (uiLocale === "lo") {
+      return `ໃຊ້ໄດ້ ${count.toLocaleString("lo-LA")} ລາຍການ`;
+    }
+
+    return `ใช้งานได้ ${count.toLocaleString("th-TH")} รายการ`;
+  };
+
   const managementLinks: SettingsLinkItem[] = [
     {
       id: "store-profile",
       href: "/settings/store",
-      title: "ข้อมูลร้าน",
-      description: "ชื่อร้าน โลโก้ ที่อยู่ และช่องทางติดต่อ",
+      title: t(uiLocale, "settings.link.storeProfile.title"),
+      description: t(uiLocale, "settings.link.storeProfile.description"),
       icon: Store,
       visible: true,
     },
     {
       id: "switch-store",
       href: "/settings/stores",
-      title: "เลือกร้าน / เปลี่ยนร้าน",
-      description: "สลับร้าน/สาขาในร้านที่กำลังเลือก",
+      title: t(uiLocale, "settings.link.switchStore.title"),
+      description: t(uiLocale, "settings.link.switchStore.description"),
       icon: Settings2,
       visible: true,
     },
     {
       id: "payment-accounts",
       href: "/settings/store/payments",
-      title: "บัญชีรับเงิน",
-      description: "จัดการบัญชีธนาคารและ QR โอนเงินของร้าน",
+      title: t(uiLocale, "settings.link.paymentAccounts.title"),
+      description: t(uiLocale, "settings.link.paymentAccounts.description"),
       icon: WalletCards,
       visible: true,
     },
     {
       id: "shipping-providers",
       href: "/settings/store/shipping-providers",
-      title: "ผู้ให้บริการขนส่ง",
-      description: "ตั้งค่ารายชื่อขนส่งที่ใช้ใน POS ออนไลน์",
+      title: t(uiLocale, "settings.link.shippingProviders.title"),
+      description: t(uiLocale, "settings.link.shippingProviders.description"),
       icon: Truck,
       visible: true,
     },
     {
       id: "pdf-settings",
       href: "/settings/pdf",
-      title: "ตั้งค่าเอกสาร PDF",
-      description: "ปรับแต่ง Logo ลายเซ็น สีหัวตาราง และข้อมูลบริษัท",
+      title: t(uiLocale, "settings.link.pdfSettings.title"),
+      description: t(uiLocale, "settings.link.pdfSettings.description"),
       icon: FileText,
       visible: true,
     },
     {
       id: "audit-log",
       href: "/settings/audit-log",
-      title: "Audit Log",
-      description: "ตรวจสอบกิจกรรมสำคัญในร้านของคุณ",
+      title: t(uiLocale, "settings.link.auditLog.title"),
+      description: t(uiLocale, "settings.link.auditLog.description"),
       icon: ClipboardList,
       visible: true,
     },
     {
       id: "users",
       href: "/settings/users",
-      title: "ผู้ใช้และสมาชิก",
-      description: "จัดการสมาชิกทีมและสถานะผู้ใช้งาน",
+      title: t(uiLocale, "settings.link.users.title"),
+      description: t(uiLocale, "settings.link.users.description"),
       icon: Users,
       visible: canViewUsers,
     },
     {
       id: "roles",
       href: "/settings/roles",
-      title: "บทบาทและสิทธิ์",
-      description: "กำหนดสิทธิ์การเข้าถึงของแต่ละตำแหน่ง",
+      title: t(uiLocale, "settings.link.roles.title"),
+      description: t(uiLocale, "settings.link.roles.description"),
       icon: Shield,
       visible: canViewRoles,
     },
     {
       id: "reports",
       href: "/reports",
-      title: "รายงาน",
-      description: "ดูภาพรวมยอดขายและแนวโน้ม",
+      title: t(uiLocale, "settings.link.reports.title"),
+      description: t(uiLocale, "settings.link.reports.description"),
       icon: PlugZap,
       visible: canViewReports,
     },
@@ -253,60 +263,67 @@ export default async function SettingsPage() {
     {
       id: "categories",
       href: "/settings/categories",
-      title: "หมวดหมู่สินค้า",
-      description: "จัดกลุ่มสินค้า เช่น อาหาร เครื่องดื่ม ขนม",
+      title: t(uiLocale, "settings.link.categories.title"),
+      description: t(uiLocale, "settings.link.categories.description"),
       icon: Tags,
       visible: canViewProducts,
     },
     {
       id: "stock-thresholds",
       href: "/settings/stock",
-      title: "ตั้งค่าแจ้งเตือนสต็อก",
-      description: "กำหนดเกณฑ์สต็อกหมดและสต็อกต่ำของร้าน",
+      title: t(uiLocale, "settings.link.stockThresholds.title"),
+      description: t(uiLocale, "settings.link.stockThresholds.description"),
       icon: PackageCheck,
       visible: canViewProducts,
     },
     {
       id: "units",
       href: "/settings/units",
-      title: "หน่วยสินค้า",
-      description: "จัดการหน่วยพื้นฐาน เช่น PCS, PACK, BOX",
+      title: t(uiLocale, "settings.link.units.title"),
+      description: t(uiLocale, "settings.link.units.description"),
       icon: Package,
       visible: canViewUnits,
     },
   ];
 
   const accountLinks: SettingsLinkItem[] = [
-
     {
       id: "account-profile",
       href: "/settings/profile",
-      title: "โปรไฟล์บัญชี",
-      description: "แก้ไขชื่อผู้ใช้และตรวจสอบข้อมูลล็อกอิน",
+      title: t(uiLocale, "settings.link.accountProfile.title"),
+      description: t(uiLocale, "settings.link.accountProfile.description"),
       icon: UserRound,
+      visible: true,
+    },
+    {
+      id: "account-language",
+      href: "/settings/language",
+      title: t(uiLocale, "settings.link.accountLanguage.title"),
+      description: t(uiLocale, "settings.link.accountLanguage.description"),
+      icon: Globe,
       visible: true,
     },
     {
       id: "account-permissions",
       href: "/settings/permissions",
-      title: "สิทธิ์ของบัญชี",
-      description: `ใช้งานได้ ${grantedCapabilitiesCount} รายการ`,
+      title: t(uiLocale, "settings.link.accountPermissions.title"),
+      description: formatGrantedCapabilities(grantedCapabilitiesCount),
       icon: CheckCircle2,
       visible: true,
     },
     {
       id: "account-security",
       href: "/settings/security",
-      title: "ความปลอดภัยบัญชี",
-      description: "จัดการความปลอดภัยและออกจากระบบ",
+      title: t(uiLocale, "settings.link.accountSecurity.title"),
+      description: t(uiLocale, "settings.link.accountSecurity.description"),
       icon: Lock,
       visible: true,
     },
     {
       id: "account-notifications",
       href: "/settings/notifications",
-      title: "การแจ้งเตือน",
-      description: "ตั้งค่าช่องทางและประเภทการแจ้งเตือน",
+      title: t(uiLocale, "settings.link.accountNotifications.title"),
+      description: t(uiLocale, "settings.link.accountNotifications.description"),
       icon: Bell,
       visible: true,
     },
@@ -331,15 +348,17 @@ export default async function SettingsPage() {
   return (
     <section className="space-y-5">
       <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">การตั้งค่า</h1>
-        <p className="text-sm text-slate-500">จัดการร้าน ทีมงาน สิทธิ์ และการเชื่อมต่อจากที่เดียว</p>
+        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
+          {t(uiLocale, "settings.page.title")}
+        </h1>
+        <p className="text-sm text-slate-500">{t(uiLocale, "settings.page.subtitle")}</p>
       </header>
 
       <div className="space-y-4">
         {adminLinks.some((item) => item.visible) ? (
           <div className="space-y-2">
             <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              พื้นที่ผู้ดูแล
+              {t(uiLocale, "settings.section.adminArea")}
             </p>
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <ul className="divide-y divide-slate-100">
@@ -363,7 +382,7 @@ export default async function SettingsPage() {
 
         <div className="space-y-2">
           <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            บัญชีและร้าน
+            {t(uiLocale, "settings.section.accountAndStore")}
           </p>
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <ul className="divide-y divide-slate-100">
@@ -373,22 +392,26 @@ export default async function SettingsPage() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-slate-900">
-                    {session?.activeStoreName ?? "ยังไม่ได้เลือกร้าน"}
+                    {session?.activeStoreName ?? t(uiLocale, "settings.store.notSelected")}
                   </p>
                   <p className="truncate text-xs text-slate-500">
                     {storeTypeLabel} • {storeSummary?.currency ?? "-"}
                   </p>
                 </div>
                 <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700">
-                  {session?.activeRoleName ?? "ไม่มีบทบาท"}
+                  {session?.activeRoleName ?? t(uiLocale, "settings.role.none")}
                 </span>
               </li>
 
               <li className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-900">ที่อยู่ร้าน</p>
+                  <p className="text-sm font-medium text-slate-900">
+                    {t(uiLocale, "settings.store.addressLabel")}
+                  </p>
                   <p className="mt-0.5 text-xs text-slate-500">
-                    {storeSummary?.address?.trim() ? storeSummary.address : "ยังไม่ระบุ"}
+                    {storeSummary?.address?.trim()
+                      ? storeSummary.address
+                      : t(uiLocale, "settings.value.notSpecified")}
                   </p>
                 </div>
                 <span className="shrink-0 text-xs font-medium text-slate-500">System: {systemRole}</span>
@@ -396,14 +419,18 @@ export default async function SettingsPage() {
 
               <li className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-900">เบอร์โทรร้าน</p>
+                  <p className="text-sm font-medium text-slate-900">
+                    {t(uiLocale, "settings.store.phoneLabel")}
+                  </p>
                   <p className="mt-0.5 text-xs text-slate-500">
-                    {storeSummary?.phoneNumber?.trim() ? storeSummary.phoneNumber : "ยังไม่ระบุ"}
+                    {storeSummary?.phoneNumber?.trim()
+                      ? storeSummary.phoneNumber
+                      : t(uiLocale, "settings.value.notSpecified")}
                   </p>
                 </div>
                 {!canUpdateSettings ? (
                   <span className="inline-flex shrink-0 items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700">
-                    สิทธิ์ดูอย่างเดียว
+                    {t(uiLocale, "settings.permission.viewOnly")}
                   </span>
                 ) : null}
               </li>
@@ -413,7 +440,7 @@ export default async function SettingsPage() {
 
         <div className="space-y-2">
           <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            การจัดการ
+            {t(uiLocale, "settings.section.management")}
           </p>
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <ul className="divide-y divide-slate-100">
@@ -436,7 +463,7 @@ export default async function SettingsPage() {
         {productSettingsLinks.some((item) => item.visible) && (
           <div className="space-y-2">
             <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              ตั้งค่าสินค้า
+              {t(uiLocale, "settings.section.productSettings")}
             </p>
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <ul className="divide-y divide-slate-100">
@@ -459,7 +486,7 @@ export default async function SettingsPage() {
 
         <div className="space-y-2">
           <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            บัญชีของฉัน
+            {t(uiLocale, "settings.section.myAccount")}
           </p>
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <ul className="divide-y divide-slate-100">
@@ -482,7 +509,7 @@ export default async function SettingsPage() {
 
         <div className="space-y-2">
           <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            การเชื่อมต่อช่องทาง
+            {t(uiLocale, "settings.section.channelConnections")}
           </p>
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             {canViewConnections ? (
@@ -494,7 +521,7 @@ export default async function SettingsPage() {
                       {fbConnection?.pageName?.trim() ? fbConnection.pageName : "ยังไม่ผูกเพจ"}
                     </p>
                   </div>
-                  <ChannelStatusPill status={fbStatus} />
+                  <ChannelStatusPill status={fbStatus} uiLocale={uiLocale} />
                 </li>
                 <li className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
                   <div className="min-w-0">
@@ -505,12 +532,12 @@ export default async function SettingsPage() {
                         : "ยังไม่ผูกหมายเลข"}
                     </p>
                   </div>
-                  <ChannelStatusPill status={waStatus} />
+                  <ChannelStatusPill status={waStatus} uiLocale={uiLocale} />
                 </li>
               </ul>
             ) : (
               <p className="px-4 py-3 text-sm text-slate-500">
-                บัญชีนี้ไม่มีสิทธิ์ดูสถานะการเชื่อมต่อช่องทาง
+                {t(uiLocale, "settings.connections.noPermission")}
               </p>
             )}
           </div>
@@ -518,12 +545,12 @@ export default async function SettingsPage() {
 
         <div className="space-y-2">
           <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            ความปลอดภัย
+            {t(uiLocale, "settings.section.security")}
           </p>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-3 flex items-start gap-2 text-sm text-slate-700">
               <PlugZap className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
-              ออกจากระบบหลังใช้งาน เพื่อความปลอดภัยของบัญชี
+              {t(uiLocale, "settings.logout.hint")}
             </div>
             <div className="sm:max-w-[220px]">
               <LogoutButton />

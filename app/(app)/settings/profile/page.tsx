@@ -8,6 +8,7 @@ import { AccountProfileSettings } from "@/components/app/account-profile-setting
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
+import { t } from "@/lib/i18n/messages";
 import { getUserPermissionsForCurrentSession, isPermissionGranted } from "@/lib/rbac/access";
 
 export default async function SettingsProfilePage() {
@@ -20,13 +21,14 @@ export default async function SettingsProfilePage() {
     redirect("/onboarding");
   }
 
+  const uiLocale = session.uiLocale;
   const permissionKeys = await getUserPermissionsForCurrentSession();
   const canViewSettings = isPermissionGranted(permissionKeys, "settings.view");
 
   if (!canViewSettings) {
     return (
       <section className="space-y-3">
-        <h1 className="text-xl font-semibold">โปรไฟล์บัญชี</h1>
+        <h1 className="text-xl font-semibold">{t(uiLocale, "settings.profile.title")}</h1>
         <p className="text-sm text-red-600">คุณไม่มีสิทธิ์ดูหน้านี้</p>
         <Link href="/settings" className="text-sm font-medium text-blue-700 hover:underline">
           กลับไปหน้าตั้งค่า
@@ -48,7 +50,7 @@ export default async function SettingsProfilePage() {
   if (!account) {
     return (
       <section className="space-y-3">
-        <h1 className="text-xl font-semibold">โปรไฟล์บัญชี</h1>
+        <h1 className="text-xl font-semibold">{t(uiLocale, "settings.profile.title")}</h1>
         <p className="text-sm text-red-600">ไม่พบบัญชีผู้ใช้ที่กำลังใช้งาน</p>
         <Link href="/settings" className="text-sm font-medium text-blue-700 hover:underline">
           กลับไปหน้าตั้งค่า
@@ -60,8 +62,10 @@ export default async function SettingsProfilePage() {
   return (
     <section className="space-y-5">
       <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">บัญชีของฉัน</h1>
-        <p className="text-sm text-slate-500">แก้ไขโปรไฟล์และจัดการความปลอดภัยบัญชี</p>
+        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
+          {t(uiLocale, "settings.profile.title")}
+        </h1>
+        <p className="text-sm text-slate-500">{t(uiLocale, "settings.profile.subtitle")}</p>
       </header>
 
       <div className="space-y-2">

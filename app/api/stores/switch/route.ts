@@ -34,6 +34,7 @@ export async function POST(request: Request) {
       id: session.userId,
       email: session.email,
       name: session.displayName,
+      uiLocale: session.uiLocale,
     },
     {
       preferredStoreId: membership.storeId,

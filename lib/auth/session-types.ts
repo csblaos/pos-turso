@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { storeTypeValues } from "@/lib/storefront/types";
+import { DEFAULT_UI_LOCALE, uiLocaleValues } from "@/lib/i18n/locales";
 
 export const sessionStoreTypeSchema = z.enum(storeTypeValues);
 
@@ -7,6 +8,7 @@ export const sessionSchema = z.object({
   userId: z.string(),
   email: z.string().email(),
   displayName: z.string(),
+  uiLocale: z.enum(uiLocaleValues).default(DEFAULT_UI_LOCALE),
   hasStoreMembership: z.boolean(),
   activeStoreId: z.string().nullable(),
   activeStoreName: z.string().nullable(),

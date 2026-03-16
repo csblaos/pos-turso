@@ -13,11 +13,18 @@ import {
 import { buildSessionForUser } from "@/lib/auth/session-db";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
+import { uiLocaleValues } from "@/lib/i18n/locales";
+import { UI_LOCALE_COOKIE_NAME, uiLocaleCookieOptions } from "@/lib/i18n/ui-locale-cookie";
 import { safeLogAuditEvent } from "@/server/services/audit.service";
 
 const updateProfileSchema = z.object({
   action: z.literal("update_profile"),
   name: z.string().trim().min(2).max(120),
+});
+
+const updateLocaleSchema = z.object({
+  action: z.literal("update_locale"),
+  uiLocale: z.enum(uiLocaleValues),
 });
 
 const changePasswordSchema = z.object({
@@ -28,6 +35,7 @@ const changePasswordSchema = z.object({
 
 const patchAccountSchema = z.discriminatedUnion("action", [
   updateProfileSchema,
+  updateLocaleSchema,
   changePasswordSchema,
 ]);
 
@@ -44,6 +52,7 @@ export async function GET() {
       email: users.email,
       mustChangePassword: users.mustChangePassword,
       passwordUpdatedAt: users.passwordUpdatedAt,
+      uiLocale: users.uiLocale,
     })
     .from(users)
     .where(eq(users.id, session.userId))
@@ -94,13 +103,16 @@ export async function PATCH(request: Request) {
     auditAction =
       payload.data.action === "update_profile"
         ? "account.profile.update"
-        : "account.password.change";
+        : payload.data.action === "update_locale"
+          ? "account.locale.update"
+          : "account.password.change";
 
     const [user] = await db
       .select({
         id: users.id,
         name: users.name,
         email: users.email,
+        uiLocale: users.uiLocale,
         passwordHash: users.passwordHash,
       })
       .from(users)
@@ -165,6 +177,7 @@ export async function PATCH(request: Request) {
             id: user.id,
             email: user.email,
             name: nextName,
+            uiLocale: user.uiLocale,
           },
           {
             preferredStoreId: session.activeStoreId,
@@ -218,6 +231,102 @@ export async function PATCH(request: Request) {
           sessionCookie.options,
         );
       }
+
+      return response;
+    }
+
+    if (payload.data.action === "update_locale") {
+      const nextLocale = payload.data.uiLocale;
+
+      if (nextLocale === user.uiLocale) {
+        await safeLogAuditEvent({
+          scope: auditScope,
+          storeId: auditStoreId,
+          actorUserId: session.userId,
+          actorName: session.displayName,
+          actorRole: session.activeRoleName,
+          action: auditAction,
+          entityType: "user_account",
+          entityId: user.id,
+          metadata: {
+            noChange: true,
+          },
+          request,
+        });
+        return NextResponse.json({
+          ok: true,
+          user: {
+            name: user.name,
+            email: user.email,
+            uiLocale: user.uiLocale,
+          },
+        });
+      }
+
+      await db.update(users).set({ uiLocale: nextLocale }).where(eq(users.id, user.id));
+
+      let sessionCookie: Awaited<ReturnType<typeof createSessionCookie>> | null = null;
+      let warning: string | null = null;
+
+      try {
+        const nextSession = await buildSessionForUser(
+          {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            uiLocale: nextLocale,
+          },
+          {
+            preferredStoreId: session.activeStoreId,
+            preferredBranchId: session.activeBranchId,
+          },
+        );
+        sessionCookie = await createSessionCookie(nextSession);
+      } catch (error) {
+        if (error instanceof SessionStoreUnavailableError) {
+          warning = "บันทึกภาษาแล้ว แต่ยังรีเฟรชเซสชันไม่สำเร็จ กรุณาเข้าสู่ระบบใหม่อีกครั้ง";
+        } else {
+          throw error;
+        }
+      }
+
+      await safeLogAuditEvent({
+        scope: auditScope,
+        storeId: auditStoreId,
+        actorUserId: session.userId,
+        actorName: session.displayName,
+        actorRole: session.activeRoleName,
+        action: auditAction,
+        entityType: "user_account",
+        entityId: user.id,
+        metadata: {
+          sessionRefreshWarning: Boolean(warning),
+        },
+        before: {
+          uiLocale: user.uiLocale,
+        },
+        after: {
+          uiLocale: nextLocale,
+        },
+        request,
+      });
+
+      const response = NextResponse.json({
+        ok: true,
+        warning,
+        token: sessionCookie?.value,
+        user: {
+          name: user.name,
+          email: user.email,
+          uiLocale: nextLocale,
+        },
+      });
+
+      if (sessionCookie) {
+        response.cookies.set(sessionCookie.name, sessionCookie.value, sessionCookie.options);
+      }
+
+      response.cookies.set(UI_LOCALE_COOKIE_NAME, nextLocale, uiLocaleCookieOptions);
 
       return response;
     }

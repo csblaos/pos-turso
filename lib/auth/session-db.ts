@@ -9,11 +9,14 @@ import {
   clearSessionCookie,
   deleteSessionById,
 } from "@/lib/auth/session";
+import { normalizeUiLocale, type UiLocale } from "@/lib/i18n/locales";
+import { UI_LOCALE_COOKIE_NAME, uiLocaleCookieOptions } from "@/lib/i18n/ui-locale-cookie";
 
 type SessionUser = {
   id: string;
   email: string;
   name: string;
+  uiLocale?: UiLocale | null;
 };
 
 export type ActiveMembership = {
@@ -142,6 +145,7 @@ export async function buildSessionForUser(
     userId: user.id,
     email: user.email,
     displayName: user.name,
+    uiLocale: normalizeUiLocale(user.uiLocale),
     hasStoreMembership: Boolean(membership),
     activeStoreId: membership?.storeId ?? null,
     activeStoreName: membership?.storeName ?? null,
@@ -163,5 +167,6 @@ export async function clearSessionResponse(
   const response = NextResponse.json(payload);
   const cookie = clearSessionCookie();
   response.cookies.set(cookie.name, cookie.value, cookie.options);
+  response.cookies.set(UI_LOCALE_COOKIE_NAME, "", { ...uiLocaleCookieOptions, maxAge: 0 });
   return response;
 }

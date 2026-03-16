@@ -382,6 +382,7 @@ export async function POST(request: Request) {
       id: users.id,
       email: users.email,
       name: users.name,
+      uiLocale: users.uiLocale,
     })
     .from(users)
     .where(eq(users.id, session.userId))

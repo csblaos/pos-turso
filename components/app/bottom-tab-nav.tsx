@@ -5,10 +5,13 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { getStorefrontTabs } from "@/components/storefront/nav/registry";
 import { type StoreType } from "@/lib/storefront/types";
+import { type UiLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
 
 type BottomTabNavProps = {
   permissionKeys: string[];
   storeType?: StoreType | null;
+  uiLocale: UiLocale;
 };
 
 const hasPermission = (permissionKeys: string[], key: string) =>
@@ -22,16 +25,56 @@ const getActiveTabHref = (pathname: string, hrefs: string[]) => {
   return sortedHrefs.find((href) => isPathInTab(pathname, href)) ?? null;
 };
 
-const getCompactLabel = (label: string, href: string) => {
-  if (href === "/orders") {
-    return "ออเดอร์";
+const getTabLabel = (uiLocale: UiLocale, label: string, href: string) => {
+  if (uiLocale === "th") {
+    return label;
+  }
+
+  if (href === "/settings/stores") {
+    return t(uiLocale, "tab.stores");
+  }
+
+  if (href === "/settings") {
+    return t(uiLocale, "tab.settings");
+  }
+
+  if (href === "/products") {
+    return t(uiLocale, "tab.products");
+  }
+
+  if (href === "/stock") {
+    return t(uiLocale, "tab.stock");
   }
 
   if (href === "/dashboard") {
-    return "หน้าหลัก";
+    return label === "ภาพรวม" ? t(uiLocale, "tab.overview") : t(uiLocale, "tab.dashboard");
+  }
+
+  if (href === "/orders") {
+    if (label === "คิวอาหาร") {
+      return t(uiLocale, "tab.restaurantQueue");
+    }
+
+    if (label === "ออเดอร์คาเฟ่") {
+      return t(uiLocale, "tab.cafeOrders");
+    }
+
+    return t(uiLocale, "tab.orders");
   }
 
   return label;
+};
+
+const getCompactLabel = (uiLocale: UiLocale, label: string, href: string) => {
+  if (href === "/orders") {
+    return t(uiLocale, "tab.orders");
+  }
+
+  if (href === "/dashboard") {
+    return t(uiLocale, "tab.dashboard");
+  }
+
+  return getTabLabel(uiLocale, label, href);
 };
 
 const getGridColumnsClass = (tabCount: number) => {
@@ -56,7 +99,7 @@ const getGridColumnsClass = (tabCount: number) => {
 
 const HIDE_NAV_PATH_PREFIXES = ["/orders/new"];
 
-export function BottomTabNav({ permissionKeys, storeType }: BottomTabNavProps) {
+export function BottomTabNav({ permissionKeys, storeType, uiLocale }: BottomTabNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [optimisticPath, setOptimisticPath] = useState<string | null>(null);
@@ -127,7 +170,7 @@ export function BottomTabNav({ permissionKeys, storeType }: BottomTabNavProps) {
 
   return (
     <nav
-      aria-label="เมนูหลัก"
+      aria-label={t(uiLocale, "nav.mainMenu")}
       className="pointer-events-none fixed bottom-0 left-0 right-0 z-20 w-full bg-white min-[1200px]:left-1/2 min-[1200px]:right-auto min-[1200px]:max-w-[var(--app-shell-max-width-desktop)] min-[1200px]:-translate-x-1/2"
       style={{
         paddingBottom: "env(safe-area-inset-bottom)",
@@ -169,8 +212,8 @@ export function BottomTabNav({ permissionKeys, storeType }: BottomTabNavProps) {
                       isActive ? "font-semibold text-slate-900" : "font-medium text-slate-500"
                     }`}
                   >
-                    <span className="sm:hidden">{getCompactLabel(tab.label, tab.href)}</span>
-                    <span className="hidden sm:inline">{tab.label}</span>
+                    <span className="sm:hidden">{getCompactLabel(uiLocale, tab.label, tab.href)}</span>
+                    <span className="hidden sm:inline">{getTabLabel(uiLocale, tab.label, tab.href)}</span>
                   </span>
                 </button>
               </li>

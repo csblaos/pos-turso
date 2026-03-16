@@ -8,6 +8,8 @@ import { Bell, Maximize2, Minimize2, RefreshCw } from "lucide-react";
 
 import { MenuBackButton } from "@/components/ui/menu-back-button";
 import { authFetch } from "@/lib/auth/client-token";
+import { type UiLocale, uiLocaleToDateLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
 
 type AppTopNavProps = {
   activeStoreName: string;
@@ -15,6 +17,7 @@ type AppTopNavProps = {
   activeBranchName: string | null;
   shellTitle: string;
   canViewNotifications: boolean;
+  uiLocale: UiLocale;
 };
 
 const navRoots = [
@@ -99,7 +102,7 @@ function getStoreInitial(storeName: string) {
   return normalizedName.slice(0, 1).toUpperCase();
 }
 
-function formatShortDateTime(value: string | null): string {
+function formatShortDateTime(value: string | null, uiLocale: UiLocale): string {
   if (!value) {
     return "-";
   }
@@ -109,7 +112,7 @@ function formatShortDateTime(value: string | null): string {
     return "-";
   }
 
-  return parsed.toLocaleString("th-TH", {
+  return parsed.toLocaleString(uiLocaleToDateLocale(uiLocale), {
     day: "numeric",
     month: "short",
     hour: "2-digit",
@@ -123,6 +126,7 @@ export function AppTopNav({
   activeBranchName,
   shellTitle,
   canViewNotifications,
+  uiLocale,
 }: AppTopNavProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -168,8 +172,8 @@ export function AppTopNav({
     return undefined;
   }, [pathname]);
   const backButtonLabel = pathname.startsWith("/orders/new")
-    ? "กลับรายการออเดอร์"
-    : "ย้อนกลับ";
+    ? t(uiLocale, "nav.backToOrders")
+    : t(uiLocale, "nav.back");
 
   useEffect(() => {
     if (!pathname.startsWith("/settings/superadmin/")) {
@@ -455,7 +459,9 @@ export function AppTopNav({
                       <p className="mt-1 truncate text-[10px] text-slate-500">
                         {poNumber ? `PO ${poNumber}` : "PO -"}
                         {supplierName ? ` · ${supplierName}` : ""}
-                        {item.dueDate ? ` · due ${formatShortDateTime(item.dueDate)}` : ""}
+                        {item.dueDate
+                          ? ` · ${uiLocale === "en" ? "due" : uiLocale === "lo" ? "ກຳນົດ" : "ครบกำหนด"} ${formatShortDateTime(item.dueDate, uiLocale)}`
+                          : ""}
                       </p>
                     </div>
                     {item.dueStatus ? (
@@ -473,7 +479,12 @@ export function AppTopNav({
 
                   <div className="mt-2 flex items-center justify-between gap-2">
                     <p className="text-[10px] text-slate-500">
-                      ตรวจล่าสุด {formatShortDateTime(item.lastDetectedAt)}
+                      {(uiLocale === "en"
+                        ? "Last checked"
+                        : uiLocale === "lo"
+                          ? "ກວດລ່າສຸດ"
+                          : "ตรวจล่าสุด")}{" "}
+                      {formatShortDateTime(item.lastDetectedAt, uiLocale)}
                     </p>
                     <div className="flex items-center gap-1.5">
                       {item.status === "UNREAD" ? (

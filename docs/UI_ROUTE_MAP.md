@@ -62,7 +62,8 @@
 
 | Page | Main Component | API Calls |
 |---|---|---|
-| `/settings/profile` | `components/app/account-profile-settings.tsx`, `components/app/account-password-settings.tsx` | `GET/PATCH /api/settings/account` |
+| `/settings/profile` | `components/app/account-profile-settings.tsx`, `components/app/account-password-settings.tsx` | `GET/PATCH /api/settings/account` (รองรับ action `update_profile`, `change_password`) |
+| `/settings/language` | `components/app/account-language-settings.tsx` | `PATCH /api/settings/account` (action `update_locale`) |
 | `/settings/users` | `components/app/users-management.tsx` | `GET/POST /api/settings/users`, `GET/PATCH /api/settings/users/[userId]`, `GET /api/settings/users/candidates` |
 | `/settings/categories` | `components/app/categories-management.tsx` | `GET/POST/PATCH/DELETE /api/products/categories` |
 | `/settings/units` | `components/app/units-management.tsx` | `GET/POST /api/units`, `PATCH/DELETE /api/units/[unitId]` |

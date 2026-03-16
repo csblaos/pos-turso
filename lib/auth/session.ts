@@ -18,6 +18,7 @@ import { sessionSchema, type AppSession } from "@/lib/auth/session-types";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { getGlobalSessionPolicy } from "@/lib/system-config/policy";
+import { normalizeUiLocale } from "@/lib/i18n/locales";
 
 export type { AppSession } from "@/lib/auth/session-types";
 
@@ -139,6 +140,16 @@ const getUserSessionLimitOverride = async (userId: string) => {
     .limit(1);
 
   return parseSessionLimit(row?.sessionLimit);
+};
+
+const getUserUiLocale = async (userId: string) => {
+  const [row] = await db
+    .select({ uiLocale: users.uiLocale })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  return row?.uiLocale ? normalizeUiLocale(row.uiLocale) : null;
 };
 
 const getEffectiveSessionLimit = async (userId: string) => {
@@ -394,13 +405,16 @@ const readSession = async () => {
     return null;
   }
 
+  const userUiLocale = await getUserUiLocale(parsed.data.userId);
+  const syncedSession = userUiLocale ? { ...parsed.data, uiLocale: userUiLocale } : parsed.data;
+
   if (AUTH_DEBUG) {
     console.info(
       `[auth] readSession: ok id=${claims.jti.slice(0, 8)}... user=${parsed.data.userId}`,
     );
   }
 
-  return parsed.data;
+  return syncedSession;
 };
 
 const getSessionForRequest = cache(readSession);
