@@ -185,9 +185,9 @@ const FONT_CONFIG: Record<PdfLang, FontConfig> = {
     familyName: "Sarabun",
   },
   lo: {
-    path: "/fonts/NotoSansLao-Regular.ttf",
-    fileName: "NotoSansLao-Regular.ttf",
-    familyName: "NotoSansLao",
+    path: "/fonts/NotoSansLaoLooped-Regular.ttf",
+    fileName: "NotoSansLaoLooped-Regular.ttf",
+    familyName: "NotoSansLaoLooped",
   },
 };
 

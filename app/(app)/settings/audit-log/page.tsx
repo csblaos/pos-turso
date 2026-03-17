@@ -16,6 +16,8 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { auditEvents, stores, users } from "@/lib/db/schema";
+import { t, type MessageKey } from "@/lib/i18n/messages";
+import { type UiLocale, uiLocaleToDateLocale } from "@/lib/i18n/locales";
 import { hasPermission } from "@/lib/rbac/access";
 
 export const dynamic = "force-dynamic";
@@ -39,14 +41,14 @@ const parseResult = (value: string): ResultFilter => {
   return "ALL";
 };
 
-const formatDateTime = (value: string) => {
+const formatDateTime = (value: string, uiLocale: UiLocale) => {
   const normalized = value.includes("T") ? value : `${value.replace(" ", "T")}Z`;
   const parsed = new Date(normalized);
   if (Number.isNaN(parsed.getTime())) {
     return value;
   }
 
-  return parsed.toLocaleString("th-TH", {
+  return parsed.toLocaleString(uiLocaleToDateLocale(uiLocale), {
     dateStyle: "medium",
     timeStyle: "short",
   });
@@ -76,42 +78,51 @@ const parseJsonText = (value: string | null) => {
   }
 };
 
-const actionFilterOptions = [
-  { value: "", label: "ทั้งหมด" },
-  { value: "order.create", label: "สร้างออเดอร์" },
-  { value: "order.update_shipping", label: "อัปเดตข้อมูลจัดส่ง" },
-  { value: "order.submit_for_payment", label: "ส่งออเดอร์รอชำระ" },
-  { value: "order.submit_payment_slip", label: "แนบสลิปชำระเงิน" },
-  { value: "order.confirm_paid", label: "ยืนยันชำระเงิน" },
-  { value: "order.mark_packed", label: "ยืนยันจัดของ" },
-  { value: "order.mark_shipped", label: "ยืนยันจัดส่ง" },
-  { value: "order.cancel", label: "ยกเลิกออเดอร์" },
-  { value: "stock.movement.create", label: "บันทึกการเคลื่อนไหวสต็อก" },
-  { value: "po.create", label: "สร้างใบสั่งซื้อ" },
-  { value: "po.update", label: "แก้ไขใบสั่งซื้อ" },
-  { value: "po.status.change", label: "เปลี่ยนสถานะใบสั่งซื้อ" },
-  { value: "store.settings.update", label: "แก้ตั้งค่าร้าน" },
-  { value: "store.settings.pdf.update", label: "แก้ตั้งค่าเอกสาร PDF" },
-  { value: "store.payment_account.create", label: "เพิ่มบัญชีรับเงิน" },
-  { value: "store.payment_account.update", label: "แก้บัญชีรับเงิน" },
-  { value: "store.payment_account.delete", label: "ลบบัญชีรับเงิน" },
-  { value: "store.member.create_new", label: "สร้างผู้ใช้ใหม่เข้าร้าน" },
-  { value: "store.member.add_existing", label: "เพิ่มผู้ใช้เดิมเข้าร้าน" },
-  { value: "store.member.assign_role", label: "เปลี่ยนบทบาทสมาชิก" },
-  { value: "store.member.set_status", label: "เปลี่ยนสถานะสมาชิก" },
-  { value: "store.member.set_session_limit", label: "ตั้งค่า session limit สมาชิก" },
-  { value: "store.member.set_branch_access", label: "ตั้งค่าสิทธิ์สาขาสมาชิก" },
-  { value: "store.member.reset_password", label: "รีเซ็ตรหัสผ่านสมาชิก" },
-  { value: "store.role.permissions.update", label: "แก้สิทธิ์บทบาท" },
-  { value: "account.profile.update", label: "แก้ข้อมูลโปรไฟล์ตัวเอง" },
-  { value: "account.password.change", label: "เปลี่ยนรหัสผ่านตัวเอง" },
+const actionFilterValues = [
+  "order.create",
+  "order.update_shipping",
+  "order.submit_for_payment",
+  "order.submit_payment_slip",
+  "order.confirm_paid",
+  "order.mark_packed",
+  "order.mark_shipped",
+  "order.cancel",
+  "stock.movement.create",
+  "po.create",
+  "po.update",
+  "po.status.change",
+  "store.settings.update",
+  "store.settings.pdf.update",
+  "store.payment_account.create",
+  "store.payment_account.update",
+  "store.payment_account.delete",
+  "store.member.create_new",
+  "store.member.add_existing",
+  "store.member.assign_role",
+  "store.member.set_status",
+  "store.member.set_session_limit",
+  "store.member.set_branch_access",
+  "store.member.reset_password",
+  "store.role.permissions.update",
+  "account.profile.update",
+  "account.password.change",
 ] as const;
 
-const actionLabelMap: Record<string, string> = Object.fromEntries(
-  actionFilterOptions
-    .filter((option) => option.value.length > 0)
-    .map((option) => [option.value, option.label]),
-);
+type ActionFilterValue = (typeof actionFilterValues)[number];
+
+function actionLabelKey(action: ActionFilterValue): MessageKey {
+  return `settings.auditLog.actionLabel.${action}` as MessageKey;
+}
+
+function getActionFilterOptions(uiLocale: UiLocale) {
+  return [
+    { value: "", label: t(uiLocale, "common.filter.all") },
+    ...actionFilterValues.map((value) => ({
+      value,
+      label: t(uiLocale, actionLabelKey(value)),
+    })),
+  ];
+}
 
 const buildHref = (basePath: string, params: URLSearchParams) => {
   const query = params.toString();
@@ -143,6 +154,7 @@ export default async function SettingsAuditLogPage({
   }
 
   const storeId = session.activeStoreId;
+  const uiLocale = session.uiLocale;
   const params = (await searchParams) ?? {};
 
   const q = getParam(params, "q").trim();
@@ -151,6 +163,13 @@ export default async function SettingsAuditLogPage({
   const result = parseResult(getParam(params, "result"));
   const fromDate = getParam(params, "from").trim();
   const toDate = getParam(params, "to").trim();
+
+  const actionFilterOptions = getActionFilterOptions(uiLocale);
+  const actionLabelMap: Record<string, string> = Object.fromEntries(
+    actionFilterOptions
+      .filter((option) => option.value.length > 0)
+      .map((option) => [option.value, option.label]),
+  );
   const cursorAtRaw = getParam(params, "cursorAt").trim();
   const cursorIdRaw = getParam(params, "cursorId").trim();
   const cursorAt =
@@ -258,27 +277,30 @@ export default async function SettingsAuditLogPage({
   return (
     <section className="space-y-5">
       <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">Audit Log</h1>
+        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
+          {t(uiLocale, "settings.link.auditLog.title")}
+        </h1>
         <p className="text-sm text-slate-500">
-          ตรวจสอบกิจกรรมในร้าน {storeRow?.name ?? "-"} (แสดงเฉพาะร้านที่กำลังใช้งาน)
+          {t(uiLocale, "settings.auditLog.page.descriptionPrefix")} {storeRow?.name ?? "-"}{" "}
+          {t(uiLocale, "settings.auditLog.page.descriptionSuffix")}
         </p>
       </header>
 
       <form className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" method="GET">
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
           <label className="space-y-1 text-xs text-slate-600">
-            ค้นหา
+            {t(uiLocale, "settings.auditLog.filter.q.label")}
             <input
               type="text"
               name="q"
               defaultValue={q}
-              placeholder="action / entity / ผู้ทำ"
+              placeholder={t(uiLocale, "settings.auditLog.filter.q.placeholder")}
               className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
             />
           </label>
 
           <label className="space-y-1 text-xs text-slate-600">
-            Action
+            {t(uiLocale, "settings.auditLog.filter.action.label")}
             <select
               name="action"
               defaultValue={action}
@@ -293,31 +315,31 @@ export default async function SettingsAuditLogPage({
           </label>
 
           <label className="space-y-1 text-xs text-slate-600">
-            Action (ค้นหาเพิ่ม)
+            {t(uiLocale, "settings.auditLog.filter.actionLike.label")}
             <input
               type="text"
               name="actionLike"
               defaultValue={actionLike}
-              placeholder="เช่น store.member"
+              placeholder={t(uiLocale, "settings.auditLog.filter.actionLike.placeholder")}
               className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
             />
           </label>
 
           <label className="space-y-1 text-xs text-slate-600">
-            ผลลัพธ์
+            {t(uiLocale, "settings.auditLog.filter.result.label")}
             <select
               name="result"
               defaultValue={result}
               className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
             >
-              <option value="ALL">ทั้งหมด</option>
-              <option value="SUCCESS">Success</option>
-              <option value="FAIL">Fail</option>
+              <option value="ALL">{t(uiLocale, "common.filter.all")}</option>
+              <option value="SUCCESS">{t(uiLocale, "common.result.success")}</option>
+              <option value="FAIL">{t(uiLocale, "common.result.fail")}</option>
             </select>
           </label>
 
           <label className="space-y-1 text-xs text-slate-600">
-            จากวันที่
+            {t(uiLocale, "settings.auditLog.filter.fromDate.label")}
             <input
               type="date"
               name="from"
@@ -327,7 +349,7 @@ export default async function SettingsAuditLogPage({
           </label>
 
           <label className="space-y-1 text-xs text-slate-600">
-            ถึงวันที่
+            {t(uiLocale, "settings.auditLog.filter.toDate.label")}
             <input
               type="date"
               name="to"
@@ -342,37 +364,42 @@ export default async function SettingsAuditLogPage({
             type="submit"
             className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-sm font-medium text-white"
           >
-            ค้นหา
+            {t(uiLocale, "settings.auditLog.action.search")}
           </button>
           <Link
             href="/settings/audit-log"
             className="inline-flex h-9 items-center rounded-lg border border-slate-200 px-3 text-sm text-slate-600"
           >
-            ล้างตัวกรอง
+            {t(uiLocale, "settings.auditLog.action.clearFilters")}
           </Link>
           <p className="ml-auto text-xs text-slate-500">
-            แสดง {rows.length.toLocaleString("th-TH")} รายการต่อหน้า
+            {t(uiLocale, "settings.auditLog.perPage.prefix")}{" "}
+            {rows.length.toLocaleString(uiLocaleToDateLocale(uiLocale))}{" "}
+            {t(uiLocale, "settings.auditLog.perPage.suffix")}
           </p>
         </div>
       </form>
 
       <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
-          <p className="text-sm font-semibold text-slate-900">กิจกรรมล่าสุด</p>
-          <p className="mt-0.5 text-xs text-slate-500">เรียงจากล่าสุดลงเก่าสุด</p>
+          <p className="text-sm font-semibold text-slate-900">{t(uiLocale, "settings.auditLog.title")}</p>
+          <p className="mt-0.5 text-xs text-slate-500">{t(uiLocale, "settings.auditLog.subtitle")}</p>
         </div>
 
         {rows.length === 0 ? (
-          <p className="px-4 py-4 text-sm text-slate-500">ยังไม่พบกิจกรรมตามตัวกรองที่เลือก</p>
+          <p className="px-4 py-4 text-sm text-slate-500">{t(uiLocale, "settings.auditLog.empty")}</p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {rows.map((row) => {
               const metadata = parseJsonText(row.metadata);
-              const actorName = row.actorNameSnapshot ?? row.actorName ?? "ระบบ";
+              const actorName =
+                row.actorNameSnapshot ?? row.actorName ?? t(uiLocale, "common.actor.system");
               const title = actionLabelMap[row.action] ?? row.action;
               const detailBits = [
                 `${row.entityType}${row.entityId ? `#${row.entityId}` : ""}`,
-                row.reasonCode ? `เหตุผล ${row.reasonCode}` : "",
+                row.reasonCode
+                  ? `${t(uiLocale, "settings.auditLog.reasonPrefix")} ${row.reasonCode}`
+                  : "",
               ].filter(Boolean);
 
               const metadataText = metadata
@@ -384,14 +411,15 @@ export default async function SettingsAuditLogPage({
 
               return (
                 <li key={row.id} className="px-4 py-3">
-                  <p className="text-xs text-slate-500">{formatDateTime(row.occurredAt)}</p>
+                  <p className="text-xs text-slate-500">{formatDateTime(row.occurredAt, uiLocale)}</p>
                   <p className="mt-1 text-sm font-medium text-slate-900">{title}</p>
                   <p className="mt-0.5 text-xs text-slate-600">
-                    โดย {actorName}
+                    {t(uiLocale, "settings.auditLog.byPrefix")} {actorName}
                     {row.actorRoleSnapshot ? ` (${row.actorRoleSnapshot})` : ""}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {detailBits.join(" • ")} • ผลลัพธ์ {row.result}
+                    {detailBits.join(" • ")} • {t(uiLocale, "settings.auditLog.resultPrefix")}{" "}
+                    {row.result}
                   </p>
                   {metadataText ? <p className="mt-1 text-xs text-slate-500">{metadataText}</p> : null}
                 </li>
@@ -406,11 +434,11 @@ export default async function SettingsAuditLogPage({
               href={buildHref("/settings/audit-log", baseParams)}
               className="rounded-lg border border-slate-200 px-3 py-1.5 text-slate-600"
             >
-              กลับล่าสุด
+              {t(uiLocale, "settings.auditLog.pagination.backToLatest")}
             </Link>
           ) : (
             <span className="rounded-lg border border-slate-100 px-3 py-1.5 text-slate-300">
-              อยู่หน้าล่าสุด
+              {t(uiLocale, "settings.auditLog.pagination.atLatest")}
             </span>
           )}
 
@@ -419,18 +447,20 @@ export default async function SettingsAuditLogPage({
               href={buildHref("/settings/audit-log", nextParams)}
               className="rounded-lg border border-slate-200 px-3 py-1.5 text-slate-600"
             >
-              โหลดถัดไป
+              {t(uiLocale, "settings.auditLog.pagination.loadMore")}
             </Link>
           ) : (
             <span className="rounded-lg border border-slate-100 px-3 py-1.5 text-slate-300">
-              ไม่มีรายการเพิ่ม
+              {t(uiLocale, "settings.auditLog.pagination.noMore")}
             </span>
           )}
         </div>
       </article>
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">นำทาง</p>
+        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          {t(uiLocale, "settings.section.navigate")}
+        </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <Link
             href="/settings"
@@ -440,8 +470,12 @@ export default async function SettingsAuditLogPage({
               <Settings2 className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">กลับหน้าตั้งค่า</span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">ดูเมนูตั้งค่าทั้งหมด</span>
+              <span className="block truncate text-sm font-medium text-slate-900">
+                {t(uiLocale, "common.backToSettings")}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-slate-500">
+                {t(uiLocale, "common.backToSettings.description")}
+              </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
           </Link>
@@ -455,10 +489,10 @@ export default async function SettingsAuditLogPage({
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium text-slate-900">
-                เปลี่ยนร้าน / เปลี่ยนสาขา
+                {t(uiLocale, "settings.link.switchStore.title")}
               </span>
               <span className="mt-0.5 block truncate text-xs text-slate-500">
-                สลับ context ร้านก่อนดู Audit Log
+                {t(uiLocale, "settings.link.switchStore.description")}
               </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />

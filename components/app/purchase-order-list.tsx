@@ -43,6 +43,10 @@ import {
 import { authFetch } from "@/lib/auth/client-token";
 import type { StoreCurrency } from "@/lib/finance/store-financial";
 import { currencySymbol } from "@/lib/finance/store-financial";
+import type { UiLocale } from "@/lib/i18n/locales";
+import { uiLocaleToDateLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
+import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 import {
   getLegacyPurchaseSavedPresetsStorageKey,
   getLegacyPurchaseWorkspaceStorageKey,
@@ -55,36 +59,49 @@ import { canNativeShare } from "@/lib/pdf/share-or-download";
 import type { PurchaseOrderListItem } from "@/server/repositories/purchase.repo";
 
 /* ── Status config ── */
-const statusConfig: Record<
+function getPurchaseStatusLabel(
+  uiLocale: UiLocale,
+  status: PurchaseOrderListItem["status"],
+): string {
+  if (status === "DRAFT") return t(uiLocale, "purchase.status.DRAFT");
+  if (status === "ORDERED") return t(uiLocale, "purchase.status.ORDERED");
+  if (status === "SHIPPED") return t(uiLocale, "purchase.status.SHIPPED");
+  if (status === "RECEIVED") return t(uiLocale, "purchase.status.RECEIVED");
+  return t(uiLocale, "purchase.status.CANCELLED");
+}
+
+function getPurchaseStatusConfig(uiLocale: UiLocale): Record<
   PurchaseOrderListItem["status"],
   { label: string; icon: typeof Clock; badgeClass: string }
-> = {
-  DRAFT: {
-    label: "ร่าง",
-    icon: FileText,
-    badgeClass: "bg-slate-100 text-slate-600",
-  },
-  ORDERED: {
-    label: "สั่งแล้ว",
-    icon: ShoppingCart,
-    badgeClass: "bg-amber-100 text-amber-700",
-  },
-  SHIPPED: {
-    label: "กำลังจัดส่ง",
-    icon: Truck,
-    badgeClass: "bg-blue-100 text-blue-700",
-  },
-  RECEIVED: {
-    label: "รับแล้ว",
-    icon: CheckCircle2,
-    badgeClass: "bg-emerald-100 text-emerald-700",
-  },
-  CANCELLED: {
-    label: "ยกเลิก",
-    icon: XCircle,
-    badgeClass: "bg-red-100 text-red-600",
-  },
-};
+> {
+  return {
+    DRAFT: {
+      label: getPurchaseStatusLabel(uiLocale, "DRAFT"),
+      icon: FileText,
+      badgeClass: "bg-slate-100 text-slate-600",
+    },
+    ORDERED: {
+      label: getPurchaseStatusLabel(uiLocale, "ORDERED"),
+      icon: ShoppingCart,
+      badgeClass: "bg-amber-100 text-amber-700",
+    },
+    SHIPPED: {
+      label: getPurchaseStatusLabel(uiLocale, "SHIPPED"),
+      icon: Truck,
+      badgeClass: "bg-blue-100 text-blue-700",
+    },
+    RECEIVED: {
+      label: getPurchaseStatusLabel(uiLocale, "RECEIVED"),
+      icon: CheckCircle2,
+      badgeClass: "bg-emerald-100 text-emerald-700",
+    },
+    CANCELLED: {
+      label: getPurchaseStatusLabel(uiLocale, "CANCELLED"),
+      icon: XCircle,
+      badgeClass: "bg-red-100 text-red-600",
+    },
+  };
+}
 
 type PurchaseOrderListProps = {
   purchaseOrders: PurchaseOrderListItem[];
@@ -152,11 +169,11 @@ function isPurchaseApSort(value: string | null): value is PurchaseApSort {
   return value === "DUE_ASC" || value === "OUTSTANDING_DESC";
 }
 
-function kpiShortcutDefaultLabel(shortcut: KpiShortcut): string {
-  if (shortcut === "OPEN_PO") return "Open PO";
-  if (shortcut === "PENDING_RATE") return "Month-End";
-  if (shortcut === "OVERDUE_AP") return "Overdue AP";
-  return "Outstanding AP";
+function kpiShortcutDefaultLabel(uiLocale: UiLocale, shortcut: KpiShortcut): string {
+  if (shortcut === "OPEN_PO") return t(uiLocale, "purchase.kpiShortcut.OPEN_PO.label");
+  if (shortcut === "PENDING_RATE") return t(uiLocale, "purchase.kpiShortcut.PENDING_RATE.label");
+  if (shortcut === "OVERDUE_AP") return t(uiLocale, "purchase.kpiShortcut.OVERDUE_AP.label");
+  return t(uiLocale, "purchase.kpiShortcut.OUTSTANDING_AP.label");
 }
 
 type PurchaseOrderDetail = {
@@ -233,8 +250,8 @@ type PendingRateQueueItem = {
   outstandingBase: number;
 };
 
-function fmtPrice(amount: number, currency: StoreCurrency): string {
-  return `${currencySymbol(currency)}${amount.toLocaleString("th-TH")}`;
+function fmtPrice(amount: number, currency: StoreCurrency, numberLocale?: string): string {
+  return `${currencySymbol(currency)}${amount.toLocaleString(numberLocale)}`;
 }
 
 function daysUntil(dateStr: string): number {
@@ -245,9 +262,9 @@ function daysUntil(dateStr: string): number {
   );
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string, dateLocale?: string): string {
   const d = new Date(dateStr);
-  return d.toLocaleDateString("th-TH", {
+  return d.toLocaleDateString(dateLocale, {
     day: "numeric",
     month: "short",
     year: undefined,
@@ -300,9 +317,20 @@ function formatIsoDateDisplay(value: string): string {
   return `${day}/${month}/${year}`;
 }
 
-const calendarWeekdayLabels = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"] as const;
+function getCalendarWeekdayLabels(uiLocale: UiLocale) {
+  return [
+    t(uiLocale, "purchase.calendar.weekday.SUN"),
+    t(uiLocale, "purchase.calendar.weekday.MON"),
+    t(uiLocale, "purchase.calendar.weekday.TUE"),
+    t(uiLocale, "purchase.calendar.weekday.WED"),
+    t(uiLocale, "purchase.calendar.weekday.THU"),
+    t(uiLocale, "purchase.calendar.weekday.FRI"),
+    t(uiLocale, "purchase.calendar.weekday.SAT"),
+  ] as const;
+}
 
 type PurchaseDatePickerFieldProps = {
+  uiLocale: UiLocale;
   value: string;
   onChange: (nextValue: string) => void;
   triggerClassName: string;
@@ -312,10 +340,11 @@ type PurchaseDatePickerFieldProps = {
 };
 
 function PurchaseDatePickerField({
+  uiLocale,
   value,
   onChange,
   triggerClassName,
-  placeholder = "dd/mm/yyyy",
+  placeholder,
   ariaLabel,
   disabled = false,
 }: PurchaseDatePickerFieldProps) {
@@ -373,7 +402,10 @@ function PurchaseDatePickerField({
   }
   const todayIso = toDateInputValue(new Date());
   const selectedIso = parseIsoDateValue(value) ? value : "";
-  const monthLabel = viewCursor.toLocaleDateString("th-TH", {
+  const dateLocale = uiLocaleToDateLocale(uiLocale);
+  const weekdayLabels = getCalendarWeekdayLabels(uiLocale);
+  const placeholderText = placeholder ?? t(uiLocale, "common.datePicker.placeholder");
+  const monthLabel = viewCursor.toLocaleDateString(dateLocale, {
     month: "long",
     year: "numeric",
   });
@@ -393,7 +425,7 @@ function PurchaseDatePickerField({
         <span
           className={`truncate ${selectedIso ? "text-slate-900" : "text-slate-400"}`}
         >
-          {selectedIso ? formatIsoDateDisplay(selectedIso) : placeholder}
+          {selectedIso ? formatIsoDateDisplay(selectedIso) : placeholderText}
         </span>
         <CalendarDays className="h-4 w-4 shrink-0 text-slate-400" />
       </button>
@@ -427,7 +459,7 @@ function PurchaseDatePickerField({
           </div>
 
           <div className="grid grid-cols-7 gap-1 pb-1">
-            {calendarWeekdayLabels.map((label) => (
+            {weekdayLabels.map((label) => (
               <span
                 key={label}
                 className="flex h-6 items-center justify-center text-[10px] font-medium text-slate-400"
@@ -498,6 +530,11 @@ export function PurchaseOrderList({
   storeLogoUrl,
   pdfConfig,
 }: PurchaseOrderListProps) {
+  const uiLocale = useUiLocale();
+  const dateLocale = uiLocaleToDateLocale(uiLocale);
+  const numberLocale = dateLocale;
+  const statusConfig = useMemo(() => getPurchaseStatusConfig(uiLocale), [uiLocale]);
+
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -984,8 +1021,8 @@ export function PurchaseOrderList({
     if (!activeKpiShortcut || typeof window === "undefined") {
       return;
     }
-    const defaultLabel = kpiShortcutDefaultLabel(activeKpiShortcut);
-    const input = window.prompt("ตั้งชื่อ preset นี้", defaultLabel);
+    const defaultLabel = kpiShortcutDefaultLabel(uiLocale, activeKpiShortcut);
+    const input = window.prompt(t(uiLocale, "purchase.preset.promptName"), defaultLabel);
     if (input === null) {
       return;
     }
@@ -1002,8 +1039,8 @@ export function PurchaseOrderList({
       ];
       return next.slice(0, 6);
     });
-    toast.success("บันทึก preset แล้ว");
-  }, [activeKpiShortcut]);
+    toast.success(t(uiLocale, "purchase.preset.saved"));
+  }, [activeKpiShortcut, uiLocale]);
 
   const removeSavedPreset = useCallback((presetId: string) => {
     setSavedPresets((current) => current.filter((item) => item.id !== presetId));
@@ -1120,12 +1157,12 @@ export function PurchaseOrderList({
           if (!res.ok) {
             return {
               purchaseOrder: null,
-              error: data?.message ?? "โหลดรายละเอียดใบสั่งซื้อไม่สำเร็จ",
+              error: data?.message ?? t(uiLocale, "purchase.detail.error.loadFailed"),
             };
           }
 
           if (!data?.ok || !data.purchaseOrder) {
-            return { purchaseOrder: null, error: "ไม่พบข้อมูลใบสั่งซื้อ" };
+            return { purchaseOrder: null, error: t(uiLocale, "purchase.detail.error.notFound") };
           }
 
           const purchaseOrder = data.purchaseOrder as PurchaseOrderDetail;
@@ -1134,7 +1171,7 @@ export function PurchaseOrderList({
         } catch {
           return {
             purchaseOrder: null,
-            error: "เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่",
+            error: t(uiLocale, "purchase.error.serverUnreachableRetry"),
           };
         } finally {
           poDetailPendingRef.current.delete(poId);
@@ -1144,7 +1181,7 @@ export function PurchaseOrderList({
       poDetailPendingRef.current.set(poId, request);
       return request;
     },
-    [],
+    [uiLocale],
   );
 
   const getCachedPoDetail = useCallback((poId: string) => {
@@ -1175,12 +1212,12 @@ export function PurchaseOrderList({
           | null;
 
         if (!res.ok) {
-          setListError(data?.message ?? "โหลดรายการใบสั่งซื้อไม่สำเร็จ");
+          setListError(data?.message ?? t(uiLocale, "purchase.list.error.loadFailed"));
           return false;
         }
 
         if (!Array.isArray(data?.purchaseOrders)) {
-          setListError("รูปแบบข้อมูลใบสั่งซื้อไม่ถูกต้อง");
+          setListError(t(uiLocale, "purchase.list.error.invalidResponse"));
           return false;
         }
 
@@ -1192,11 +1229,11 @@ export function PurchaseOrderList({
         setLastUpdatedAt(new Date().toISOString());
         return true;
       } catch {
-        setListError("เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่");
+        setListError(t(uiLocale, "purchase.error.serverUnreachableRetry"));
         return false;
       }
     },
-    [pageSize],
+    [pageSize, uiLocale],
   );
 
   const loadPendingQueue = useCallback(async () => {
@@ -1227,18 +1264,18 @@ export function PurchaseOrderList({
         | null;
 
       if (!res.ok || !data?.ok) {
-        setPendingQueueError(data?.message ?? "โหลดคิวรอปิดเรทไม่สำเร็จ");
+        setPendingQueueError(data?.message ?? t(uiLocale, "purchase.monthEnd.error.loadQueueFailed"));
         return;
       }
 
       setPendingRateQueue(Array.isArray(data.queue) ? data.queue : []);
       setPendingQueueError(null);
     } catch {
-      setPendingQueueError("เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่");
+      setPendingQueueError(t(uiLocale, "purchase.error.serverUnreachableRetry"));
     } finally {
       setIsLoadingPendingQueue(false);
     }
-  }, [pendingReceivedFrom, pendingReceivedTo, pendingSupplierFilter]);
+  }, [pendingReceivedFrom, pendingReceivedTo, pendingSupplierFilter, uiLocale]);
 
   const reloadFirstPage = useCallback(async () => {
     setIsRefreshingList(true);
@@ -1311,11 +1348,11 @@ export function PurchaseOrderList({
 
   const openBulkMonthEndMode = useCallback(() => {
     if (selectedPendingQueueItems.length === 0) {
-      toast.error("กรุณาเลือก PO อย่างน้อย 1 รายการ");
+      toast.error(t(uiLocale, "purchase.monthEnd.bulk.validation.selectAtLeastOne"));
       return;
     }
     if (hasMixedPendingCurrencies) {
-      toast.error("ปิดเรทแบบกลุ่มได้เฉพาะ PO สกุลเงินเดียวกันต่อรอบ");
+      toast.error(t(uiLocale, "purchase.monthEnd.mixedCurrencies"));
       return;
     }
     setBulkRateInput("");
@@ -1326,27 +1363,27 @@ export function PurchaseOrderList({
     setBulkProgressText(null);
     setBulkPaidAtInput(new Date().toISOString().slice(0, 10));
     setIsBulkMonthEndMode(true);
-  }, [hasMixedPendingCurrencies, selectedPendingQueueItems.length]);
+  }, [hasMixedPendingCurrencies, selectedPendingQueueItems.length, uiLocale]);
 
   const submitBulkMonthEnd = useCallback(async () => {
     if (sortedSelectedPendingQueueItems.length === 0) {
-      toast.error("กรุณาเลือก PO ที่ต้องการปิดเรท");
+      toast.error(t(uiLocale, "purchase.monthEnd.bulk.validation.selectToFinalize"));
       return;
     }
     if (hasMixedPendingCurrencies) {
-      toast.error("ปิดเรทแบบกลุ่มได้เฉพาะ PO สกุลเงินเดียวกันต่อรอบ");
+      toast.error(t(uiLocale, "purchase.monthEnd.mixedCurrencies"));
       return;
     }
 
     const exchangeRate = Math.round(Number(bulkRateInput));
     if (!Number.isFinite(exchangeRate) || exchangeRate <= 0) {
-      toast.error("กรุณากรอกอัตราแลกเปลี่ยนจริงให้ถูกต้อง");
+      toast.error(t(uiLocale, "purchase.monthEnd.bulk.validation.exchangeRateInvalid"));
       return;
     }
 
     const paymentReference = bulkReferenceInput.trim();
     if (!paymentReference) {
-      toast.error("กรุณากรอกเลขอ้างอิงรอบบัตร/รอบชำระ");
+      toast.error(t(uiLocale, "purchase.monthEnd.bulk.validation.referenceRequired"));
       return;
     }
 
@@ -1358,13 +1395,13 @@ export function PurchaseOrderList({
       hasStatementTotal &&
       (!Number.isFinite(parsedStatementTotal) || parsedStatementTotal <= 0)
     ) {
-      toast.error("กรุณากรอกยอดชำระรวมจาก statement ให้ถูกต้อง");
+      toast.error(t(uiLocale, "purchase.monthEnd.bulk.validation.statementTotalInvalid"));
       return;
     }
 
     setIsBulkSubmitting(true);
     setBulkErrors([]);
-    setBulkProgressText("เริ่มประมวลผล...");
+    setBulkProgressText(t(uiLocale, "purchase.monthEnd.bulk.progress.start"));
 
     const errors: string[] = [];
     let settledCount = 0;
@@ -1378,7 +1415,7 @@ export function PurchaseOrderList({
       for (let i = 0; i < sortedSelectedPendingQueueItems.length; i += 1) {
         const item = sortedSelectedPendingQueueItems[i]!;
         setBulkProgressText(
-          `กำลังประมวลผล ${i + 1}/${sortedSelectedPendingQueueItems.length} (${item.poNumber})`,
+          `${t(uiLocale, "purchase.monthEnd.bulk.progress.processing.prefix")} ${i + 1}/${sortedSelectedPendingQueueItems.length} (${item.poNumber})`,
         );
 
         const finalizeRes = await authFetch(
@@ -1391,7 +1428,9 @@ export function PurchaseOrderList({
             },
             body: JSON.stringify({
               exchangeRate,
-              note: paymentNote || `รอบชำระ ${paymentReference}`,
+              note:
+                paymentNote ||
+                `${t(uiLocale, "purchase.monthEnd.bulk.noteTemplate.prefix")} ${paymentReference}`,
             }),
           },
         );
@@ -1400,7 +1439,7 @@ export function PurchaseOrderList({
           | null;
         if (!finalizeRes.ok) {
           errors.push(
-            `${item.poNumber}: ปิดเรทไม่สำเร็จ (${finalizeData?.message ?? "unknown"})`,
+            `${item.poNumber}: ${t(uiLocale, "purchase.monthEnd.bulk.error.finalizeFailed.prefix")} (${finalizeData?.message ?? t(uiLocale, "common.unknown")})`,
           );
           continue;
         }
@@ -1409,7 +1448,7 @@ export function PurchaseOrderList({
         const detailResult = await loadPoDetail(item.id, { preferCache: false });
         if (!detailResult.purchaseOrder) {
           errors.push(
-            `${item.poNumber}: โหลดยอดค้างหลังปิดเรทไม่สำเร็จ (${detailResult.error ?? "unknown"})`,
+            `${item.poNumber}: ${t(uiLocale, "purchase.monthEnd.bulk.error.loadOutstandingFailed.prefix")} (${detailResult.error ?? t(uiLocale, "common.unknown")})`,
           );
           continue;
         }
@@ -1447,7 +1486,7 @@ export function PurchaseOrderList({
           | null;
         if (!settleRes.ok) {
           errors.push(
-            `${item.poNumber}: บันทึกชำระไม่สำเร็จ (${settleData?.message ?? "unknown"})`,
+            `${item.poNumber}: ${t(uiLocale, "purchase.monthEnd.bulk.error.settleFailed.prefix")} (${settleData?.message ?? t(uiLocale, "common.unknown")})`,
           );
           continue;
         }
@@ -1463,27 +1502,23 @@ export function PurchaseOrderList({
 
       if (finalizedCount > 0) {
         toast.success(
-          `ปิดเรทสำเร็จ ${finalizedCount}/${sortedSelectedPendingQueueItems.length} รายการ`,
+          `${t(uiLocale, "purchase.monthEnd.bulk.toast.finalized.prefix")} ${finalizedCount}/${sortedSelectedPendingQueueItems.length} ${t(uiLocale, "purchase.items")}`,
         );
       }
       if (settledCount > 0) {
         toast.success(
-          `บันทึกชำระสำเร็จ ${settledCount}/${sortedSelectedPendingQueueItems.length} รายการ (รวม ${fmtPrice(
-            settledAmountTotal,
-            storeCurrency,
-          )})`,
+          `${t(uiLocale, "purchase.monthEnd.bulk.toast.settled.prefix")} ${settledCount}/${sortedSelectedPendingQueueItems.length} ${t(uiLocale, "purchase.items")} (${t(uiLocale, "purchase.monthEnd.bulk.toast.total.prefix")} ${fmtPrice(settledAmountTotal, storeCurrency, numberLocale)})`,
         );
       }
       if ((remainingStatementBudget ?? 0) > 0) {
         toast(
-          `ยังมียอด statement ที่ยังไม่ถูกจับคู่ ${fmtPrice(
-            remainingStatementBudget ?? 0,
-            storeCurrency,
-          )}`,
+          `${t(uiLocale, "purchase.monthEnd.bulk.toast.remainingStatement.prefix")} ${fmtPrice(remainingStatementBudget ?? 0, storeCurrency, numberLocale)}`,
         );
       }
       if (errors.length > 0) {
-        toast.error(`มีรายการไม่สำเร็จ ${errors.length} รายการ`);
+        toast.error(
+          `${t(uiLocale, "purchase.monthEnd.bulk.toast.failures.prefix")} ${errors.length} ${t(uiLocale, "purchase.items")}`,
+        );
       } else {
         setSelectedPendingQueueIds([]);
         setIsBulkMonthEndMode(false);
@@ -1493,7 +1528,7 @@ export function PurchaseOrderList({
       await reloadFirstPage();
       router.refresh();
     } catch {
-      toast.error("เชื่อมต่อไม่สำเร็จระหว่างประมวลผลแบบกลุ่ม");
+      toast.error(t(uiLocale, "purchase.monthEnd.bulk.error.connectionDuringBulk"));
     } finally {
       setIsBulkSubmitting(false);
       setBulkProgressText(null);
@@ -1506,10 +1541,12 @@ export function PurchaseOrderList({
     bulkReferenceInput,
     hasMixedPendingCurrencies,
     loadPoDetail,
+    numberLocale,
     reloadFirstPage,
     router,
     sortedSelectedPendingQueueItems,
     storeCurrency,
+    uiLocale,
   ]);
 
   /* ── Load products for item picker ── */
@@ -1575,7 +1612,7 @@ export function PurchaseOrderList({
   /* ── Add item ── */
   const addItem = (product: { id: string; name: string }) => {
     if (items.some((i) => i.productId === product.id)) {
-      toast.error("สินค้านี้เพิ่มไปแล้ว");
+      toast.error(t(uiLocale, "purchase.items.error.duplicateProduct"));
       return;
     }
     setItems((prev) => [
@@ -1623,7 +1660,7 @@ export function PurchaseOrderList({
   /* ── Submit ── */
   const submitPO = async (receiveImmediately: boolean) => {
     if (items.length === 0) {
-      toast.error("กรุณาเพิ่มรายการสินค้าอย่างน้อย 1 รายการ");
+      toast.error(t(uiLocale, "purchase.create.validation.itemsRequired"));
       return;
     }
     setIsSubmitting(true);
@@ -1657,20 +1694,20 @@ export function PurchaseOrderList({
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data?.message ?? "สร้างใบสั่งซื้อไม่สำเร็จ");
+        toast.error(data?.message ?? t(uiLocale, "purchase.create.error.failed"));
         return;
       }
       toast.success(
         receiveImmediately
-          ? "สร้างใบสั่งซื้อ + รับสินค้าเรียบร้อย"
-          : "สร้างใบสั่งซื้อเรียบร้อย",
+          ? t(uiLocale, "purchase.create.toast.successReceived")
+          : t(uiLocale, "purchase.create.toast.success"),
       );
       if (
         data?.purchaseOrder?.purchaseCurrency &&
         data.purchaseOrder.purchaseCurrency !== storeCurrency &&
         !data.purchaseOrder.exchangeRateLockedAt
       ) {
-        toast("PO นี้อยู่สถานะรอปิดเรท สามารถปิดเรทจริงได้ภายหลัง", {
+        toast(t(uiLocale, "purchase.create.toast.pendingRateHint"), {
           icon: "🧾",
         });
       }
@@ -1678,7 +1715,7 @@ export function PurchaseOrderList({
       await reloadFirstPage();
       router.refresh();
     } catch {
-      toast.error("เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่");
+      toast.error(t(uiLocale, "purchase.error.serverUnreachableRetry"));
     } finally {
       setIsSubmitting(false);
     }
@@ -1697,16 +1734,18 @@ export function PurchaseOrderList({
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data?.message ?? "อัปเดตสถานะไม่สำเร็จ");
+        toast.error(data?.message ?? t(uiLocale, "purchase.statusUpdate.error.failed"));
         return;
       }
-      toast.success(`อัปเดตสถานะเป็น "${statusConfig[status].label}" เรียบร้อย`);
+      toast.success(
+        `${t(uiLocale, "purchase.statusUpdate.toast.success.prefix")}${statusConfig[status].label}${t(uiLocale, "purchase.statusUpdate.toast.success.suffix")}`,
+      );
       invalidatePoDetailCache(poId);
       await reloadFirstPage();
       setSelectedPO(null);
       router.refresh();
     } catch {
-      toast.error("เชื่อมต่อไม่สำเร็จ");
+      toast.error(t(uiLocale, "purchase.error.serverUnreachable"));
     }
   };
 
@@ -1821,25 +1860,29 @@ export function PurchaseOrderList({
     };
   }, [pendingRateQueue.length, poList]);
   const activeKpiShortcutLabel = useMemo(() => {
-    if (activeKpiShortcut === "OPEN_PO") return "Open PO: กรองเฉพาะงานที่ยังเปิด";
-    if (activeKpiShortcut === "PENDING_RATE") return "Pending Rate: โฟกัสงานปิดเรทปลายเดือน";
+    if (activeKpiShortcut === "OPEN_PO") return t(uiLocale, "purchase.kpiShortcut.OPEN_PO.active");
+    if (activeKpiShortcut === "PENDING_RATE") {
+      return t(uiLocale, "purchase.kpiShortcut.PENDING_RATE.active");
+    }
     if (activeKpiShortcut === "OVERDUE_AP") {
-      return "Overdue AP: AP by Supplier + due status = OVERDUE";
+      return t(uiLocale, "purchase.kpiShortcut.OVERDUE_AP.active");
     }
     if (activeKpiShortcut === "OUTSTANDING_AP") {
-      return "Outstanding: AP by Supplier + เรียงยอดค้างมากสุด";
+      return t(uiLocale, "purchase.kpiShortcut.OUTSTANDING_AP.active");
     }
     return null;
-  }, [activeKpiShortcut]);
+  }, [activeKpiShortcut, uiLocale]);
 
   return (
     <div className="space-y-3">
       {/* ── Header row: title + "+" button ── */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">ใบสั่งซื้อ</h2>
+          <h2 className="text-sm font-semibold text-slate-900">{t(uiLocale, "purchase.title")}</h2>
           <p className="text-[11px] text-slate-500">
-            {poList.length > 0 ? `${poList.length} รายการ` : "ยังไม่มีรายการ"}
+            {poList.length > 0
+              ? `${poList.length.toLocaleString(numberLocale)} ${t(uiLocale, "purchase.items")}`
+              : t(uiLocale, "purchase.emptyList")}
           </p>
         </div>
         {canCreate && (
@@ -1850,7 +1893,7 @@ export function PurchaseOrderList({
               onClick={openCreateSheet}
             >
               <Plus className="h-4 w-4" strokeWidth={2.5} />
-              สร้างใบสั่งซื้อ
+              {t(uiLocale, "purchase.create")}
             </button>
           </div>
         )}
@@ -1864,55 +1907,60 @@ export function PurchaseOrderList({
       />
       <div className="rounded-2xl border border-slate-200 bg-white p-3">
         <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-          ตัวชี้วัดและทางลัด
+          {t(uiLocale, "purchase.kpi.title")}
         </p>
         <p className="mt-1 text-[11px] text-slate-500">
-          การ์ด KPI เป็นข้อมูลสรุป (ไม่รองรับการคลิก)
+          {t(uiLocale, "purchase.kpi.subtitle")}
         </p>
         <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-left">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-              Open PO
+              {t(uiLocale, "purchase.kpi.openPo.title")}
             </p>
             <p className="mt-0.5 text-sm font-semibold text-slate-900">
-              {workspaceSummary.openPoCount.toLocaleString("th-TH")}
+              {workspaceSummary.openPoCount.toLocaleString(numberLocale)}
             </p>
-            <p className="text-[11px] text-slate-500">งานสั่งซื้อรายวัน</p>
+            <p className="text-[11px] text-slate-500">{t(uiLocale, "purchase.kpi.openPo.desc")}</p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-left">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-              Pending Rate
+              {t(uiLocale, "purchase.kpi.pendingRate.title")}
             </p>
             <p className="mt-0.5 text-sm font-semibold text-slate-900">
-              {workspaceSummary.pendingRateCount.toLocaleString("th-TH")}
-            </p>
-            <p className="text-[11px] text-slate-500">คิวปิดเรทปลายเดือน</p>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-left">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-              Overdue AP
-            </p>
-            <p className="mt-0.5 text-sm font-semibold text-slate-900">
-              {workspaceSummary.overduePoCount.toLocaleString("th-TH")}
+              {workspaceSummary.pendingRateCount.toLocaleString(numberLocale)}
             </p>
             <p className="text-[11px] text-slate-500">
-              ใกล้ครบกำหนด {workspaceSummary.dueSoonPoCount.toLocaleString("th-TH")}
+              {t(uiLocale, "purchase.kpi.pendingRate.desc")}
             </p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-left">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-              Outstanding
+              {t(uiLocale, "purchase.kpi.overdueAp.title")}
             </p>
             <p className="mt-0.5 text-sm font-semibold text-slate-900">
-              {fmtPrice(workspaceSummary.outstandingBase, storeCurrency)}
+              {workspaceSummary.overduePoCount.toLocaleString(numberLocale)}
             </p>
-            <p className="text-[11px] text-slate-500">ดู AP ราย supplier</p>
+            <p className="text-[11px] text-slate-500">
+              {t(uiLocale, "purchase.kpi.overdueAp.dueSoonPrefix")}{" "}
+              {workspaceSummary.dueSoonPoCount.toLocaleString(numberLocale)}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-left">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              {t(uiLocale, "purchase.kpi.outstanding.title")}
+            </p>
+            <p className="mt-0.5 text-sm font-semibold text-slate-900">
+              {fmtPrice(workspaceSummary.outstandingBase, storeCurrency, numberLocale)}
+            </p>
+            <p className="text-[11px] text-slate-500">
+              {t(uiLocale, "purchase.kpi.outstanding.desc")}
+            </p>
           </div>
         </div>
         {activeKpiShortcutLabel ? (
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
             <p className="text-[11px] text-slate-600">
-              Applied filter: {activeKpiShortcutLabel}
+              {t(uiLocale, "purchase.kpi.appliedFilter")} {activeKpiShortcutLabel}
             </p>
             <div className="flex items-center gap-1.5">
               <button
@@ -1920,14 +1968,14 @@ export function PurchaseOrderList({
                 className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
                 onClick={saveCurrentShortcutPreset}
               >
-                บันทึก preset นี้
+                {t(uiLocale, "purchase.kpi.savePreset")}
               </button>
               <button
                 type="button"
                 className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
                 onClick={clearKpiShortcut}
               >
-                ล้างตัวกรองด่วน
+                {t(uiLocale, "purchase.kpi.clearShortcut")}
               </button>
             </div>
           </div>
@@ -1946,14 +1994,14 @@ export function PurchaseOrderList({
                 >
                   {preset.label}
                 </button>
-                <button
-                  type="button"
-                  className="rounded-full p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
-                  onClick={() => removeSavedPreset(preset.id)}
-                  aria-label={`ลบ preset ${preset.label}`}
-                >
-                  <X className="h-3 w-3" />
-                </button>
+                  <button
+                    type="button"
+                    className="rounded-full p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                    onClick={() => removeSavedPreset(preset.id)}
+                    aria-label={`${t(uiLocale, "purchase.preset.deleteAriaPrefix")} ${preset.label}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
               </div>
             ))}
           </div>
@@ -1962,30 +2010,30 @@ export function PurchaseOrderList({
 
       <div className="sticky top-2 z-10 rounded-2xl border border-slate-200 bg-white/95 p-2 backdrop-blur md:static md:z-auto md:bg-white md:p-2 md:backdrop-blur-0">
         <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-          โหมดการทำงาน
+          {t(uiLocale, "purchase.workspace.title")}
         </p>
         <div className="mt-1 flex gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {(
             [
               {
                 id: "OPERATIONS" as PurchaseWorkspace,
-                label: "PO Operations",
+                label: t(uiLocale, "purchase.workspace.operations.label"),
                 icon: ShoppingCart,
-                desc: "สร้าง/ติดตามสถานะ PO",
+                desc: t(uiLocale, "purchase.workspace.operations.desc"),
                 badge: workspaceSummary.openPoCount,
               },
               {
                 id: "MONTH_END" as PurchaseWorkspace,
-                label: "Month-End Close",
+                label: t(uiLocale, "purchase.workspace.monthEnd.label"),
                 icon: Banknote,
-                desc: "ปิดเรทและชำระปลายเดือน",
+                desc: t(uiLocale, "purchase.workspace.monthEnd.desc"),
                 badge: workspaceSummary.pendingRateCount,
               },
               {
                 id: "SUPPLIER_AP" as PurchaseWorkspace,
-                label: "AP by Supplier",
+                label: t(uiLocale, "purchase.workspace.supplierAp.label"),
                 icon: FileText,
-                desc: "statement/filter/export",
+                desc: t(uiLocale, "purchase.workspace.supplierAp.desc"),
                 badge: workspaceSummary.overduePoCount,
               },
             ] as const
@@ -2013,7 +2061,7 @@ export function PurchaseOrderList({
                         : "bg-slate-200 text-slate-600"
                     }`}
                   >
-                    {workspace.badge.toLocaleString("th-TH")}
+                    {workspace.badge.toLocaleString(numberLocale)}
                   </span>
                 ) : null}
                 <span
@@ -2034,10 +2082,10 @@ export function PurchaseOrderList({
         <div className="flex items-center justify-between gap-2">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-amber-700">
-              คิว PO รอปิดเรท
+              {t(uiLocale, "purchase.monthEnd.queue.title")}
             </p>
             <p className="text-[11px] text-amber-700/90">
-              {pendingRateQueue.length} รายการ
+              {pendingRateQueue.length.toLocaleString(numberLocale)} {t(uiLocale, "purchase.items")}
             </p>
           </div>
           <button
@@ -2048,27 +2096,28 @@ export function PurchaseOrderList({
             className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-[11px] font-medium text-amber-700 hover:bg-amber-100"
           >
             <Download className="h-3.5 w-3.5" />
-            Export CSV
+            {t(uiLocale, "purchase.monthEnd.exportCsv")}
           </button>
         </div>
         <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
           <div className="space-y-1">
-            <label className="text-[11px] text-amber-700">ซัพพลายเออร์</label>
+            <label className="text-[11px] text-amber-700">{t(uiLocale, "purchase.monthEnd.filter.supplier.label")}</label>
             <input
               className="h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-300"
-              placeholder="กรองซัพพลายเออร์"
+              placeholder={t(uiLocale, "purchase.monthEnd.filter.supplier.placeholder")}
               value={pendingSupplierFilter}
               onChange={(event) => setPendingSupplierFilter(event.target.value)}
             />
           </div>
           <div className="space-y-1 min-w-0">
-            <label className="text-[11px] text-amber-700">วันที่รับตั้งแต่</label>
+            <label className="text-[11px] text-amber-700">{t(uiLocale, "purchase.monthEnd.filter.receivedFrom.label")}</label>
             <PurchaseDatePickerField
+              uiLocale={uiLocale}
               value={pendingReceivedFrom}
               onChange={setPendingReceivedFrom}
               triggerClassName="h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-left text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-300 flex items-center justify-between gap-2"
-              placeholder="dd/mm/yyyy"
-              ariaLabel="เลือกวันที่รับตั้งแต่ในคิว PO รอปิดเรท"
+              placeholder={t(uiLocale, "common.datePicker.placeholder")}
+              ariaLabel={t(uiLocale, "purchase.monthEnd.filter.receivedFrom.aria")}
             />
             <div className="flex flex-wrap gap-1.5">
               <button
@@ -2076,39 +2125,40 @@ export function PurchaseOrderList({
                 className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
                 onClick={() => applyPendingQueueDateShortcut("receivedFrom", "TODAY")}
               >
-                วันนี้
+                {t(uiLocale, "purchase.dateShortcut.today")}
               </button>
               <button
                 type="button"
                 className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
                 onClick={() => applyPendingQueueDateShortcut("receivedFrom", "PLUS_7")}
               >
-                +7 วัน
+                {t(uiLocale, "purchase.dateShortcut.plus7")}
               </button>
               <button
                 type="button"
                 className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
                 onClick={() => applyPendingQueueDateShortcut("receivedFrom", "END_OF_MONTH")}
               >
-                สิ้นเดือน
+                {t(uiLocale, "purchase.dateShortcut.endOfMonth")}
               </button>
               <button
                 type="button"
                 className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
                 onClick={() => applyPendingQueueDateShortcut("receivedFrom", "CLEAR")}
               >
-                ล้างค่า
+                {t(uiLocale, "purchase.dateShortcut.clear")}
               </button>
             </div>
           </div>
           <div className="space-y-1 min-w-0">
-            <label className="text-[11px] text-amber-700">วันที่รับถึง</label>
+            <label className="text-[11px] text-amber-700">{t(uiLocale, "purchase.monthEnd.filter.receivedTo.label")}</label>
             <PurchaseDatePickerField
+              uiLocale={uiLocale}
               value={pendingReceivedTo}
               onChange={setPendingReceivedTo}
               triggerClassName="h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-left text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-300 flex items-center justify-between gap-2"
-              placeholder="dd/mm/yyyy"
-              ariaLabel="เลือกวันที่รับถึงในคิว PO รอปิดเรท"
+              placeholder={t(uiLocale, "common.datePicker.placeholder")}
+              ariaLabel={t(uiLocale, "purchase.monthEnd.filter.receivedTo.aria")}
             />
             <div className="flex flex-wrap gap-1.5">
               <button
@@ -2116,34 +2166,34 @@ export function PurchaseOrderList({
                 className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
                 onClick={() => applyPendingQueueDateShortcut("receivedTo", "TODAY")}
               >
-                วันนี้
+                {t(uiLocale, "purchase.dateShortcut.today")}
               </button>
               <button
                 type="button"
                 className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
                 onClick={() => applyPendingQueueDateShortcut("receivedTo", "PLUS_7")}
               >
-                +7 วัน
+                {t(uiLocale, "purchase.dateShortcut.plus7")}
               </button>
               <button
                 type="button"
                 className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
                 onClick={() => applyPendingQueueDateShortcut("receivedTo", "END_OF_MONTH")}
               >
-                สิ้นเดือน
+                {t(uiLocale, "purchase.dateShortcut.endOfMonth")}
               </button>
               <button
                 type="button"
                 className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
                 onClick={() => applyPendingQueueDateShortcut("receivedTo", "CLEAR")}
               >
-                ล้างค่า
+                {t(uiLocale, "purchase.dateShortcut.clear")}
               </button>
             </div>
           </div>
         </div>
         {isLoadingPendingQueue ? (
-          <p className="text-xs text-amber-700">กำลังโหลดคิวรอปิดเรท...</p>
+          <p className="text-xs text-amber-700">{t(uiLocale, "purchase.monthEnd.loadingQueue")}</p>
         ) : pendingQueueError ? (
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs text-red-600">{pendingQueueError}</p>
@@ -2155,14 +2205,14 @@ export function PurchaseOrderList({
                 void loadPendingQueue();
               }}
             >
-              ลองใหม่
+              {t(uiLocale, "purchase.action.retry")}
             </Button>
           </div>
         ) : pendingRateQueue.length === 0 ? (
           <div className="space-y-2 rounded-lg border border-dashed border-amber-300 bg-white px-3 py-4 text-center">
-            <p className="text-xs text-amber-700/90">ไม่มี PO ที่รอปิดเรทตามเงื่อนไข</p>
+            <p className="text-xs text-amber-700/90">{t(uiLocale, "purchase.monthEnd.empty.title")}</p>
             <p className="text-[11px] text-slate-500">
-              ลองกลับไป `PO Operations` เพื่อเช็กงานรับเข้าสินค้าหรือสร้าง PO เพิ่ม
+              {t(uiLocale, "purchase.monthEnd.empty.hint")}
             </p>
             <div className="flex justify-center gap-2">
               <button
@@ -2170,7 +2220,7 @@ export function PurchaseOrderList({
                 className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-100"
                 onClick={() => handleWorkspaceChange("OPERATIONS")}
               >
-                ไป PO Operations
+                {t(uiLocale, "purchase.monthEnd.goOperations")}
               </button>
               {canCreate ? (
                 <button
@@ -2178,7 +2228,7 @@ export function PurchaseOrderList({
                   className="rounded-md bg-amber-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-amber-700"
                   onClick={openCreateSheet}
                 >
-                  สร้าง PO ใหม่
+                  {t(uiLocale, "purchase.monthEnd.createPo")}
                 </button>
               ) : null}
             </div>
@@ -2187,8 +2237,12 @@ export function PurchaseOrderList({
           <div className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white px-2.5 py-2">
               <p className="text-[11px] text-amber-800">
-                เลือกแล้ว {selectedPendingQueueIds.length}/{pendingRateQueue.length} รายการ
-                {selectedPendingCurrency ? ` · สกุล ${selectedPendingCurrency}` : ""}
+                {t(uiLocale, "purchase.monthEnd.selected")}{" "}
+                {selectedPendingQueueIds.length.toLocaleString(numberLocale)}/
+                {pendingRateQueue.length.toLocaleString(numberLocale)} {t(uiLocale, "purchase.items")}
+                {selectedPendingCurrency
+                  ? ` · ${t(uiLocale, "purchase.monthEnd.currencyPrefix")} ${selectedPendingCurrency}`
+                  : ""}
               </p>
               <div className="flex flex-wrap items-center gap-1.5">
                 <button
@@ -2197,7 +2251,7 @@ export function PurchaseOrderList({
                   onClick={selectAllPendingQueue}
                   disabled={isBulkSubmitting}
                 >
-                  เลือกทั้งหมด
+                  {t(uiLocale, "purchase.monthEnd.selectAll")}
                 </button>
                 <button
                   type="button"
@@ -2205,7 +2259,7 @@ export function PurchaseOrderList({
                   onClick={clearPendingQueueSelection}
                   disabled={isBulkSubmitting}
                 >
-                  ล้างเลือก
+                  {t(uiLocale, "purchase.monthEnd.clearSelection")}
                 </button>
                 <button
                   type="button"
@@ -2213,27 +2267,28 @@ export function PurchaseOrderList({
                   onClick={openBulkMonthEndMode}
                   disabled={selectedPendingQueueIds.length === 0 || isBulkSubmitting}
                 >
-                  ปิดเรท + ชำระปลายเดือน
+                  {t(uiLocale, "purchase.monthEnd.bulkAction")}
                 </button>
               </div>
             </div>
             {hasMixedPendingCurrencies ? (
               <p className="text-[11px] text-red-600">
-                รายการที่เลือกมีหลายสกุลเงิน กรุณาเลือกทีละสกุลเพื่อปิดเรทแบบกลุ่ม
+                {t(uiLocale, "purchase.monthEnd.mixedCurrencies")}
               </p>
             ) : null}
             {isBulkMonthEndMode ? (
               <div className="space-y-2 rounded-lg border border-amber-300 bg-white p-3">
                 <p className="text-xs font-semibold text-amber-800">
-                  ปิดเรท + บันทึกชำระแบบกลุ่ม (รอบบัตรปลายเดือน)
+                  {t(uiLocale, "purchase.monthEnd.bulk.panel.title")}
                 </p>
                 <p className="text-[11px] text-amber-700/90">
-                  ระบบจะจับคู่ยอดชำระอัตโนมัติแบบครบกำหนดเก่าสุดก่อน (oldest due first)
+                  {t(uiLocale, "purchase.monthEnd.bulk.panel.subtitle")}
                 </p>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div className="space-y-1">
                     <label className="text-[11px] text-slate-600">
-                      อัตราแลกเปลี่ยนจริง (1 {selectedPendingCurrency ?? "-"} = ? {storeCurrency})
+                      {t(uiLocale, "purchase.monthEnd.bulk.field.exchangeRate.label")} (1{" "}
+                      {selectedPendingCurrency ?? "-"} = ? {storeCurrency})
                     </label>
                     <input
                       type="number"
@@ -2246,7 +2301,9 @@ export function PurchaseOrderList({
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] text-slate-600">วันที่ชำระ (top-up date)</label>
+                    <label className="text-[11px] text-slate-600">
+                      {t(uiLocale, "purchase.monthEnd.bulk.field.paidAt.label")}
+                    </label>
                     <input
                       type="date"
                       className="po-date-input h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-300"
@@ -2257,7 +2314,7 @@ export function PurchaseOrderList({
                   </div>
                   <div className="space-y-1">
                     <label className="text-[11px] text-slate-600">
-                      ยอดชำระรวมตาม statement (ไม่บังคับ)
+                      {t(uiLocale, "purchase.monthEnd.bulk.field.statementTotal.labelOptional")}
                     </label>
                     <input
                       type="number"
@@ -2269,52 +2326,61 @@ export function PurchaseOrderList({
                       disabled={isBulkSubmitting}
                     />
                     <p className="text-[10px] text-slate-500">
-                      ถ้าเว้นว่าง ระบบจะชำระเต็มยอดค้างทุก PO ที่เลือก
+                      {t(uiLocale, "purchase.monthEnd.bulk.field.statementTotal.help")}
                     </p>
                   </div>
                   <div className="space-y-1 sm:col-span-2">
                     <label className="text-[11px] text-slate-600">
-                      เลขอ้างอิงรอบบัตร/รอบชำระ (บังคับ)
+                      {t(uiLocale, "purchase.monthEnd.bulk.field.reference.labelRequired")}
                     </label>
                     <input
                       className="h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-300"
                       value={bulkReferenceInput}
                       onChange={(event) => setBulkReferenceInput(event.target.value)}
-                      placeholder="เช่น BCEL-VISA-2026-02"
+                      placeholder={t(uiLocale, "purchase.monthEnd.bulk.field.reference.placeholder")}
                       disabled={isBulkSubmitting}
                     />
                   </div>
                   <div className="space-y-1 sm:col-span-2">
-                    <label className="text-[11px] text-slate-600">หมายเหตุ (ไม่บังคับ)</label>
+                    <label className="text-[11px] text-slate-600">
+                      {t(uiLocale, "purchase.monthEnd.bulk.field.note.labelOptional")}
+                    </label>
                     <input
                       className="h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-300"
                       value={bulkNoteInput}
                       onChange={(event) => setBulkNoteInput(event.target.value)}
-                      placeholder="เช่น top-up รอบปลายเดือน"
+                      placeholder={t(uiLocale, "purchase.monthEnd.bulk.field.note.placeholder")}
                       disabled={isBulkSubmitting}
                     />
                   </div>
                 </div>
                 <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50/50 p-2">
                   <p className="text-[11px] font-medium text-amber-800">
-                    แผนกระทบยอดอัตโนมัติ (ก่อนกดยืนยัน)
+                    {t(uiLocale, "purchase.monthEnd.bulk.preview.title")}
                   </p>
                   <p className="text-[11px] text-amber-800">
-                    ยอดค้างที่เลือก {fmtPrice(bulkAllocationPreview.totalOutstanding, storeCurrency)}
+                    {t(uiLocale, "purchase.monthEnd.bulk.preview.selectedOutstanding.prefix")}{" "}
+                    {fmtPrice(bulkAllocationPreview.totalOutstanding, storeCurrency, numberLocale)}
                     {" · "}
-                    จะลงชำระ {fmtPrice(bulkAllocationPreview.plannedTotal, storeCurrency)}
+                    {t(uiLocale, "purchase.monthEnd.bulk.preview.willSettle.prefix")}{" "}
+                    {fmtPrice(bulkAllocationPreview.plannedTotal, storeCurrency, numberLocale)}
                     {" · "}
-                    ค้างหลังรอบนี้ {fmtPrice(bulkAllocationPreview.outstandingAfter, storeCurrency)}
+                    {t(uiLocale, "purchase.monthEnd.bulk.preview.remainingOutstanding.prefix")}{" "}
+                    {fmtPrice(bulkAllocationPreview.outstandingAfter, storeCurrency, numberLocale)}
                   </p>
                   {bulkAllocationPreview.statementTotal !== null ? (
                     <p className="text-[11px] text-amber-800">
-                      ยอด statement ที่ยังไม่ถูกจับคู่{" "}
-                      {fmtPrice(bulkAllocationPreview.remainingUnallocated, storeCurrency)}
+                      {t(uiLocale, "purchase.monthEnd.bulk.preview.unmatchedStatement.prefix")}{" "}
+                      {fmtPrice(
+                        bulkAllocationPreview.remainingUnallocated,
+                        storeCurrency,
+                        numberLocale,
+                      )}
                     </p>
                   ) : null}
                   {bulkAllocationPreview.invalidStatementTotal ? (
                     <p className="text-[11px] text-red-600">
-                      ยอดชำระรวมต้องมากกว่า 0
+                      {t(uiLocale, "purchase.monthEnd.bulk.preview.statementTotalInvalid")}
                     </p>
                   ) : null}
                   <div className="max-h-24 space-y-0.5 overflow-y-auto pr-1">
@@ -2322,11 +2388,15 @@ export function PurchaseOrderList({
                       <p key={row.id} className="text-[11px] text-amber-800">
                         {row.poNumber}
                         {row.supplierName ? ` · ${row.supplierName}` : ""}
-                        {row.dueDate ? ` · due ${formatDate(row.dueDate)}` : ""}
+                        {row.dueDate
+                          ? ` · ${t(uiLocale, "purchase.label.dueDate")} ${formatDate(row.dueDate, dateLocale)}`
+                          : ""}
                         {" · "}
-                        จับคู่ {fmtPrice(row.planned, storeCurrency)}
-                        {" / ค้าง "}
-                        {fmtPrice(row.outstanding, storeCurrency)}
+                        {t(uiLocale, "purchase.monthEnd.bulk.preview.match.prefix")}{" "}
+                        {fmtPrice(row.planned, storeCurrency, numberLocale)}
+                        {" / "}
+                        {t(uiLocale, "purchase.monthEnd.bulk.preview.outstanding.prefix")}{" "}
+                        {fmtPrice(row.outstanding, storeCurrency, numberLocale)}
                       </p>
                     ))}
                   </div>
@@ -2337,7 +2407,8 @@ export function PurchaseOrderList({
                 {bulkErrors.length > 0 ? (
                   <div className="space-y-1 rounded-md border border-red-200 bg-red-50 p-2">
                     <p className="text-[11px] font-medium text-red-700">
-                      รายการที่ไม่สำเร็จ ({bulkErrors.length})
+                      {t(uiLocale, "purchase.monthEnd.bulk.errors.title.prefix")} (
+                      {bulkErrors.length.toLocaleString(numberLocale)})
                     </p>
                     <ul className="max-h-24 list-disc space-y-0.5 overflow-y-auto pl-4 text-[11px] text-red-700">
                       {bulkErrors.map((error, index) => (
@@ -2354,7 +2425,7 @@ export function PurchaseOrderList({
                     onClick={() => setIsBulkMonthEndMode(false)}
                     disabled={isBulkSubmitting}
                   >
-                    ยกเลิก
+                    {t(uiLocale, "common.action.cancel")}
                   </Button>
                   <Button
                     type="button"
@@ -2367,7 +2438,7 @@ export function PurchaseOrderList({
                     {isBulkSubmitting ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      "เริ่มปิดเรท + ชำระ"
+                      t(uiLocale, "purchase.monthEnd.bulk.cta.confirm")
                     )}
                   </Button>
                 </div>
@@ -2398,13 +2469,17 @@ export function PurchaseOrderList({
                       </p>
                       <p className="text-[11px] text-slate-500">
                         {item.receivedAt
-                          ? `รับเมื่อ ${formatDate(item.receivedAt)}`
-                          : "ยังไม่มีวันที่รับ"}
+                          ? `${t(uiLocale, "purchase.label.receivedAt")} ${formatDate(item.receivedAt, dateLocale)}`
+                          : t(uiLocale, "purchase.label.noReceivedDate")}
                         {" · "}
-                        เรทตั้งต้น {item.exchangeRateInitial} {storeCurrency}/{item.purchaseCurrency}
-                        {item.dueDate ? ` · ครบกำหนด ${formatDate(item.dueDate)}` : ""}
+                        {t(uiLocale, "purchase.label.initialRate")} {item.exchangeRateInitial}{" "}
+                        {storeCurrency}/{item.purchaseCurrency}
+                        {item.dueDate
+                          ? ` · ${t(uiLocale, "purchase.label.dueDate")} ${formatDate(item.dueDate, dateLocale)}`
+                          : ""}
                         {" · "}
-                        ค้าง {fmtPrice(item.outstandingBase, storeCurrency)}
+                        {t(uiLocale, "purchase.label.outstanding")}{" "}
+                        {fmtPrice(item.outstandingBase, storeCurrency, numberLocale)}
                       </p>
                     </div>
                     <ChevronRight className="h-4 w-4 shrink-0 text-amber-500" />
@@ -2443,7 +2518,7 @@ export function PurchaseOrderList({
               void reloadFirstPage();
             }}
           >
-            ลองใหม่
+            {t(uiLocale, "purchase.action.retry")}
           </Button>
         </div>
       ) : null}
@@ -2452,13 +2527,13 @@ export function PurchaseOrderList({
       <div className="flex gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {(
           [
-            { id: "ALL" as StatusFilter, label: "ทั้งหมด" },
-            { id: "OPEN" as StatusFilter, label: "งานเปิด" },
-            { id: "DRAFT" as StatusFilter, label: "ร่าง" },
-            { id: "ORDERED" as StatusFilter, label: "สั่งแล้ว" },
-            { id: "SHIPPED" as StatusFilter, label: "จัดส่ง" },
-            { id: "RECEIVED" as StatusFilter, label: "รับแล้ว" },
-            { id: "CANCELLED" as StatusFilter, label: "ยกเลิก" },
+            { id: "ALL" as StatusFilter, label: t(uiLocale, "purchase.filter.all") },
+            { id: "OPEN" as StatusFilter, label: t(uiLocale, "purchase.filter.open") },
+            { id: "DRAFT" as StatusFilter, label: getPurchaseStatusLabel(uiLocale, "DRAFT") },
+            { id: "ORDERED" as StatusFilter, label: getPurchaseStatusLabel(uiLocale, "ORDERED") },
+            { id: "SHIPPED" as StatusFilter, label: getPurchaseStatusLabel(uiLocale, "SHIPPED") },
+            { id: "RECEIVED" as StatusFilter, label: getPurchaseStatusLabel(uiLocale, "RECEIVED") },
+            { id: "CANCELLED" as StatusFilter, label: getPurchaseStatusLabel(uiLocale, "CANCELLED") },
           ] as const
         ).map((f) => {
           const count = statusCounts[f.id] ?? 0;
@@ -2492,7 +2567,7 @@ export function PurchaseOrderList({
                       : "bg-slate-200 text-slate-500"
                   }`}
                 >
-                  {count}
+                  {count.toLocaleString(numberLocale)}
                 </span>
               )}
             </button>
@@ -2502,7 +2577,7 @@ export function PurchaseOrderList({
 
       {/* ── PO list ── */}
       {isRefreshingList && poList.length === 0 ? (
-        <StockTabLoadingState message="กำลังอัปเดตรายการใบสั่งซื้อ..." />
+        <StockTabLoadingState message={t(uiLocale, "purchase.list.refreshing")} />
       ) : listError && poList.length === 0 ? (
         <StockTabErrorState
           message={listError}
@@ -2515,10 +2590,10 @@ export function PurchaseOrderList({
           <ShoppingCart className="mx-auto h-10 w-10 text-slate-300" />
           <p className="mt-2 text-sm text-slate-500">
             {statusFilter === "ALL"
-              ? "ยังไม่มีใบสั่งซื้อ"
+              ? t(uiLocale, "purchase.empty.all")
               : statusFilter === "OPEN"
-                ? "ยังไม่มีงานเปิด"
-                : "ไม่มีรายการในสถานะนี้"}
+                ? t(uiLocale, "purchase.empty.open")
+                : t(uiLocale, "purchase.empty.status")}
           </p>
           {canCreate && (statusFilter === "ALL" || statusFilter === "OPEN") && (
             <button
@@ -2527,7 +2602,7 @@ export function PurchaseOrderList({
               onClick={openCreateSheet}
             >
               <Plus className="h-4 w-4" />
-              สร้างใบสั่งซื้อใหม่
+              {t(uiLocale, "purchase.createNew")}
             </button>
           )}
         </div>
@@ -2570,7 +2645,7 @@ export function PurchaseOrderList({
                     )}
                     {isExchangeRatePending && (
                       <p className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                        รอปิดเรท
+                        {t(uiLocale, "purchase.badge.pendingRate")}
                       </p>
                     )}
                     {po.status === "RECEIVED" && (
@@ -2584,16 +2659,26 @@ export function PurchaseOrderList({
                         }`}
                       >
                         {po.paymentStatus === "PAID"
-                          ? "ชำระแล้ว"
+                          ? t(uiLocale, "purchase.paymentStatus.PAID")
                           : po.paymentStatus === "PARTIAL"
-                            ? "ชำระบางส่วน"
-                            : "ยังไม่ชำระ"}
+                            ? t(uiLocale, "purchase.paymentStatus.PARTIAL")
+                            : t(uiLocale, "purchase.paymentStatus.UNPAID")}
                       </p>
                     )}
                     <p className="mt-1 text-xs text-slate-500">
-                      {po.itemCount} รายการ ·{" "}
-                      {fmtPrice(po.totalCostBase + po.shippingCost + po.otherCost, storeCurrency)}
-                      {po.status === "RECEIVED" ? ` · ค้าง ${fmtPrice(po.outstandingBase, storeCurrency)}` : ""}
+                      {po.itemCount.toLocaleString(numberLocale)} {t(uiLocale, "purchase.items")} ·{" "}
+                      {fmtPrice(
+                        po.totalCostBase + po.shippingCost + po.otherCost,
+                        storeCurrency,
+                        numberLocale,
+                      )}
+                      {po.status === "RECEIVED" ? (
+                        <>
+                          {" · "}
+                          {t(uiLocale, "purchase.label.outstanding")}{" "}
+                          {fmtPrice(po.outstandingBase, storeCurrency, numberLocale)}
+                        </>
+                      ) : null}
                     </p>
                   </div>
                   <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
@@ -2602,64 +2687,83 @@ export function PurchaseOrderList({
                   <div className="space-y-1 text-[11px] text-slate-600">
                     {/* Timeline based on status */}
                     {po.status === "DRAFT" && (
-                      <div>สั่งเมื่อ {formatDate(po.createdAt)}</div>
+                      <div>
+                        {t(uiLocale, "purchase.timeline.createdAt")}{" "}
+                        {formatDate(po.createdAt, dateLocale)}
+                      </div>
                     )}
                     {po.status === "ORDERED" && (
                       <div>
-                        สั่งเมื่อ {formatDate(po.createdAt)}
+                        {t(uiLocale, "purchase.timeline.createdAt")}{" "}
+                        {formatDate(po.createdAt, dateLocale)}
                         {po.orderedAt && (
                           <>
                             {" "}
-                            → ยืนยันเมื่อ {formatDate(po.orderedAt)}
+                            → {t(uiLocale, "purchase.timeline.orderedAt")}{" "}
+                            {formatDate(po.orderedAt, dateLocale)}
                           </>
                         )}
                       </div>
                     )}
                     {po.status === "SHIPPED" && (
                       <div>
-                        สั่งเมื่อ {formatDate(po.createdAt)}
+                        {t(uiLocale, "purchase.timeline.createdAt")}{" "}
+                        {formatDate(po.createdAt, dateLocale)}
                         {po.shippedAt && (
                           <>
                             {" "}
-                            → จัดส่งเมื่อ {formatDate(po.shippedAt)}
+                            → {t(uiLocale, "purchase.timeline.shippedAt")}{" "}
+                            {formatDate(po.shippedAt, dateLocale)}
                           </>
                         )}
                         {po.expectedAt && (
                           <>
                             {" "}
-                            → คาดว่า {formatDate(po.expectedAt)}
+                            → {t(uiLocale, "purchase.timeline.expectedAt")}{" "}
+                            {formatDate(po.expectedAt, dateLocale)}
                           </>
                         )}
                       </div>
                     )}
                     {po.status === "RECEIVED" && (
                       <div>
-                        สั่งเมื่อ {formatDate(po.createdAt)}
+                        {t(uiLocale, "purchase.timeline.createdAt")}{" "}
+                        {formatDate(po.createdAt, dateLocale)}
                         {po.shippedAt && (
                           <>
                             {" "}
-                            → จัดส่งเมื่อ {formatDate(po.shippedAt)}
+                            → {t(uiLocale, "purchase.timeline.shippedAt")}{" "}
+                            {formatDate(po.shippedAt, dateLocale)}
                           </>
                         )}
                         {po.receivedAt && (
                           <>
                             {" "}
-                            → รับเมื่อ {formatDate(po.receivedAt)}
+                            → {t(uiLocale, "purchase.timeline.receivedAt")}{" "}
+                            {formatDate(po.receivedAt, dateLocale)}
                           </>
                         )}
                       </div>
                     )}
-    {po.status === "CANCELLED" && (
+                    {po.status === "CANCELLED" && (
                       <div>
-                        สั่งเมื่อ {formatDate(po.createdAt)}{" "}
+                        {t(uiLocale, "purchase.timeline.createdAt")}{" "}
+                        {formatDate(po.createdAt, dateLocale)}{" "}
                         {po.cancelledAt && (
                           <>
-                            · <span className="text-red-600">ยกเลิกเมื่อ {formatDate(po.cancelledAt)}</span>
+                            ·{" "}
+                            <span className="text-red-600">
+                              {t(uiLocale, "purchase.timeline.cancelledAt")}{" "}
+                              {formatDate(po.cancelledAt, dateLocale)}
+                            </span>
                           </>
                         )}
                         {!po.cancelledAt && (
                           <>
-                            · <span className="text-red-600">ยกเลิก</span>
+                            ·{" "}
+                            <span className="text-red-600">
+                              {t(uiLocale, "purchase.status.cancelled")}
+                            </span>
                           </>
                         )}
                       </div>
@@ -2669,7 +2773,9 @@ export function PurchaseOrderList({
                 {remaining !== null && (
                   <div className="mt-1.5">
                     <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-slate-500">ความคืบหน้า</span>
+                      <span className="text-slate-500">
+                        {t(uiLocale, "purchase.progress.label")}
+                      </span>
                       <span
                         className={
                           remaining <= 0
@@ -2680,8 +2786,8 @@ export function PurchaseOrderList({
                         }
                       >
                         {remaining <= 0
-                          ? "เลยกำหนด"
-                          : `เหลือ ${remaining} วัน`}
+                          ? t(uiLocale, "purchase.progress.overdue")
+                          : `${t(uiLocale, "purchase.progress.remainingPrefix")} ${remaining.toLocaleString(numberLocale)} ${t(uiLocale, "purchase.progress.remainingSuffix")}`}
                       </span>
                     </div>
                     <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
@@ -2712,7 +2818,9 @@ export function PurchaseOrderList({
                 onClick={loadMore}
                 disabled={isLoadingMore}
               >
-                {isLoadingMore ? "กำลังโหลด..." : "โหลดเพิ่ม"}
+                {isLoadingMore
+                  ? t(uiLocale, "purchase.list.loadingMore")
+                  : t(uiLocale, "purchase.list.loadMore")}
               </Button>
               <div ref={loadMoreRef} className="h-2 w-full" />
             </div>
@@ -2725,45 +2833,47 @@ export function PurchaseOrderList({
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
        * SlideUpSheet — Create PO Wizard
        * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-      <SlideUpSheet
-        isOpen={isCreateOpen}
-        onClose={closeCreateSheet}
-        title="สร้างใบสั่งซื้อ"
-        description={`ขั้นตอน ${wizardStep}/3`}
-        closeOnBackdrop={false}
-        disabled={isSubmitting}
-        footer={
-          <Button
-            type="button"
-            variant="outline"
-            className="h-11 w-full rounded-xl"
-            onClick={closeCreateSheet}
-            disabled={isSubmitting}
-          >
-            ยกเลิก
-          </Button>
-        }
-      >
-            {/* Step 1: Info */}
-            {wizardStep === 1 && (
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <label className="text-xs text-muted-foreground">
-                      ชื่อซัพพลายเออร์ (ไม่บังคับ)
-                    </label>
-                    {supplierNameOptions.length > 0 ? (
-                      <button
-                        type="button"
-                        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
-                        onClick={() => setIsSupplierPickerOpen((current) => !current)}
-                      >
-                        {isSupplierPickerOpen ? "ซ่อนรายการซัพพลายเออร์" : "ดูซัพพลายเออร์ทั้งหมด"}
-                      </button>
-                    ) : null}
-                  </div>
-                  <input
-                    className={fieldClassName}
+	      <SlideUpSheet
+	        isOpen={isCreateOpen}
+	        onClose={closeCreateSheet}
+	        title={t(uiLocale, "purchase.create")}
+	        description={`${t(uiLocale, "purchase.createWizard.step.prefix")} ${wizardStep}/3`}
+	        closeOnBackdrop={false}
+	        disabled={isSubmitting}
+	        footer={
+	          <Button
+	            type="button"
+	            variant="outline"
+	            className="h-11 w-full rounded-xl"
+	            onClick={closeCreateSheet}
+	            disabled={isSubmitting}
+	          >
+	            {t(uiLocale, "common.action.cancel")}
+	          </Button>
+	        }
+	      >
+	            {/* Step 1: Info */}
+	            {wizardStep === 1 && (
+	              <div className="space-y-3">
+	                <div className="space-y-2">
+	                  <div className="flex items-center justify-between gap-2">
+	                    <label className="text-xs text-muted-foreground">
+	                      {t(uiLocale, "purchase.createWizard.supplierName.labelOptional")}
+	                    </label>
+	                    {supplierNameOptions.length > 0 ? (
+	                      <button
+	                        type="button"
+	                        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+	                        onClick={() => setIsSupplierPickerOpen((current) => !current)}
+	                      >
+	                        {isSupplierPickerOpen
+	                          ? t(uiLocale, "purchase.createWizard.supplierName.toggle.hide")
+	                          : t(uiLocale, "purchase.createWizard.supplierName.toggle.show")}
+	                      </button>
+	                    ) : null}
+	                  </div>
+	                  <input
+	                    className={fieldClassName}
                     value={supplierName}
                     onFocus={() => {
                       if (supplierNameOptions.length > 0) {
@@ -2774,25 +2884,25 @@ export function PurchaseOrderList({
                       setSupplierName(e.target.value);
                       if (supplierNameOptions.length > 0) {
                         setIsSupplierPickerOpen(true);
-                      }
-                    }}
-                    placeholder="เช่น ร้านสมชาย, ตลาดเช้า"
-                  />
-                  {supplierNameOptions.length > 0 ? (
-                    <p className="text-[11px] text-slate-500">
-                      พิมพ์เพื่อค้นหาและแตะเลือกจากรายการเดิม หรือพิมพ์ชื่อใหม่เองได้
-                    </p>
-                  ) : null}
-                  {supplierNameOptions.length > 0 && (isSupplierPickerOpen || supplierName) ? (
-                    <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-200 bg-white">
-                      {visibleSupplierPickerOptions.length === 0 ? (
-                        <p className="px-3 py-2 text-xs text-slate-400">
-                          ไม่พบชื่อซัพพลายเออร์ที่ตรงกับคำค้นหา (ใช้ชื่อที่พิมพ์ได้เลย)
-                        </p>
-                      ) : (
-                        visibleSupplierPickerOptions.map((name) => (
-                          <button
-                            key={name}
+	                      }
+	                    }}
+	                    placeholder={t(uiLocale, "purchase.createWizard.supplierName.placeholder")}
+	                  />
+	                  {supplierNameOptions.length > 0 ? (
+	                    <p className="text-[11px] text-slate-500">
+	                      {t(uiLocale, "purchase.createWizard.supplierName.help")}
+	                    </p>
+	                  ) : null}
+	                  {supplierNameOptions.length > 0 && (isSupplierPickerOpen || supplierName) ? (
+	                    <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-200 bg-white">
+	                      {visibleSupplierPickerOptions.length === 0 ? (
+	                        <p className="px-3 py-2 text-xs text-slate-400">
+	                          {t(uiLocale, "purchase.createWizard.supplierName.noMatches")}
+	                        </p>
+	                      ) : (
+	                        visibleSupplierPickerOptions.map((name) => (
+	                          <button
+	                            key={name}
                             type="button"
                             className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
                             onClick={() => {
@@ -2806,14 +2916,14 @@ export function PurchaseOrderList({
                       )}
                     </div>
                   ) : null}
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">
-                    เบอร์ติดต่อ (ไม่บังคับ)
-                  </label>
-                  <input
-                    className={fieldClassName}
-                    type="tel"
+	                </div>
+	                <div className="space-y-2">
+	                  <label className="text-xs text-muted-foreground">
+	                    {t(uiLocale, "purchase.createWizard.supplierContact.labelOptional")}
+	                  </label>
+	                  <input
+	                    className={fieldClassName}
+	                    type="tel"
                     inputMode="tel"
                     autoComplete="tel"
                     enterKeyHint="next"
@@ -2821,14 +2931,14 @@ export function PurchaseOrderList({
                     onChange={(e) => setSupplierContact(e.target.value)}
                     placeholder="020-xxxx-xxxx"
                   />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">
-                    สกุลเงินที่ซื้อ
-                  </label>
-                  <div className="flex gap-2">
-                    {(["LAK", "THB", "USD"] as StoreCurrency[]).map((c) => (
-                      <button
+	                </div>
+	                <div className="space-y-2">
+	                  <label className="text-xs text-muted-foreground">
+	                    {t(uiLocale, "purchase.createWizard.purchaseCurrency.label")}
+	                  </label>
+	                  <div className="flex gap-2">
+	                    {(["LAK", "THB", "USD"] as StoreCurrency[]).map((c) => (
+	                      <button
                         key={c}
                         type="button"
                         className={`flex-1 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
@@ -2847,91 +2957,98 @@ export function PurchaseOrderList({
                       </button>
                     ))}
                   </div>
-                </div>
-                {purchaseCurrency !== storeCurrency && (
-                  <div className="space-y-2">
-                    <label className="text-xs text-muted-foreground">
-                      อัตราแลกเปลี่ยนจริง (ถ้าทราบ)
-                    </label>
-                    <input
-                      className={fieldClassName}
-                      type="number"
-                      inputMode="decimal"
-                      value={exchangeRate}
-                      onChange={(e) => setExchangeRate(e.target.value)}
-                      placeholder={`เช่น 600 (1 ${purchaseCurrency} = ? ${storeCurrency})`}
-                    />
-                    <p className="text-[11px] text-slate-500">
-                      ถ้ายังไม่ทราบเรทตอนนี้ สามารถเว้นว่างได้ แล้วไปกด{" "}
-                      <span className="font-medium">ปิดเรท</span> หลังรับสินค้า/ตอนชำระจริง
-                    </p>
-                  </div>
-                )}
-                <Button
-                  className="h-11 w-full rounded-xl"
+	                </div>
+	                {purchaseCurrency !== storeCurrency && (
+	                  <div className="space-y-2">
+	                    <label className="text-xs text-muted-foreground">
+	                      {t(uiLocale, "purchase.createWizard.exchangeRate.labelOptional")}
+	                    </label>
+	                    <input
+	                      className={fieldClassName}
+	                      type="number"
+	                      inputMode="decimal"
+	                      value={exchangeRate}
+	                      onChange={(e) => setExchangeRate(e.target.value)}
+	                      placeholder={`${t(uiLocale, "common.examplePrefix")} 600 (1 ${purchaseCurrency} = ? ${storeCurrency})`}
+	                    />
+	                    <p className="text-[11px] text-slate-500">
+	                      {t(uiLocale, "purchase.createWizard.exchangeRate.help.prefix")}{" "}
+	                      <span className="font-medium">
+	                        {t(uiLocale, "purchase.action.finalizeRate")}
+	                      </span>{" "}
+	                      {t(uiLocale, "purchase.createWizard.exchangeRate.help.suffix")}
+	                    </p>
+	                  </div>
+	                )}
+	                <Button
+	                  className="h-11 w-full rounded-xl"
                   onClick={() => {
                     setIsSupplierPickerOpen(false);
                     setWizardStep(2);
-                  }}
-                >
-                  ถัดไป →
-                </Button>
-              </div>
-            )}
+	                  }}
+	                >
+	                  {t(uiLocale, "common.action.next")} →
+	                </Button>
+	              </div>
+	            )}
 
             {/* Step 2: Items */}
             {wizardStep === 2 && (
               <div className="space-y-3">
                 {/* Product search */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <label className="text-xs text-muted-foreground">
-                      เพิ่มสินค้า
-                    </label>
-                    <button
-                      type="button"
-                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+	                <div className="space-y-2">
+	                  <div className="flex items-center justify-between gap-2">
+	                    <label className="text-xs text-muted-foreground">
+	                      {t(uiLocale, "purchase.createWizard.items.add")}
+	                    </label>
+	                    <button
+	                      type="button"
+	                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
                       onClick={() => {
                         const nextOpen = !isProductPickerOpen;
                         setIsProductPickerOpen(nextOpen);
                         if (nextOpen) {
                           void loadProducts();
                         }
-                      }}
-                    >
-                      {isProductPickerOpen ? "ซ่อนรายการสินค้า" : "ดูสินค้าทั้งหมด"}
-                    </button>
-                  </div>
-                  <input
-                    className={fieldClassName}
+	                      }}
+	                    >
+	                      {isProductPickerOpen
+	                        ? t(uiLocale, "purchase.createWizard.items.toggle.hide")
+	                        : t(uiLocale, "purchase.createWizard.items.toggle.show")}
+	                    </button>
+	                  </div>
+	                  <input
+	                    className={fieldClassName}
                     value={productSearch}
                     onFocus={() => {
                       setIsProductPickerOpen(true);
                       void loadProducts();
                     }}
                     onChange={(e) => {
-                      setProductSearch(e.target.value);
-                      setIsProductPickerOpen(true);
-                    }}
-                    placeholder="🔍 ค้นหาสินค้า..."
-                  />
-                  <p className="text-[11px] text-slate-500">
-                    ค้นหาด้วยชื่อหรือ SKU หรือกดปุ่มเพื่อเลือกจากรายการ
-                  </p>
-                  {(isProductPickerOpen || productSearch) && (
-                    <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-200 bg-white">
-                      {loadingProducts ? (
-                        <p className="px-3 py-2 text-xs text-slate-400">
-                          กำลังโหลด...
-                        </p>
-                      ) : visibleProductPickerOptions.length === 0 ? (
-                        <p className="px-3 py-2 text-xs text-slate-400">
-                          {productSearch ? "ไม่พบสินค้าที่ค้นหา" : "ไม่มีสินค้าให้เลือก"}
-                        </p>
-                      ) : (
-                        visibleProductPickerOptions.map((p) => (
-                          <button
-                            key={p.id}
+	                      setProductSearch(e.target.value);
+	                      setIsProductPickerOpen(true);
+	                    }}
+	                    placeholder={t(uiLocale, "purchase.createWizard.items.search.placeholder")}
+	                  />
+	                  <p className="text-[11px] text-slate-500">
+	                    {t(uiLocale, "purchase.createWizard.items.search.help")}
+	                  </p>
+	                  {(isProductPickerOpen || productSearch) && (
+	                    <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-200 bg-white">
+	                      {loadingProducts ? (
+	                        <p className="px-3 py-2 text-xs text-slate-400">
+	                          {t(uiLocale, "common.loading")}
+	                        </p>
+	                      ) : visibleProductPickerOptions.length === 0 ? (
+	                        <p className="px-3 py-2 text-xs text-slate-400">
+	                          {productSearch
+	                            ? t(uiLocale, "purchase.createWizard.items.search.noMatches")
+	                            : t(uiLocale, "purchase.createWizard.items.search.empty")}
+	                        </p>
+	                      ) : (
+	                        visibleProductPickerOptions.map((p) => (
+	                          <button
+	                            key={p.id}
                             type="button"
                             className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
                             onClick={() =>
@@ -2949,13 +3066,13 @@ export function PurchaseOrderList({
                   )}
                 </div>
 
-                {/* Item list */}
-                {items.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-slate-200 px-3 py-6 text-center text-sm text-slate-400">
-                    ยังไม่ได้เพิ่มสินค้า
-                  </p>
-                ) : (
-                  <div className="space-y-2">
+	                {/* Item list */}
+	                {items.length === 0 ? (
+	                  <p className="rounded-xl border border-dashed border-slate-200 px-3 py-6 text-center text-sm text-slate-400">
+	                    {t(uiLocale, "purchase.createWizard.items.empty")}
+	                  </p>
+	                ) : (
+	                  <div className="space-y-2">
                     {items.map((item) => (
                       <div
                         key={item.productId}
@@ -2974,10 +3091,10 @@ export function PurchaseOrderList({
                           </button>
                         </div>
                         <div className="mt-2 grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[11px] text-slate-500">
-                              จำนวน
-                            </label>
+	                          <div>
+	                            <label className="text-[11px] text-slate-500">
+	                              {t(uiLocale, "purchase.field.qty")}
+	                            </label>
                             <input
                               className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
                               type="number"
@@ -2992,10 +3109,11 @@ export function PurchaseOrderList({
                               }
                             />
                           </div>
-                          <div>
-                            <label className="text-[11px] text-slate-500">
-                              ราคา/{currencySymbol(purchaseCurrency)}
-                            </label>
+	                          <div>
+	                            <label className="text-[11px] text-slate-500">
+	                              {t(uiLocale, "purchase.field.unitPrice.prefix")}
+	                              {currencySymbol(purchaseCurrency)}
+	                            </label>
                             <input
                               className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
                               type="number"
@@ -3021,6 +3139,7 @@ export function PurchaseOrderList({
                                 effectiveRate,
                             ),
                             storeCurrency,
+                            numberLocale,
                           )}
                         </p>
                       </div>
@@ -3028,33 +3147,33 @@ export function PurchaseOrderList({
                   </div>
                 )}
 
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    className="h-11 flex-1 rounded-xl"
-                    onClick={() => setWizardStep(1)}
-                  >
-                    ← ย้อนกลับ
-                  </Button>
-                  <Button
-                    className="h-11 flex-1 rounded-xl"
-                    onClick={() => setWizardStep(3)}
-                    disabled={items.length === 0}
-                  >
-                    ถัดไป →
-                  </Button>
-                </div>
-              </div>
-            )}
+	                <div className="flex gap-2">
+	                  <Button
+	                    variant="outline"
+	                    className="h-11 flex-1 rounded-xl"
+	                    onClick={() => setWizardStep(1)}
+	                  >
+	                    ← {t(uiLocale, "nav.back")}
+	                  </Button>
+	                  <Button
+	                    className="h-11 flex-1 rounded-xl"
+	                    onClick={() => setWizardStep(3)}
+	                    disabled={items.length === 0}
+	                  >
+	                    {t(uiLocale, "common.action.next")} →
+	                  </Button>
+	                </div>
+	              </div>
+	            )}
 
             {/* Step 3: Costs + Summary */}
             {wizardStep === 3 && (
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <label className="text-xs text-muted-foreground">
-                      ค่าขนส่ง ({currencySymbol(storeCurrency)})
-                    </label>
+	                <div className="grid grid-cols-2 gap-3">
+	                  <div className="space-y-2">
+	                    <label className="text-xs text-muted-foreground">
+	                      {t(uiLocale, "purchase.field.shippingCost.label")} ({currencySymbol(storeCurrency)})
+	                    </label>
                     <input
                       className={fieldClassName}
                       type="number"
@@ -3064,10 +3183,10 @@ export function PurchaseOrderList({
                       onChange={(e) => setShippingCost(e.target.value)}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs text-muted-foreground">
-                      ค่าอื่นๆ ({currencySymbol(storeCurrency)})
-                    </label>
+	                  <div className="space-y-2">
+	                    <label className="text-xs text-muted-foreground">
+	                      {t(uiLocale, "purchase.field.otherCost.label")} ({currencySymbol(storeCurrency)})
+	                    </label>
                     <input
                       className={fieldClassName}
                       type="number"
@@ -3078,180 +3197,189 @@ export function PurchaseOrderList({
                     />
                   </div>
                 </div>
-                {Number(otherCost) > 0 && (
-                  <div className="space-y-2">
-                    <label className="text-xs text-muted-foreground">
-                      หมายเหตุค่าอื่นๆ
-                    </label>
+	                {Number(otherCost) > 0 && (
+	                  <div className="space-y-2">
+	                    <label className="text-xs text-muted-foreground">
+	                      {t(uiLocale, "purchase.field.otherCostNote.label")}
+	                    </label>
                     <input
-                      className={fieldClassName}
-                      value={otherCostNote}
-                      onChange={(e) => setOtherCostNote(e.target.value)}
-                      placeholder="เช่น ค่าภาษี, ค่าดำเนินการ"
-                    />
-                  </div>
-                )}
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div className="space-y-2 min-w-0">
-                    <label className="text-xs text-muted-foreground">
-                      คาดว่าจะได้รับ (ไม่บังคับ)
-                    </label>
+	                      className={fieldClassName}
+	                      value={otherCostNote}
+	                      onChange={(e) => setOtherCostNote(e.target.value)}
+	                      placeholder={`${t(uiLocale, "common.examplePrefix")} ${t(uiLocale, "purchase.field.otherCostNote.placeholderExample")}`}
+	                    />
+	                  </div>
+	                )}
+	                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+	                  <div className="space-y-2 min-w-0">
+	                    <label className="text-xs text-muted-foreground">
+	                      {t(uiLocale, "purchase.createWizard.expectedAt.labelOptional")}
+	                    </label>
                     <PurchaseDatePickerField
-                      value={expectedAt}
-                      onChange={setExpectedAt}
-                      triggerClassName={`${fieldClassName} flex items-center justify-between gap-2 text-left`}
-                      ariaLabel="เลือกวันที่คาดว่าจะได้รับ"
-                    />
-                    <p className="text-[11px] text-slate-500">
-                      ยังไม่ระบุได้ เลือกภายหลังได้
-                    </p>
+                      uiLocale={uiLocale}
+	                      value={expectedAt}
+	                      onChange={setExpectedAt}
+	                      triggerClassName={`${fieldClassName} flex items-center justify-between gap-2 text-left`}
+	                      ariaLabel={t(uiLocale, "purchase.createWizard.expectedAt.aria")}
+	                    />
+	                    <p className="text-[11px] text-slate-500">
+	                      {t(uiLocale, "purchase.createWizard.expectedAt.help")}
+	                    </p>
                     <div className="flex flex-wrap gap-1.5">
-                      <button
+	                      <button
                         type="button"
                         className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
                         onClick={() => applyCreateDateShortcut("expectedAt", "TODAY")}
-                      >
-                        วันนี้
-                      </button>
+	                      >
+	                        {t(uiLocale, "purchase.dateShortcut.today")}
+	                      </button>
                       <button
                         type="button"
                         className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
                         onClick={() => applyCreateDateShortcut("expectedAt", "PLUS_7")}
-                      >
-                        +7 วัน
-                      </button>
+	                      >
+	                        {t(uiLocale, "purchase.dateShortcut.plus7")}
+	                      </button>
                       <button
                         type="button"
                         className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
                         onClick={() => applyCreateDateShortcut("expectedAt", "END_OF_MONTH")}
-                      >
-                        สิ้นเดือน
-                      </button>
+	                      >
+	                        {t(uiLocale, "purchase.dateShortcut.endOfMonth")}
+	                      </button>
                       <button
                         type="button"
                         className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
                         onClick={() => applyCreateDateShortcut("expectedAt", "CLEAR")}
-                      >
-                        ล้างค่า
-                      </button>
+	                      >
+	                        {t(uiLocale, "purchase.dateShortcut.clear")}
+	                      </button>
                     </div>
                   </div>
-                  <div className="space-y-2 min-w-0">
-                    <label className="text-xs text-muted-foreground">
-                      ครบกำหนดชำระ (due date)
-                    </label>
+	                  <div className="space-y-2 min-w-0">
+	                    <label className="text-xs text-muted-foreground">
+	                      {t(uiLocale, "purchase.createWizard.dueDate.label")}
+	                    </label>
                     <PurchaseDatePickerField
-                      value={dueDate}
-                      onChange={setDueDate}
-                      triggerClassName={`${fieldClassName} flex items-center justify-between gap-2 text-left`}
-                      ariaLabel="เลือกวันที่ครบกำหนดชำระ"
-                    />
-                    <p className="text-[11px] text-slate-500">
-                      ถ้ายังไม่รู้กำหนดจริง ให้เว้นว่างไว้ก่อนได้
-                    </p>
+                      uiLocale={uiLocale}
+	                      value={dueDate}
+	                      onChange={setDueDate}
+	                      triggerClassName={`${fieldClassName} flex items-center justify-between gap-2 text-left`}
+	                      ariaLabel={t(uiLocale, "purchase.createWizard.dueDate.aria")}
+	                    />
+	                    <p className="text-[11px] text-slate-500">
+	                      {t(uiLocale, "purchase.createWizard.dueDate.help")}
+	                    </p>
                     <div className="flex flex-wrap gap-1.5">
                       <button
                         type="button"
                         className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
                         onClick={() => applyCreateDateShortcut("dueDate", "TODAY")}
-                      >
-                        วันนี้
-                      </button>
+	                      >
+	                        {t(uiLocale, "purchase.dateShortcut.today")}
+	                      </button>
                       <button
                         type="button"
                         className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
                         onClick={() => applyCreateDateShortcut("dueDate", "PLUS_7")}
-                      >
-                        +7 วัน
-                      </button>
+	                      >
+	                        {t(uiLocale, "purchase.dateShortcut.plus7")}
+	                      </button>
                       <button
                         type="button"
                         className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
                         onClick={() => applyCreateDateShortcut("dueDate", "END_OF_MONTH")}
-                      >
-                        สิ้นเดือน
-                      </button>
+	                      >
+	                        {t(uiLocale, "purchase.dateShortcut.endOfMonth")}
+	                      </button>
                       <button
                         type="button"
                         className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
                         onClick={() => applyCreateDateShortcut("dueDate", "CLEAR")}
-                      >
-                        ล้างค่า
-                      </button>
+	                      >
+	                        {t(uiLocale, "purchase.dateShortcut.clear")}
+	                      </button>
                     </div>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">
-                    หมายเหตุ (ไม่บังคับ)
-                  </label>
-                  <input
-                    className={fieldClassName}
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder="หมายเหตุเพิ่มเติม"
-                  />
-                </div>
+	                <div className="space-y-2">
+	                  <label className="text-xs text-muted-foreground">
+	                    {t(uiLocale, "purchase.createWizard.note.labelOptional")}
+	                  </label>
+	                  <input
+	                    className={fieldClassName}
+	                    value={note}
+	                    onChange={(e) => setNote(e.target.value)}
+	                    placeholder={t(uiLocale, "purchase.createWizard.note.placeholder")}
+	                  />
+	                </div>
 
                 {/* Summary */}
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    สรุป
-                  </p>
-                  {purchaseCurrency !== storeCurrency && !hasExchangeRateInput && (
-                    <p className="mt-1 text-[11px] text-amber-700">
-                      ยังไม่ปิดเรทจริง: ระบบจะใช้เรทชั่วคราว 1 เพื่อบันทึก PO และให้ไปปิดเรทภายหลัง
-                    </p>
-                  )}
-                  <div className="mt-2 space-y-1 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">สินค้า ({items.length} รายการ)</span>
-                      <span className="font-medium">
-                        {fmtPrice(itemsTotalBase, storeCurrency)}
-                      </span>
-                    </div>
-                    {shipping > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-slate-600">ค่าขนส่ง</span>
-                        <span>{fmtPrice(shipping, storeCurrency)}</span>
-                      </div>
-                    )}
-                    {other > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-slate-600">ค่าอื่นๆ</span>
-                        <span>{fmtPrice(other, storeCurrency)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between border-t border-slate-200 pt-1 font-semibold">
-                      <span>รวมทั้งหมด</span>
-                      <span>{fmtPrice(grandTotal, storeCurrency)}</span>
-                    </div>
-                  </div>
-                </div>
+	                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+	                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+	                    {t(uiLocale, "purchase.createWizard.summary.title")}
+	                  </p>
+	                  {purchaseCurrency !== storeCurrency && !hasExchangeRateInput && (
+	                    <p className="mt-1 text-[11px] text-amber-700">
+	                      {t(uiLocale, "purchase.createWizard.summary.pendingRateHint")}
+	                    </p>
+	                  )}
+	                  <div className="mt-2 space-y-1 text-sm">
+	                    <div className="flex justify-between">
+	                      <span className="text-slate-600">
+	                        {t(uiLocale, "purchase.summary.products")} ({items.length}{" "}
+	                        {t(uiLocale, "purchase.items")})
+	                      </span>
+	                      <span className="font-medium">
+	                        {fmtPrice(itemsTotalBase, storeCurrency, numberLocale)}
+	                      </span>
+	                    </div>
+	                    {shipping > 0 && (
+	                      <div className="flex justify-between">
+	                        <span className="text-slate-600">
+	                          {t(uiLocale, "purchase.summary.shipping")}
+	                        </span>
+	                        <span>{fmtPrice(shipping, storeCurrency, numberLocale)}</span>
+	                      </div>
+	                    )}
+	                    {other > 0 && (
+	                      <div className="flex justify-between">
+	                        <span className="text-slate-600">
+	                          {t(uiLocale, "purchase.summary.other")}
+	                        </span>
+	                        <span>{fmtPrice(other, storeCurrency, numberLocale)}</span>
+	                      </div>
+	                    )}
+	                    <div className="flex justify-between border-t border-slate-200 pt-1 font-semibold">
+	                      <span>{t(uiLocale, "purchase.summary.total")}</span>
+	                      <span>{fmtPrice(grandTotal, storeCurrency, numberLocale)}</span>
+	                    </div>
+	                  </div>
+	                </div>
 
                 {/* Action buttons */}
-                <Button
-                  variant="outline"
-                  className="h-11 w-full rounded-xl"
-                  onClick={() => setWizardStep(2)}
-                  disabled={isSubmitting}
-                >
-                  ← ย้อนกลับ
-                </Button>
+	                <Button
+	                  variant="outline"
+	                  className="h-11 w-full rounded-xl"
+	                  onClick={() => setWizardStep(2)}
+	                  disabled={isSubmitting}
+	                >
+	                  ← {t(uiLocale, "nav.back")}
+	                </Button>
                 <div className="grid grid-cols-2 gap-2">
                   <Button
                     variant="outline"
                     className="h-11 rounded-xl text-xs"
                     onClick={() => submitPO(false)}
                     disabled={isSubmitting}
-                  >
+	                  >
                     {isSubmitting ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <FileText className="mr-1 h-3.5 w-3.5" />
                     )}
-                    บันทึกร่าง
-                  </Button>
+	                    {t(uiLocale, "purchase.createWizard.cta.saveDraft")}
+	                  </Button>
                   <Button
                     className="h-11 rounded-xl bg-emerald-600 text-xs text-white hover:bg-emerald-700"
                     onClick={() => submitPO(true)}
@@ -3262,16 +3390,16 @@ export function PurchaseOrderList({
                     ) : (
                       <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
                     )}
-                    รับสินค้าทันที
-                  </Button>
-                </div>
+	                    {t(uiLocale, "purchase.createWizard.cta.receiveNow")}
+	                  </Button>
+	                </div>
                 <Button
                   className="h-11 w-full rounded-xl"
-                  onClick={async () => {
-                    if (items.length === 0) {
-                      toast.error("กรุณาเพิ่มรายการสินค้าอย่างน้อย 1 รายการ");
-                      return;
-                    }
+	                  onClick={async () => {
+	                    if (items.length === 0) {
+	                      toast.error(t(uiLocale, "purchase.create.validation.itemsRequired"));
+	                      return;
+	                    }
                     setIsSubmitting(true);
                     try {
                       const res = await authFetch("/api/stock/purchase-orders", {
@@ -3301,11 +3429,11 @@ export function PurchaseOrderList({
                           })),
                         }),
                       });
-                      const data = await res.json();
-                      if (!res.ok) {
-                        toast.error(data?.message ?? "สร้างไม่สำเร็จ");
-                        return;
-                      }
+	                      const data = await res.json();
+	                      if (!res.ok) {
+	                        toast.error(data?.message ?? t(uiLocale, "purchase.create.error.failed"));
+	                        return;
+	                      }
                       // Now set it to ORDERED
                       const poId = data.purchaseOrder.id;
                       await authFetch(`/api/stock/purchase-orders/${poId}`, {
@@ -3313,69 +3441,69 @@ export function PurchaseOrderList({
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ status: "ORDERED" }),
                       });
-                      toast.success("สร้างใบสั่งซื้อ + ยืนยันสั่งแล้ว");
-                      forceCloseCreateSheet();
-                      await reloadFirstPage();
-                      router.refresh();
-                    } catch {
-                      toast.error("เชื่อมต่อไม่สำเร็จ");
-                    } finally {
-                      setIsSubmitting(false);
-                    }
-                  }}
-                  disabled={isSubmitting}
-                >
+	                      toast.success(t(uiLocale, "purchase.create.toast.successOrdered"));
+	                      forceCloseCreateSheet();
+	                      await reloadFirstPage();
+	                      router.refresh();
+	                    } catch {
+	                      toast.error(t(uiLocale, "purchase.error.serverUnreachable"));
+	                    } finally {
+	                      setIsSubmitting(false);
+	                    }
+	                  }}
+	                  disabled={isSubmitting}
+	                >
                   {isSubmitting ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Package className="mr-1 h-3.5 w-3.5" />
                   )}
-                  ยืนยันสั่งซื้อ
-                </Button>
-              </div>
-            )}
-      </SlideUpSheet>
+	                  {t(uiLocale, "purchase.createWizard.cta.confirmOrder")}
+	                </Button>
+	              </div>
+	            )}
+	      </SlideUpSheet>
 
-      {isCreateOpen && isCreateCloseConfirmOpen ? (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center px-4">
-          <button
-            type="button"
-            aria-label="ปิดกล่องยืนยันปิดฟอร์ม"
-            className="absolute inset-0 bg-slate-900/55"
-            onClick={() => setIsCreateCloseConfirmOpen(false)}
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="ยืนยันปิดฟอร์มสร้างใบสั่งซื้อ"
-            className="relative w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-4 shadow-xl"
-          >
-            <p className="text-sm font-semibold text-slate-900">
-              ยืนยันปิดฟอร์มสร้างใบสั่งซื้อ
-            </p>
-            <p className="mt-2 text-xs text-slate-600">
-              มีข้อมูลที่ยังไม่บันทึก ต้องการปิดและทิ้งข้อมูลที่กรอกไว้หรือไม่
-            </p>
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 rounded-lg text-xs"
-                onClick={() => setIsCreateCloseConfirmOpen(false)}
-              >
-                กลับไปแก้ไข
-              </Button>
-              <Button
-                type="button"
-                className="h-9 rounded-lg bg-red-600 text-xs text-white hover:bg-red-700"
-                onClick={forceCloseCreateSheet}
-              >
-                ปิดและทิ้งข้อมูล
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+	      {isCreateOpen && isCreateCloseConfirmOpen ? (
+	        <div className="fixed inset-0 z-[90] flex items-center justify-center px-4">
+	          <button
+	            type="button"
+	            aria-label={t(uiLocale, "purchase.createWizard.closeConfirm.backdropAria")}
+	            className="absolute inset-0 bg-slate-900/55"
+	            onClick={() => setIsCreateCloseConfirmOpen(false)}
+	          />
+	          <div
+	            role="dialog"
+	            aria-modal="true"
+	            aria-label={t(uiLocale, "purchase.createWizard.closeConfirm.dialogAria")}
+	            className="relative w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-4 shadow-xl"
+	          >
+	            <p className="text-sm font-semibold text-slate-900">
+	              {t(uiLocale, "purchase.createWizard.closeConfirm.title")}
+	            </p>
+	            <p className="mt-2 text-xs text-slate-600">
+	              {t(uiLocale, "purchase.createWizard.closeConfirm.description")}
+	            </p>
+	            <div className="mt-4 grid grid-cols-2 gap-2">
+	              <Button
+	                type="button"
+	                variant="outline"
+	                className="h-9 rounded-lg text-xs"
+	                onClick={() => setIsCreateCloseConfirmOpen(false)}
+	              >
+	                {t(uiLocale, "purchase.createWizard.closeConfirm.cta.backToEdit")}
+	              </Button>
+	              <Button
+	                type="button"
+	                className="h-9 rounded-lg bg-red-600 text-xs text-white hover:bg-red-700"
+	                onClick={forceCloseCreateSheet}
+	              >
+	                {t(uiLocale, "purchase.createWizard.closeConfirm.cta.discard")}
+	              </Button>
+	            </div>
+	          </div>
+	        </div>
+	      ) : null}
 
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
        * PO Detail Sheet (quick actions)
@@ -3429,6 +3557,11 @@ function PODetailSheet({
   ) => void;
 }) {
   const router = useRouter();
+  const uiLocale = useUiLocale();
+  const dateLocale = uiLocaleToDateLocale(uiLocale);
+  const numberLocale = dateLocale;
+  const statusConfig = useMemo(() => getPurchaseStatusConfig(uiLocale), [uiLocale]);
+
   const [po, setPo] = useState<PurchaseOrderDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -3507,13 +3640,13 @@ function PODetailSheet({
         setDetailError(null);
         return;
       }
-      if (!keepExisting) {
-        setPo(null);
-        setDetailError(result.error ?? "โหลดรายละเอียดใบสั่งซื้อไม่สำเร็จ");
-      }
-    },
-    [loadPoDetail],
-  );
+	      if (!keepExisting) {
+	        setPo(null);
+	        setDetailError(result.error ?? t(uiLocale, "purchase.detail.error.loadFailed"));
+	      }
+	    },
+	    [loadPoDetail, uiLocale],
+	  );
 
   useEffect(() => {
     if (!poId) {
@@ -3566,17 +3699,17 @@ function PODetailSheet({
       if (result.purchaseOrder) {
         setPo(result.purchaseOrder);
         setDetailError(null);
-      } else {
-        setPo(null);
-        setDetailError(result.error ?? "โหลดรายละเอียดใบสั่งซื้อไม่สำเร็จ");
-      }
-      setLoading(false);
-    });
+	      } else {
+	        setPo(null);
+	        setDetailError(result.error ?? t(uiLocale, "purchase.detail.error.loadFailed"));
+	      }
+	      setLoading(false);
+	    });
 
     return () => {
       cancelled = true;
     };
-  }, [getCachedPoDetail, loadPoDetail, poId]);
+	  }, [getCachedPoDetail, loadPoDetail, poId, uiLocale]);
 
   const handleStatusChange = async (
     newStatus: "ORDERED" | "SHIPPED" | "RECEIVED" | "CANCELLED",
@@ -3608,11 +3741,11 @@ function PODetailSheet({
 
   const submitFinalizeRate = useCallback(async () => {
     if (!po) return;
-    const nextRate = Number(finalRateInput);
-    if (!Number.isFinite(nextRate) || nextRate <= 0) {
-      toast.error("กรุณากรอกอัตราแลกเปลี่ยนจริงให้ถูกต้อง");
-      return;
-    }
+	    const nextRate = Number(finalRateInput);
+	    if (!Number.isFinite(nextRate) || nextRate <= 0) {
+	      toast.error(t(uiLocale, "purchase.detail.finalizeRate.validation.invalidExchangeRate"));
+	      return;
+	    }
 
     setIsFinalizingRate(true);
     try {
@@ -3636,27 +3769,35 @@ function PODetailSheet({
             purchaseOrder?: PurchaseOrderDetail;
           }
         | null;
-      if (!res.ok) {
-        toast.error(data?.message ?? "ปิดเรทไม่สำเร็จ");
-        return;
-      }
+	      if (!res.ok) {
+	        toast.error(data?.message ?? t(uiLocale, "purchase.detail.finalizeRate.error.failed"));
+	        return;
+	      }
 
       const updatedPo = data?.purchaseOrder;
       if (updatedPo) {
         setPo(updatedPo);
         onCacheUpdate(updatedPo);
       }
-      setIsFinalizeRateMode(false);
-      setFinalRateNoteInput("");
-      toast.success("ปิดเรทเรียบร้อย");
-      await onRefreshList();
-      router.refresh();
-    } catch {
-      toast.error("เชื่อมต่อไม่สำเร็จ");
-    } finally {
-      setIsFinalizingRate(false);
-    }
-  }, [finalRateInput, finalRateNoteInput, onCacheUpdate, onRefreshList, po, router]);
+	      setIsFinalizeRateMode(false);
+	      setFinalRateNoteInput("");
+	      toast.success(t(uiLocale, "purchase.detail.finalizeRate.toast.success"));
+	      await onRefreshList();
+	      router.refresh();
+	    } catch {
+	      toast.error(t(uiLocale, "purchase.error.serverUnreachable"));
+	    } finally {
+	      setIsFinalizingRate(false);
+	    }
+	  }, [
+	    finalRateInput,
+	    finalRateNoteInput,
+	    onCacheUpdate,
+	    onRefreshList,
+	    po,
+	    router,
+	    uiLocale,
+	  ]);
 
   const startSettlePayment = useCallback(() => {
     if (!po) return;
@@ -3668,17 +3809,17 @@ function PODetailSheet({
     setIsSettleMode(true);
   }, [po]);
 
-  const submitSettlePayment = useCallback(async () => {
-    if (!po) return;
-    const amountBase = Math.round(Number(settleAmountInput));
-    if (!Number.isFinite(amountBase) || amountBase <= 0) {
-      toast.error("กรุณากรอกยอดชำระให้ถูกต้อง");
-      return;
-    }
-    if (amountBase > po.outstandingBase) {
-      toast.error("ยอดชำระเกินยอดค้าง");
-      return;
-    }
+	  const submitSettlePayment = useCallback(async () => {
+	    if (!po) return;
+	    const amountBase = Math.round(Number(settleAmountInput));
+	    if (!Number.isFinite(amountBase) || amountBase <= 0) {
+	      toast.error(t(uiLocale, "purchase.detail.settle.validation.amountInvalid"));
+	      return;
+	    }
+	    if (amountBase > po.outstandingBase) {
+	      toast.error(t(uiLocale, "purchase.detail.settle.validation.amountTooHigh"));
+	      return;
+	    }
     setIsSettlingPayment(true);
     try {
       const res = await authFetch(`/api/stock/purchase-orders/${po.id}/settle`, {
@@ -3701,35 +3842,36 @@ function PODetailSheet({
           }
         | null;
 
-      if (!res.ok) {
-        toast.error(data?.message ?? "บันทึกชำระไม่สำเร็จ");
-        return;
-      }
+	      if (!res.ok) {
+	        toast.error(data?.message ?? t(uiLocale, "purchase.detail.settle.error.failed"));
+	        return;
+	      }
 
       const updatedPo = data?.purchaseOrder;
       if (updatedPo) {
         setPo(updatedPo);
         onCacheUpdate(updatedPo);
-      }
-      setIsSettleMode(false);
-      toast.success("บันทึกชำระเรียบร้อย");
-      await onRefreshList();
-      router.refresh();
-    } catch {
-      toast.error("เชื่อมต่อไม่สำเร็จ");
-    } finally {
-      setIsSettlingPayment(false);
-    }
-  }, [
-    onCacheUpdate,
-    onRefreshList,
-    po,
-    router,
-    settleAmountInput,
-    settleNoteInput,
-    settlePaidAtInput,
-    settleReferenceInput,
-  ]);
+	      }
+	      setIsSettleMode(false);
+	      toast.success(t(uiLocale, "purchase.detail.settle.toast.success"));
+	      await onRefreshList();
+	      router.refresh();
+	    } catch {
+	      toast.error(t(uiLocale, "purchase.error.serverUnreachable"));
+	    } finally {
+	      setIsSettlingPayment(false);
+	    }
+	  }, [
+	    onCacheUpdate,
+	    onRefreshList,
+	    po,
+	    router,
+	    settleAmountInput,
+	    settleNoteInput,
+	    settlePaidAtInput,
+	    settleReferenceInput,
+	    uiLocale,
+	  ]);
 
   const startApplyExtraCost = useCallback(() => {
     if (!po) return;
@@ -3744,14 +3886,14 @@ function PODetailSheet({
     const shippingCost = Math.round(Number(extraCostShippingInput));
     const otherCost = Math.round(Number(extraCostOtherInput));
 
-    if (!Number.isFinite(shippingCost) || shippingCost < 0) {
-      toast.error("กรุณากรอกค่าขนส่งให้ถูกต้อง");
-      return;
-    }
-    if (!Number.isFinite(otherCost) || otherCost < 0) {
-      toast.error("กรุณากรอกค่าอื่นๆ ให้ถูกต้อง");
-      return;
-    }
+	    if (!Number.isFinite(shippingCost) || shippingCost < 0) {
+	      toast.error(t(uiLocale, "purchase.detail.extraCost.validation.shippingInvalid"));
+	      return;
+	    }
+	    if (!Number.isFinite(otherCost) || otherCost < 0) {
+	      toast.error(t(uiLocale, "purchase.detail.extraCost.validation.otherInvalid"));
+	      return;
+	    }
 
     setIsApplyingExtraCost(true);
     try {
@@ -3776,32 +3918,33 @@ function PODetailSheet({
             purchaseOrder?: PurchaseOrderDetail;
           }
         | null;
-      if (!res.ok) {
-        toast.error(data?.message ?? "อัปเดตค่าขนส่ง/ค่าอื่นไม่สำเร็จ");
-        return;
-      }
+	      if (!res.ok) {
+	        toast.error(data?.message ?? t(uiLocale, "purchase.detail.extraCost.error.failed"));
+	        return;
+	      }
       if (data?.purchaseOrder) {
         setPo(data.purchaseOrder);
         onCacheUpdate(data.purchaseOrder);
-      }
-      setIsApplyExtraCostMode(false);
-      toast.success("อัปเดตค่าขนส่ง/ค่าอื่นเรียบร้อย");
-      await onRefreshList();
-      router.refresh();
-    } catch {
-      toast.error("เชื่อมต่อไม่สำเร็จ");
-    } finally {
-      setIsApplyingExtraCost(false);
-    }
-  }, [
-    extraCostOtherInput,
-    extraCostOtherNoteInput,
-    extraCostShippingInput,
-    onCacheUpdate,
-    onRefreshList,
-    po,
-    router,
-  ]);
+	      }
+	      setIsApplyExtraCostMode(false);
+	      toast.success(t(uiLocale, "purchase.detail.extraCost.toast.success"));
+	      await onRefreshList();
+	      router.refresh();
+	    } catch {
+	      toast.error(t(uiLocale, "purchase.error.serverUnreachable"));
+	    } finally {
+	      setIsApplyingExtraCost(false);
+	    }
+	  }, [
+	    extraCostOtherInput,
+	    extraCostOtherNoteInput,
+	    extraCostShippingInput,
+	    onCacheUpdate,
+	    onRefreshList,
+	    po,
+	    router,
+	    uiLocale,
+	  ]);
 
   const reversePayment = useCallback(
     async (paymentId: string) => {
@@ -3825,25 +3968,25 @@ function PODetailSheet({
               purchaseOrder?: PurchaseOrderDetail;
             }
           | null;
-        if (!res.ok) {
-          toast.error(data?.message ?? "ย้อนรายการชำระไม่สำเร็จ");
-          return;
-        }
+	        if (!res.ok) {
+	          toast.error(data?.message ?? t(uiLocale, "purchase.detail.reversePayment.error.failed"));
+	          return;
+	        }
         if (data?.purchaseOrder) {
           setPo(data.purchaseOrder);
           onCacheUpdate(data.purchaseOrder);
         }
-        toast.success("ย้อนรายการชำระเรียบร้อย");
-        await onRefreshList();
-        router.refresh();
-      } catch {
-        toast.error("เชื่อมต่อไม่สำเร็จ");
-      } finally {
-        setReversingPaymentId(null);
-      }
-    },
-    [onCacheUpdate, onRefreshList, po, router],
-  );
+	        toast.success(t(uiLocale, "purchase.detail.reversePayment.toast.success"));
+	        await onRefreshList();
+	        router.refresh();
+	      } catch {
+	        toast.error(t(uiLocale, "purchase.error.serverUnreachable"));
+	      } finally {
+	        setReversingPaymentId(null);
+	      }
+	    },
+	    [onCacheUpdate, onRefreshList, po, router, uiLocale],
+	  );
 
   const canEditPO =
     po?.status === "DRAFT" || po?.status === "ORDERED" || po?.status === "SHIPPED";
@@ -3896,12 +4039,12 @@ function PODetailSheet({
     setIsEditMode(true);
   };
 
-  const saveEdit = async () => {
-    if (!po) return;
-    if (isDraftEditable && editForm.items.length === 0) {
-      toast.error("ต้องมีอย่างน้อย 1 รายการสินค้า");
-      return;
-    }
+	  const saveEdit = async () => {
+	    if (!po) return;
+	    if (isDraftEditable && editForm.items.length === 0) {
+	      toast.error(t(uiLocale, "purchase.create.validation.itemsRequired"));
+	      return;
+	    }
 
     setIsSavingEdit(true);
     try {
@@ -3944,36 +4087,36 @@ function PODetailSheet({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data?.message ?? "อัปเดต PO ไม่สำเร็จ");
-        return;
-      }
+	      const data = await res.json();
+	      if (!res.ok) {
+	        toast.error(data?.message ?? t(uiLocale, "purchase.detail.edit.error.failed"));
+	        return;
+	      }
 
       const updatedPo = data.purchaseOrder as PurchaseOrderDetail;
-      setPo(updatedPo);
-      onCacheUpdate(updatedPo);
-      setIsEditMode(false);
-      toast.success("บันทึกการแก้ไข PO เรียบร้อย");
-      router.refresh();
-    } catch {
-      toast.error("เชื่อมต่อไม่สำเร็จ");
-    } finally {
-      setIsSavingEdit(false);
-    }
-  };
+	      setPo(updatedPo);
+	      onCacheUpdate(updatedPo);
+	      setIsEditMode(false);
+	      toast.success(t(uiLocale, "purchase.detail.edit.toast.success"));
+	      router.refresh();
+	    } catch {
+	      toast.error(t(uiLocale, "purchase.error.serverUnreachable"));
+	    } finally {
+	      setIsSavingEdit(false);
+	    }
+	  };
 
   const isOpen = poId !== null;
 
   return (
-    <SlideUpSheet
-      isOpen={isOpen}
-      onClose={onClose}
-      title={po?.poNumber ?? "รายละเอียด"}
-      disabled={
-        updating ||
-        isSavingEdit ||
-        isFinalizingRate ||
+	    <SlideUpSheet
+	      isOpen={isOpen}
+	      onClose={onClose}
+	      title={po?.poNumber ?? t(uiLocale, "purchase.detail.title")}
+	      disabled={
+	        updating ||
+	        isSavingEdit ||
+	        isFinalizingRate ||
         isSettlingPayment ||
         isApplyingExtraCost ||
         reversingPaymentId !== null
@@ -4025,17 +4168,17 @@ function PODetailSheet({
                       variant="outline"
                       className="h-8 rounded-lg border-emerald-300 px-2.5 text-xs text-emerald-700 hover:bg-emerald-50"
                       onClick={startSettlePayment}
-                      disabled={updating || isSettlingPayment || isExchangeRatePending}
-                      title={
-                        isExchangeRatePending
-                          ? "ต้องปิดเรทก่อนบันทึกชำระ"
-                          : undefined
-                      }
-                    >
-                      <Banknote className="mr-1 h-3.5 w-3.5" />
-                      บันทึกชำระ
-                    </Button>
-                  )}
+	                      disabled={updating || isSettlingPayment || isExchangeRatePending}
+	                      title={
+	                        isExchangeRatePending
+	                          ? t(uiLocale, "purchase.detail.settle.tooltip.requiresFinalRate")
+	                          : undefined
+	                      }
+	                    >
+	                      <Banknote className="mr-1 h-3.5 w-3.5" />
+	                      {t(uiLocale, "purchase.action.settlePayment")}
+	                    </Button>
+	                  )}
                   {canApplyExtraCost &&
                     !isEditMode &&
                     !isSettleMode &&
@@ -4045,11 +4188,11 @@ function PODetailSheet({
                       variant="outline"
                       className="h-8 rounded-lg border-sky-300 px-2.5 text-xs text-sky-700 hover:bg-sky-50"
                       onClick={startApplyExtraCost}
-                      disabled={updating || isApplyingExtraCost}
-                    >
-                      อัปเดตค่าส่ง/ค่าอื่น
-                    </Button>
-                  )}
+	                      disabled={updating || isApplyingExtraCost}
+	                    >
+	                      {t(uiLocale, "purchase.action.applyExtraCost")}
+	                    </Button>
+	                  )}
                   {canFinalizeExchangeRate &&
                     !isEditMode &&
                     !isSettleMode &&
@@ -4058,12 +4201,12 @@ function PODetailSheet({
                     <Button
                       variant="outline"
                       className="h-8 rounded-lg border-amber-300 px-2.5 text-xs text-amber-700 hover:bg-amber-50"
-                      onClick={startFinalizeRate}
-                      disabled={updating || isFinalizingRate}
-                    >
-                      ปิดเรท
-                    </Button>
-                  )}
+	                      onClick={startFinalizeRate}
+	                      disabled={updating || isFinalizingRate}
+	                    >
+	                      {t(uiLocale, "purchase.action.finalizeRate")}
+	                    </Button>
+	                  )}
                   {canEditPO &&
                     !isEditMode &&
                     !isSettleMode &&
@@ -4073,12 +4216,12 @@ function PODetailSheet({
                       variant="outline"
                       className="h-8 rounded-lg px-2.5 text-xs"
                       onClick={startEdit}
-                      disabled={updating}
-                    >
-                      <Pencil className="mr-1 h-3.5 w-3.5" />
-                      แก้ไข
-                    </Button>
-                  )}
+	                      disabled={updating}
+	                    >
+	                      <Pencil className="mr-1 h-3.5 w-3.5" />
+	                      {t(uiLocale, "purchase.action.edit")}
+	                    </Button>
+	                  )}
                 </div>
               </div>
 
@@ -4120,15 +4263,15 @@ function PODetailSheet({
                             unitCostBase: item.unitCostBase,
                           })),
                         };
-                        const blob = await generatePoPdf(pdfData, storeCurrency, pdfConfig);
-                        const { downloadBlob } = await import("@/lib/pdf/share-or-download");
-                        downloadBlob(blob, `${po.poNumber}.pdf`);
-                        toast.success("ดาวน์โหลด PDF เรียบร้อย");
-                      } catch {
-                        toast.error("สร้าง PDF ไม่สำเร็จ");
-                      } finally {
-                        setIsGeneratingPdf(false);
-                      }
+	                        const blob = await generatePoPdf(pdfData, storeCurrency, pdfConfig);
+	                        const { downloadBlob } = await import("@/lib/pdf/share-or-download");
+	                        downloadBlob(blob, `${po.poNumber}.pdf`);
+	                        toast.success(t(uiLocale, "purchase.pdf.toast.downloaded"));
+	                      } catch {
+	                        toast.error(t(uiLocale, "purchase.pdf.toast.generateFailed"));
+	                      } finally {
+	                        setIsGeneratingPdf(false);
+	                      }
                     }}
                   >
                     {isGeneratingPdf ? (
@@ -4175,56 +4318,62 @@ function PODetailSheet({
                               unitCostBase: item.unitCostBase,
                             })),
                           };
-                          const blob = await generatePoPdf(pdfData, storeCurrency, pdfConfig);
-                          const { shareOrDownload } = await import("@/lib/pdf/share-or-download");
-                          const result = await shareOrDownload(blob, `${po.poNumber}.pdf`, `ใบสั่งซื้อ ${po.poNumber}`);
-                          if (result === "downloaded") toast.success("ดาวน์โหลด PDF เรียบร้อย");
-                        } catch {
-                          toast.error("แชร์ PDF ไม่สำเร็จ");
-                        } finally {
-                          setIsGeneratingPdf(false);
-                        }
+	                          const blob = await generatePoPdf(pdfData, storeCurrency, pdfConfig);
+	                          const { shareOrDownload } = await import("@/lib/pdf/share-or-download");
+	                          const result = await shareOrDownload(
+	                            blob,
+	                            `${po.poNumber}.pdf`,
+	                            `${t(uiLocale, "purchase.title")} ${po.poNumber}`,
+	                          );
+	                          if (result === "downloaded") toast.success(t(uiLocale, "purchase.pdf.toast.downloaded"));
+	                        } catch {
+	                          toast.error(t(uiLocale, "purchase.pdf.toast.shareFailed"));
+	                        } finally {
+	                          setIsGeneratingPdf(false);
+	                        }
                       }}
-                    >
-                      <Share2 className="h-3.5 w-3.5" />
-                      แชร์
-                    </button>
-                  )}
+	                    >
+	                      <Share2 className="h-3.5 w-3.5" />
+	                      {t(uiLocale, "purchase.pdf.action.share")}
+	                    </button>
+	                  )}
                 </div>
               )}
 
-              {po.purchaseCurrency !== storeCurrency && (
-                <div
-                  className={`rounded-xl border px-3 py-2 text-xs ${
-                    isExchangeRatePending
+	              {po.purchaseCurrency !== storeCurrency && (
+	                <div
+	                  className={`rounded-xl border px-3 py-2 text-xs ${
+	                    isExchangeRatePending
                       ? "border-amber-200 bg-amber-50 text-amber-800"
                       : "border-emerald-200 bg-emerald-50 text-emerald-800"
-                  }`}
-                >
-                  <p className="font-medium">
-                    เรทอ้างอิง: 1 {po.purchaseCurrency} = {po.exchangeRate} {storeCurrency}
-                  </p>
-                  <p className="mt-1">
-                    เรทตั้งต้นตอนสร้าง PO: 1 {po.purchaseCurrency} = {po.exchangeRateInitial} {storeCurrency}
-                  </p>
-                  {isExchangeRatePending ? (
-                    <p className="mt-1">
-                      สถานะ: รอปิดเรทจริง (แนะนำปิดเรทตอนชำระจริงปลายงวด)
-                    </p>
-                  ) : (
-                    <p className="mt-1">
-                      สถานะ: ปิดเรทแล้ว
-                      {po.exchangeRateLockedAt
-                        ? ` เมื่อ ${formatDate(po.exchangeRateLockedAt)}`
-                        : ""}
-                      {po.exchangeRate !== po.exchangeRateInitial
-                        ? ` · ส่วนต่างเรท ${po.exchangeRate - po.exchangeRateInitial > 0 ? "+" : ""}${po.exchangeRate - po.exchangeRateInitial}`
-                        : ""}
-                      {po.exchangeRateLockNote ? ` · ${po.exchangeRateLockNote}` : ""}
-                    </p>
-                  )}
-                </div>
-              )}
+	                  }`}
+	                >
+	                  <p className="font-medium">
+	                    {t(uiLocale, "purchase.detail.fx.referenceRate.prefix")} 1{" "}
+	                    {po.purchaseCurrency} = {po.exchangeRate} {storeCurrency}
+	                  </p>
+	                  <p className="mt-1">
+	                    {t(uiLocale, "purchase.detail.fx.initialRate.prefix")} 1{" "}
+	                    {po.purchaseCurrency} = {po.exchangeRateInitial} {storeCurrency}
+	                  </p>
+	                  {isExchangeRatePending ? (
+	                    <p className="mt-1">
+	                      {t(uiLocale, "purchase.detail.fx.status.pending")}
+	                    </p>
+	                  ) : (
+	                    <p className="mt-1">
+	                      {t(uiLocale, "purchase.detail.fx.status.locked.prefix")}
+	                      {po.exchangeRateLockedAt
+	                        ? `${t(uiLocale, "purchase.detail.fx.lockedAt.prefix")} ${formatDate(po.exchangeRateLockedAt, dateLocale)}`
+	                        : ""}
+	                      {po.exchangeRate !== po.exchangeRateInitial
+	                        ? `${t(uiLocale, "purchase.detail.fx.delta.prefix")} ${po.exchangeRate - po.exchangeRateInitial > 0 ? "+" : ""}${po.exchangeRate - po.exchangeRateInitial}`
+	                        : ""}
+	                      {po.exchangeRateLockNote ? ` · ${po.exchangeRateLockNote}` : ""}
+	                    </p>
+	                  )}
+	                </div>
+	              )}
 
               {po.status === "RECEIVED" && (
                 <div
@@ -4234,77 +4383,88 @@ function PODetailSheet({
                       : po.paymentStatus === "PARTIAL"
                         ? "border-amber-200 bg-amber-50 text-amber-800"
                       : "border-slate-200 bg-slate-50 text-slate-700"
-                  }`}
-                >
-                  <p className="font-medium">
-                    สถานะชำระ: {po.paymentStatus === "PAID"
-                      ? "ชำระแล้ว"
-                      : po.paymentStatus === "PARTIAL"
-                        ? "ชำระบางส่วน"
-                        : "ยังไม่ชำระ"}
-                  </p>
-                  <p className="mt-1">
-                    จ่ายแล้ว {fmtPrice(po.totalPaidBase, storeCurrency)} · ค้าง {fmtPrice(po.outstandingBase, storeCurrency)}
-                  </p>
-                  {po.paymentStatus === "PAID" || po.paymentStatus === "PARTIAL" ? (
-                    <p className="mt-1">
-                      {po.paidAt ? `ชำระเมื่อ ${formatDate(po.paidAt)}` : "บันทึกชำระแล้ว"}
-                      {po.paidByName ? ` · โดย ${po.paidByName}` : ""}
-                      {po.paymentReference ? ` · อ้างอิง ${po.paymentReference}` : ""}
-                      {po.paymentNote ? ` · ${po.paymentNote}` : ""}
-                    </p>
-                  ) : (
-                    <p className="mt-1">
-                      {isExchangeRatePending
-                        ? "ยังปิดเรทไม่ครบ: ต้องปิดเรทก่อนบันทึกชำระ"
-                        : "พร้อมบันทึกชำระเมื่อจ่ายจริง"}
-                    </p>
-                  )}
-                </div>
-              )}
+	                  }`}
+	                >
+	                  <p className="font-medium">
+	                    {t(uiLocale, "purchase.detail.payment.status.prefix")}{" "}
+	                    {po.paymentStatus === "PAID"
+	                      ? t(uiLocale, "purchase.detail.payment.status.PAID")
+	                      : po.paymentStatus === "PARTIAL"
+	                        ? t(uiLocale, "purchase.detail.payment.status.PARTIAL")
+	                        : t(uiLocale, "purchase.detail.payment.status.UNPAID")}
+	                  </p>
+	                  <p className="mt-1">
+	                    {t(uiLocale, "purchase.detail.payment.paidPrefix")}{" "}
+	                    {fmtPrice(po.totalPaidBase, storeCurrency, numberLocale)} ·{" "}
+	                    {t(uiLocale, "purchase.detail.payment.outstandingPrefix")}{" "}
+	                    {fmtPrice(po.outstandingBase, storeCurrency, numberLocale)}
+	                  </p>
+	                  {po.paymentStatus === "PAID" || po.paymentStatus === "PARTIAL" ? (
+	                    <p className="mt-1">
+	                      {po.paidAt
+	                        ? `${t(uiLocale, "purchase.detail.payment.paidAt.prefix")} ${formatDate(po.paidAt, dateLocale)}`
+	                        : t(uiLocale, "purchase.detail.payment.paidRecorded")}
+	                      {po.paidByName
+	                        ? ` · ${t(uiLocale, "stock.movement.by.prefix")} ${po.paidByName}`
+	                        : ""}
+	                      {po.paymentReference
+	                        ? `${t(uiLocale, "purchase.detail.payment.reference.prefix")} ${po.paymentReference}`
+	                        : ""}
+	                      {po.paymentNote ? ` · ${po.paymentNote}` : ""}
+	                    </p>
+	                  ) : (
+	                    <p className="mt-1">
+	                      {isExchangeRatePending
+	                        ? t(uiLocale, "purchase.detail.payment.pendingRateBlocker")
+	                        : t(uiLocale, "purchase.detail.payment.readyToSettleHint")}
+	                    </p>
+	                  )}
+	                </div>
+	              )}
 
-              {isFinalizeRateMode && (
-                <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-amber-700">
-                    ปิดเรทแลกเปลี่ยนจริง
-                  </p>
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-amber-700">
-                      อัตราแลกเปลี่ยนจริง (1 {po.purchaseCurrency} = ? {storeCurrency})
-                    </label>
+	              {isFinalizeRateMode && (
+	                <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+	                  <p className="text-xs font-semibold uppercase tracking-wider text-amber-700">
+	                    {t(uiLocale, "purchase.detail.finalizeRate.title")}
+	                  </p>
+	                  <div className="space-y-1">
+	                    <label className="text-[11px] text-amber-700">
+	                      {t(uiLocale, "purchase.detail.finalizeRate.field.exchangeRate.label")} (1{" "}
+	                      {po.purchaseCurrency} = ? {storeCurrency})
+	                    </label>
                     <input
                       type="number"
                       inputMode="decimal"
-                      className="h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-300"
-                      value={finalRateInput}
-                      onChange={(event) => setFinalRateInput(event.target.value)}
-                      placeholder="เช่น 670"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-amber-700">
-                      หมายเหตุการปิดเรท (ไม่บังคับ)
-                    </label>
-                    <input
-                      className="h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-300"
-                      value={finalRateNoteInput}
-                      onChange={(event) => setFinalRateNoteInput(event.target.value)}
-                      placeholder="เช่น ชำระปลายเดือน/อ้างอิงใบแจ้งหนี้"
-                    />
-                  </div>
-                  <p className="text-[11px] text-amber-700/90">
-                    หมายเหตุ: การปิดเรทจะอัปเดตราคาฐานใน PO นี้สำหรับการอ้างอิงบัญชี ไม่ย้อนแก้เอกสารที่ปิดไปแล้ว
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
+	                      className="h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-300"
+	                      value={finalRateInput}
+	                      onChange={(event) => setFinalRateInput(event.target.value)}
+	                      placeholder={`${t(uiLocale, "common.examplePrefix")} 670`}
+	                    />
+	                  </div>
+	                  <div className="space-y-1">
+	                    <label className="text-[11px] text-amber-700">
+	                      {t(uiLocale, "purchase.detail.finalizeRate.field.note.labelOptional")}
+	                    </label>
+	                    <input
+	                      className="h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-300"
+	                      value={finalRateNoteInput}
+	                      onChange={(event) => setFinalRateNoteInput(event.target.value)}
+	                      placeholder={`${t(uiLocale, "common.examplePrefix")} ${t(uiLocale, "purchase.detail.finalizeRate.field.note.placeholderExample")}`}
+	                    />
+	                  </div>
+	                  <p className="text-[11px] text-amber-700/90">
+	                    {t(uiLocale, "purchase.detail.finalizeRate.help")}
+	                  </p>
+	                  <div className="grid grid-cols-2 gap-2">
                     <Button
                       type="button"
                       variant="outline"
                       className="h-9 border-amber-200 bg-white text-xs text-amber-700 hover:bg-amber-100"
-                      onClick={() => setIsFinalizeRateMode(false)}
-                      disabled={isFinalizingRate}
-                    >
-                      ยกเลิก
-                    </Button>
+	                      onClick={() => setIsFinalizeRateMode(false)}
+	                      disabled={isFinalizingRate}
+	                    >
+	                      {t(uiLocale, "common.action.cancel")}
+	                    </Button>
                     <Button
                       type="button"
                       className="h-9 bg-amber-600 text-xs text-white hover:bg-amber-700"
@@ -4313,40 +4473,41 @@ function PODetailSheet({
                       }}
                       disabled={isFinalizingRate}
                     >
-                      {isFinalizingRate ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        "ยืนยันปิดเรท"
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              )}
+	                      {isFinalizingRate ? (
+	                        <Loader2 className="h-4 w-4 animate-spin" />
+	                      ) : (
+	                        t(uiLocale, "purchase.detail.finalizeRate.cta.confirm")
+	                      )}
+	                    </Button>
+	                  </div>
+	                </div>
+	              )}
 
-              {isSettleMode && (
-                <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
-                    บันทึกชำระ PO
-                  </p>
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-emerald-700">
-                      ยอดชำระ ({storeCurrency})
-                    </label>
+	              {isSettleMode && (
+	                <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+	                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
+	                    {t(uiLocale, "purchase.detail.settle.title")}
+	                  </p>
+	                  <div className="space-y-1">
+	                    <label className="text-[11px] text-emerald-700">
+	                      {t(uiLocale, "purchase.detail.settle.field.amount.label")} ({storeCurrency})
+	                    </label>
                     <input
                       type="number"
                       inputMode="numeric"
                       className="h-9 w-full rounded-lg border border-emerald-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-300"
                       value={settleAmountInput}
                       onChange={(event) => setSettleAmountInput(event.target.value)}
-                    />
-                    <p className="text-[11px] text-emerald-700/90">
-                      ยอดค้างปัจจุบัน {fmtPrice(po.outstandingBase, storeCurrency)}
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-emerald-700">
-                      วันที่ชำระ
-                    </label>
+	                    />
+	                    <p className="text-[11px] text-emerald-700/90">
+	                      {t(uiLocale, "purchase.detail.settle.field.outstandingHint.prefix")}{" "}
+	                      {fmtPrice(po.outstandingBase, storeCurrency, numberLocale)}
+	                    </p>
+	                  </div>
+	                  <div className="space-y-1">
+	                    <label className="text-[11px] text-emerald-700">
+	                      {t(uiLocale, "purchase.detail.settle.field.paidAt.label")}
+	                    </label>
                     <input
                       type="date"
                       className="po-date-input h-9 w-full rounded-lg border border-emerald-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-300"
@@ -4354,21 +4515,21 @@ function PODetailSheet({
                       onChange={(event) => setSettlePaidAtInput(event.target.value)}
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-emerald-700">
-                      เลขอ้างอิงชำระ (ไม่บังคับ)
-                    </label>
+	                  <div className="space-y-1">
+	                    <label className="text-[11px] text-emerald-700">
+	                      {t(uiLocale, "purchase.detail.settle.field.reference.labelOptional")}
+	                    </label>
                     <input
                       className="h-9 w-full rounded-lg border border-emerald-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-300"
-                      value={settleReferenceInput}
-                      onChange={(event) => setSettleReferenceInput(event.target.value)}
-                      placeholder="เช่น Statement ปลายเดือน / เลขใบแจ้งหนี้"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-emerald-700">
-                      หมายเหตุ (ไม่บังคับ)
-                    </label>
+	                      value={settleReferenceInput}
+	                      onChange={(event) => setSettleReferenceInput(event.target.value)}
+	                      placeholder={`${t(uiLocale, "common.examplePrefix")} ${t(uiLocale, "purchase.detail.settle.field.reference.placeholderExample")}`}
+	                    />
+	                  </div>
+	                  <div className="space-y-1">
+	                    <label className="text-[11px] text-emerald-700">
+	                      {t(uiLocale, "purchase.detail.settle.field.note.labelOptional")}
+	                    </label>
                     <input
                       className="h-9 w-full rounded-lg border border-emerald-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-300"
                       value={settleNoteInput}
@@ -4380,11 +4541,11 @@ function PODetailSheet({
                       type="button"
                       variant="outline"
                       className="h-9 border-emerald-200 bg-white text-xs text-emerald-700 hover:bg-emerald-100"
-                      onClick={() => setIsSettleMode(false)}
-                      disabled={isSettlingPayment}
-                    >
-                      ยกเลิก
-                    </Button>
+	                      onClick={() => setIsSettleMode(false)}
+	                      disabled={isSettlingPayment}
+	                    >
+	                      {t(uiLocale, "common.action.cancel")}
+	                    </Button>
                     <Button
                       type="button"
                       className="h-9 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
@@ -4393,26 +4554,26 @@ function PODetailSheet({
                       }}
                       disabled={isSettlingPayment}
                     >
-                      {isSettlingPayment ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        "ยืนยันบันทึกชำระ"
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              )}
+	                      {isSettlingPayment ? (
+	                        <Loader2 className="h-4 w-4 animate-spin" />
+	                      ) : (
+	                        t(uiLocale, "purchase.detail.settle.cta.confirm")
+	                      )}
+	                    </Button>
+	                  </div>
+	                </div>
+	              )}
 
-              {isApplyExtraCostMode && (
-                <div className="space-y-3 rounded-xl border border-sky-200 bg-sky-50 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-sky-700">
-                    อัปเดตค่าขนส่ง/ค่าอื่นหลังรับสินค้า
-                  </p>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <div className="space-y-1">
-                      <label className="text-[11px] text-sky-700">
-                        ค่าขนส่ง ({storeCurrency})
-                      </label>
+	              {isApplyExtraCostMode && (
+	                <div className="space-y-3 rounded-xl border border-sky-200 bg-sky-50 p-3">
+	                  <p className="text-xs font-semibold uppercase tracking-wider text-sky-700">
+	                    {t(uiLocale, "purchase.detail.extraCost.title")}
+	                  </p>
+	                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+	                    <div className="space-y-1">
+	                      <label className="text-[11px] text-sky-700">
+	                        {t(uiLocale, "purchase.field.shippingCost.label")} ({storeCurrency})
+	                      </label>
                       <input
                         type="number"
                         inputMode="numeric"
@@ -4421,10 +4582,10 @@ function PODetailSheet({
                         onChange={(event) => setExtraCostShippingInput(event.target.value)}
                       />
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] text-sky-700">
-                        ค่าอื่นๆ ({storeCurrency})
-                      </label>
+	                    <div className="space-y-1">
+	                      <label className="text-[11px] text-sky-700">
+	                        {t(uiLocale, "purchase.field.otherCost.label")} ({storeCurrency})
+	                      </label>
                       <input
                         type="number"
                         inputMode="numeric"
@@ -4434,35 +4595,36 @@ function PODetailSheet({
                       />
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-sky-700">
-                      หมายเหตุค่าอื่นๆ (ไม่บังคับ)
-                    </label>
+	                  <div className="space-y-1">
+	                    <label className="text-[11px] text-sky-700">
+	                      {t(uiLocale, "purchase.field.otherCostNote.labelOptional")}
+	                    </label>
                     <input
                       className="h-9 w-full rounded-lg border border-sky-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-sky-300"
-                      value={extraCostOtherNoteInput}
-                      onChange={(event) => setExtraCostOtherNoteInput(event.target.value)}
-                      placeholder="เช่น ค่าขนส่งปลายเดือน / ค่าบริการเพิ่มเติม"
-                    />
-                  </div>
-                  <p className="text-[11px] text-sky-700/90">
-                    ยอดรวมใหม่ {fmtPrice(extraCostGrandTotalPreview, storeCurrency)} ·
-                    คงค้างใหม่{" "}
-                    {fmtPrice(Math.max(0, extraCostOutstandingPreview), storeCurrency)}
-                  </p>
-                  <p className="text-[11px] text-sky-700/90">
-                    หมายเหตุ: อัปเดตยอด AP/statement ทันที แต่ไม่ปรับต้นทุนสินค้าแบบย้อนย้อนหลัง
-                  </p>
+	                      value={extraCostOtherNoteInput}
+	                      onChange={(event) => setExtraCostOtherNoteInput(event.target.value)}
+	                      placeholder={`${t(uiLocale, "common.examplePrefix")} ${t(uiLocale, "purchase.detail.extraCost.field.otherCostNote.placeholderExample")}`}
+	                    />
+	                  </div>
+	                  <p className="text-[11px] text-sky-700/90">
+	                    {t(uiLocale, "purchase.detail.extraCost.preview.newTotalPrefix")}{" "}
+	                    {fmtPrice(extraCostGrandTotalPreview, storeCurrency, numberLocale)} ·{" "}
+	                    {t(uiLocale, "purchase.detail.extraCost.preview.newOutstandingPrefix")}{" "}
+	                    {fmtPrice(Math.max(0, extraCostOutstandingPreview), storeCurrency, numberLocale)}
+	                  </p>
+	                  <p className="text-[11px] text-sky-700/90">
+	                    {t(uiLocale, "purchase.detail.extraCost.help")}
+	                  </p>
                   <div className="grid grid-cols-2 gap-2">
                     <Button
                       type="button"
                       variant="outline"
                       className="h-9 border-sky-200 bg-white text-xs text-sky-700 hover:bg-sky-100"
-                      onClick={() => setIsApplyExtraCostMode(false)}
-                      disabled={isApplyingExtraCost}
-                    >
-                      ยกเลิก
-                    </Button>
+	                      onClick={() => setIsApplyExtraCostMode(false)}
+	                      disabled={isApplyingExtraCost}
+	                    >
+	                      {t(uiLocale, "common.action.cancel")}
+	                    </Button>
                     <Button
                       type="button"
                       className="h-9 bg-sky-600 text-xs text-white hover:bg-sky-700"
@@ -4471,21 +4633,21 @@ function PODetailSheet({
                       }}
                       disabled={isApplyingExtraCost}
                     >
-                      {isApplyingExtraCost ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        "ยืนยันอัปเดต"
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              )}
+	                      {isApplyingExtraCost ? (
+	                        <Loader2 className="h-4 w-4 animate-spin" />
+	                      ) : (
+	                        t(uiLocale, "purchase.detail.extraCost.cta.confirm")
+	                      )}
+	                    </Button>
+	                  </div>
+	                </div>
+	              )}
 
-              {po.status === "RECEIVED" && po.paymentEntries.length > 0 && (
-                <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                    ประวัติการชำระ
-                  </p>
+	              {po.status === "RECEIVED" && po.paymentEntries.length > 0 && (
+	                <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
+	                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+	                    {t(uiLocale, "purchase.detail.payments.title")}
+	                  </p>
                   <div className="space-y-2">
                     {po.paymentEntries.map((entry) => {
                       const isReversed = po.paymentEntries.some(
@@ -4498,16 +4660,22 @@ function PODetailSheet({
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <p className="text-xs font-medium text-slate-700">
-                                {entry.entryType === "PAYMENT" ? "ชำระ" : "ย้อนรายการ"}
-                                {" · "}
-                                {entry.paidAt ? formatDate(entry.paidAt) : "-"}
-                              </p>
-                              <p className="text-[11px] text-slate-500">
-                                {entry.createdByName ? `โดย ${entry.createdByName}` : "โดยระบบ"}
-                                {entry.reference ? ` · อ้างอิง ${entry.reference}` : ""}
-                                {entry.note ? ` · ${entry.note}` : ""}
-                              </p>
+	                              <p className="text-xs font-medium text-slate-700">
+	                                {entry.entryType === "PAYMENT"
+	                                  ? t(uiLocale, "purchase.detail.payments.entryType.PAYMENT")
+	                                  : t(uiLocale, "purchase.detail.payments.entryType.REVERSAL")}
+	                                {" · "}
+	                                {entry.paidAt ? formatDate(entry.paidAt, dateLocale) : "-"}
+	                              </p>
+	                              <p className="text-[11px] text-slate-500">
+	                                {entry.createdByName
+	                                  ? `${t(uiLocale, "stock.movement.by.prefix")} ${entry.createdByName}`
+	                                  : t(uiLocale, "purchase.detail.payments.bySystem")}
+	                                {entry.reference
+	                                  ? `${t(uiLocale, "purchase.detail.payment.reference.prefix")} ${entry.reference}`
+	                                  : ""}
+	                                {entry.note ? ` · ${entry.note}` : ""}
+	                              </p>
                             </div>
                             <div className="text-right">
                               <p
@@ -4518,7 +4686,7 @@ function PODetailSheet({
                                 }`}
                               >
                                 {entry.entryType === "PAYMENT" ? "+" : "-"}
-                                {fmtPrice(entry.amountBase, storeCurrency)}
+                                {fmtPrice(entry.amountBase, storeCurrency, numberLocale)}
                               </p>
                               {entry.entryType === "PAYMENT" && !isReversed ? (
                                 <Button
@@ -4530,16 +4698,18 @@ function PODetailSheet({
                                   }}
                                   disabled={reversingPaymentId === entry.id}
                                 >
-                                  {reversingPaymentId === entry.id ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  ) : (
-                                    "ย้อนรายการ"
-                                  )}
-                                </Button>
-                              ) : null}
-                              {entry.entryType === "PAYMENT" && isReversed ? (
-                                <p className="mt-1 text-[10px] text-slate-500">ถูกย้อนแล้ว</p>
-                              ) : null}
+	                                  {reversingPaymentId === entry.id ? (
+	                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+	                                  ) : (
+	                                    t(uiLocale, "purchase.detail.reversePayment.cta.label")
+	                                  )}
+	                                </Button>
+	                              ) : null}
+	                              {entry.entryType === "PAYMENT" && isReversed ? (
+	                                <p className="mt-1 text-[10px] text-slate-500">
+	                                  {t(uiLocale, "purchase.detail.reversePayment.badge.reversed")}
+	                                </p>
+	                              ) : null}
                             </div>
                           </div>
                         </div>
@@ -4549,17 +4719,19 @@ function PODetailSheet({
                 </div>
               )}
 
-              {isEditMode && (
-                <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    แก้ไข PO
-                  </p>
+	              {isEditMode && (
+	                <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+	                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+	                    {t(uiLocale, "purchase.detail.edit.title")}
+	                  </p>
 
                   {isDraftEditable && (
                     <>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <label className="text-[11px] text-slate-500">ซัพพลายเออร์</label>
+	                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+	                        <div className="space-y-1">
+	                          <label className="text-[11px] text-slate-500">
+	                            {t(uiLocale, "purchase.detail.edit.field.supplierName.label")}
+	                          </label>
                           <input
                             className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
                             value={editForm.supplierName}
@@ -4571,8 +4743,10 @@ function PODetailSheet({
                             }
                           />
                         </div>
-                        <div className="space-y-1">
-                          <label className="text-[11px] text-slate-500">เบอร์ติดต่อ</label>
+	                        <div className="space-y-1">
+	                          <label className="text-[11px] text-slate-500">
+	                            {t(uiLocale, "purchase.detail.edit.field.supplierContact.label")}
+	                          </label>
                           <input
                             className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
                             type="tel"
@@ -4590,9 +4764,11 @@ function PODetailSheet({
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <label className="text-[11px] text-slate-500">สกุลเงิน</label>
+	                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+	                        <div className="space-y-1">
+	                          <label className="text-[11px] text-slate-500">
+	                            {t(uiLocale, "purchase.detail.edit.field.purchaseCurrency.label")}
+	                          </label>
                           <select
                             className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
                             value={editForm.purchaseCurrency}
@@ -4608,8 +4784,10 @@ function PODetailSheet({
                             <option value="USD">USD</option>
                           </select>
                         </div>
-                        <div className="space-y-1">
-                          <label className="text-[11px] text-slate-500">อัตราแลกเปลี่ยน</label>
+	                        <div className="space-y-1">
+	                          <label className="text-[11px] text-slate-500">
+	                            {t(uiLocale, "purchase.detail.edit.field.exchangeRate.label")}
+	                          </label>
                           <input
                             type="number"
                             className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
@@ -4621,17 +4799,19 @@ function PODetailSheet({
                               }))
                             }
                           />
-                          {editForm.purchaseCurrency !== storeCurrency && (
-                            <p className="text-[10px] text-slate-500">
-                              เว้นว่างได้ถ้ายังไม่ทราบเรทจริง (ระบบจะตั้งเป็นรอปิดเรท)
-                            </p>
-                          )}
-                        </div>
-                      </div>
+	                          {editForm.purchaseCurrency !== storeCurrency && (
+	                            <p className="text-[10px] text-slate-500">
+	                              {t(uiLocale, "purchase.detail.edit.field.exchangeRate.helpPendingRate")}
+	                            </p>
+	                          )}
+	                        </div>
+	                      </div>
 
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <label className="text-[11px] text-slate-500">ค่าขนส่ง</label>
+	                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+	                        <div className="space-y-1">
+	                          <label className="text-[11px] text-slate-500">
+	                            {t(uiLocale, "purchase.field.shippingCost.label")}
+	                          </label>
                           <input
                             type="number"
                             className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
@@ -4644,8 +4824,10 @@ function PODetailSheet({
                             }
                           />
                         </div>
-                        <div className="space-y-1">
-                          <label className="text-[11px] text-slate-500">ค่าอื่นๆ</label>
+	                        <div className="space-y-1">
+	                          <label className="text-[11px] text-slate-500">
+	                            {t(uiLocale, "purchase.field.otherCost.label")}
+	                          </label>
                           <input
                             type="number"
                             className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
@@ -4660,8 +4842,10 @@ function PODetailSheet({
                         </div>
                       </div>
 
-                      <div className="space-y-1">
-                        <label className="text-[11px] text-slate-500">หมายเหตุค่าอื่นๆ</label>
+	                      <div className="space-y-1">
+	                        <label className="text-[11px] text-slate-500">
+	                          {t(uiLocale, "purchase.field.otherCostNote.label")}
+	                        </label>
                         <input
                           className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
                           value={editForm.otherCostNote}
@@ -4674,8 +4858,10 @@ function PODetailSheet({
                         />
                       </div>
 
-                      <div className="space-y-2">
-                        <p className="text-[11px] text-slate-500">รายการสินค้า</p>
+	                      <div className="space-y-2">
+	                        <p className="text-[11px] text-slate-500">
+	                          {t(uiLocale, "purchase.detail.edit.items.title")}
+	                        </p>
                         {editForm.items.map((item, index) => (
                           <div
                             key={`${item.productId}-${index}`}
@@ -4722,91 +4908,99 @@ function PODetailSheet({
                     </>
                   )}
 
-                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-                    <div className="space-y-1 min-w-0">
-                      <label className="text-[11px] text-slate-500">วันที่คาดรับ</label>
-                      <PurchaseDatePickerField
+	                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+	                    <div className="space-y-1 min-w-0">
+	                      <label className="text-[11px] text-slate-500">
+	                        {t(uiLocale, "purchase.detail.edit.field.expectedAt.label")}
+	                      </label>
+	                      <PurchaseDatePickerField
+                        uiLocale={uiLocale}
                         value={editForm.expectedAt}
                         onChange={(nextValue) =>
                           setEditForm((prev) => ({ ...prev, expectedAt: nextValue }))
-                        }
-                        triggerClassName="h-9 w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-2.5 text-left text-base sm:text-sm outline-none focus:ring-2 focus:ring-primary"
-                        ariaLabel="เลือกวันที่คาดรับในฟอร์มแก้ไข PO"
-                      />
+	                        }
+	                        triggerClassName="h-9 w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-2.5 text-left text-base sm:text-sm outline-none focus:ring-2 focus:ring-primary"
+	                        ariaLabel={t(uiLocale, "purchase.detail.edit.field.expectedAt.aria")}
+	                      />
                       <div className="flex max-w-full flex-wrap gap-1.5 pt-1">
                         <button
                           type="button"
                           className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-slate-50"
                           onClick={() => applyEditDateShortcut("expectedAt", "TODAY")}
-                        >
-                          วันนี้
-                        </button>
+	                        >
+	                          {t(uiLocale, "purchase.dateShortcut.today")}
+	                        </button>
                         <button
                           type="button"
                           className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-slate-50"
                           onClick={() => applyEditDateShortcut("expectedAt", "PLUS_7")}
-                        >
-                          +7 วัน
-                        </button>
+	                        >
+	                          {t(uiLocale, "purchase.dateShortcut.plus7")}
+	                        </button>
                         <button
                           type="button"
                           className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-slate-50"
                           onClick={() => applyEditDateShortcut("expectedAt", "END_OF_MONTH")}
-                        >
-                          สิ้นเดือน
-                        </button>
+	                        >
+	                          {t(uiLocale, "purchase.dateShortcut.endOfMonth")}
+	                        </button>
                         <button
                           type="button"
                           className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-slate-50"
                           onClick={() => applyEditDateShortcut("expectedAt", "CLEAR")}
-                        >
-                          ล้างค่า
-                        </button>
+	                        >
+	                          {t(uiLocale, "purchase.dateShortcut.clear")}
+	                        </button>
                       </div>
                     </div>
-                    <div className="space-y-1 min-w-0">
-                      <label className="text-[11px] text-slate-500">ครบกำหนดชำระ</label>
-                      <PurchaseDatePickerField
+	                    <div className="space-y-1 min-w-0">
+	                      <label className="text-[11px] text-slate-500">
+	                        {t(uiLocale, "purchase.detail.edit.field.dueDate.label")}
+	                      </label>
+	                      <PurchaseDatePickerField
+                        uiLocale={uiLocale}
                         value={editForm.dueDate}
                         onChange={(nextValue) =>
                           setEditForm((prev) => ({ ...prev, dueDate: nextValue }))
-                        }
-                        triggerClassName="h-9 w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-2.5 text-left text-base sm:text-sm outline-none focus:ring-2 focus:ring-primary"
-                        ariaLabel="เลือกวันที่ครบกำหนดชำระในฟอร์มแก้ไข PO"
-                      />
+	                        }
+	                        triggerClassName="h-9 w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-2.5 text-left text-base sm:text-sm outline-none focus:ring-2 focus:ring-primary"
+	                        ariaLabel={t(uiLocale, "purchase.detail.edit.field.dueDate.aria")}
+	                      />
                       <div className="flex max-w-full flex-wrap gap-1.5 pt-1">
                         <button
                           type="button"
                           className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-slate-50"
                           onClick={() => applyEditDateShortcut("dueDate", "TODAY")}
-                        >
-                          วันนี้
-                        </button>
+	                        >
+	                          {t(uiLocale, "purchase.dateShortcut.today")}
+	                        </button>
                         <button
                           type="button"
                           className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-slate-50"
                           onClick={() => applyEditDateShortcut("dueDate", "PLUS_7")}
-                        >
-                          +7 วัน
-                        </button>
+	                        >
+	                          {t(uiLocale, "purchase.dateShortcut.plus7")}
+	                        </button>
                         <button
                           type="button"
                           className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-slate-50"
                           onClick={() => applyEditDateShortcut("dueDate", "END_OF_MONTH")}
-                        >
-                          สิ้นเดือน
-                        </button>
+	                        >
+	                          {t(uiLocale, "purchase.dateShortcut.endOfMonth")}
+	                        </button>
                         <button
                           type="button"
                           className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-slate-50"
                           onClick={() => applyEditDateShortcut("dueDate", "CLEAR")}
-                        >
-                          ล้างค่า
-                        </button>
+	                        >
+	                          {t(uiLocale, "purchase.dateShortcut.clear")}
+	                        </button>
                       </div>
                     </div>
-                    <div className="space-y-1 min-w-0">
-                      <label className="text-[11px] text-slate-500">Tracking</label>
+	                    <div className="space-y-1 min-w-0">
+	                      <label className="text-[11px] text-slate-500">
+	                        {t(uiLocale, "purchase.detail.edit.field.tracking.label")}
+	                      </label>
                       <input
                         className="h-9 w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
                         value={editForm.trackingInfo}
@@ -4820,8 +5014,10 @@ function PODetailSheet({
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-slate-500">หมายเหตุ</label>
+	                  <div className="space-y-1">
+	                    <label className="text-[11px] text-slate-500">
+	                      {t(uiLocale, "purchase.detail.edit.field.note.label")}
+	                    </label>
                     <input
                       className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
                       value={editForm.note}
@@ -4834,86 +5030,97 @@ function PODetailSheet({
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      variant="outline"
-                      className="h-10 rounded-lg"
-                      onClick={() => setIsEditMode(false)}
-                      disabled={isSavingEdit}
-                    >
-                      ยกเลิก
-                    </Button>
+	                  <div className="grid grid-cols-2 gap-2">
+	                    <Button
+	                      variant="outline"
+	                      className="h-10 rounded-lg"
+	                      onClick={() => setIsEditMode(false)}
+	                      disabled={isSavingEdit}
+	                    >
+	                      {t(uiLocale, "common.action.cancel")}
+	                    </Button>
                     <Button
                       className="h-10 rounded-lg"
                       onClick={saveEdit}
                       disabled={isSavingEdit}
                     >
-                      {isSavingEdit ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        "บันทึกการแก้ไข"
-                      )}
-                    </Button>
-                  </div>
+	                      {isSavingEdit ? (
+	                        <Loader2 className="h-4 w-4 animate-spin" />
+	                      ) : (
+	                        t(uiLocale, "purchase.detail.edit.cta.save")
+	                      )}
+	                    </Button>
+	                  </div>
                 </div>
               )}
 
-              {/* Timeline */}
-              <div className="space-y-1.5 text-xs">
-                {po.createdAt && (
-                  <div className="flex items-center gap-2 text-slate-600">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                    {formatDate(po.createdAt)} สร้าง
-                    {po.createdByName ? ` โดย ${po.createdByName}` : ""}
-                  </div>
-                )}
-                {po.orderedAt && (
-                  <div className="flex items-center gap-2 text-slate-600">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                    {formatDate(po.orderedAt)} ยืนยันสั่งซื้อ
-                  </div>
-                )}
-                {po.shippedAt && (
-                  <div className="flex items-center gap-2 text-slate-600">
-                    <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
-                    {formatDate(po.shippedAt)} จัดส่ง
-                    {po.trackingInfo ? ` (${po.trackingInfo})` : ""}
-                  </div>
-                )}
-                {po.receivedAt && (
-                  <div className="flex items-center gap-2 text-slate-600">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    {formatDate(po.receivedAt)} รับสินค้าแล้ว
-                  </div>
-                )}
-                {po.paidAt && (
-                  <div className="flex items-center gap-2 text-slate-600">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-700" />
-                    {formatDate(po.paidAt)} บันทึกชำระแล้ว
-                    {po.paidByName ? ` โดย ${po.paidByName}` : ""}
-                  </div>
-                )}
+	              {/* Timeline */}
+	              <div className="space-y-1.5 text-xs">
+	                {po.createdAt && (
+	                  <div className="flex items-center gap-2 text-slate-600">
+	                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+	                    {formatDate(po.createdAt, dateLocale)}{" "}
+	                    {t(uiLocale, "purchase.detail.timeline.created")}
+	                    {po.createdByName
+	                      ? `${t(uiLocale, "purchase.detail.timeline.by.prefix")} ${po.createdByName}`
+	                      : ""}
+	                  </div>
+	                )}
+	                {po.orderedAt && (
+	                  <div className="flex items-center gap-2 text-slate-600">
+	                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+	                    {formatDate(po.orderedAt, dateLocale)}{" "}
+	                    {t(uiLocale, "purchase.detail.timeline.ordered")}
+	                  </div>
+	                )}
+	                {po.shippedAt && (
+	                  <div className="flex items-center gap-2 text-slate-600">
+	                    <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+	                    {formatDate(po.shippedAt, dateLocale)}{" "}
+	                    {t(uiLocale, "purchase.detail.timeline.shipped")}
+	                    {po.trackingInfo ? ` (${po.trackingInfo})` : ""}
+	                  </div>
+	                )}
+	                {po.receivedAt && (
+	                  <div className="flex items-center gap-2 text-slate-600">
+	                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+	                    {formatDate(po.receivedAt, dateLocale)}{" "}
+	                    {t(uiLocale, "purchase.detail.timeline.received")}
+	                  </div>
+	                )}
+	                {po.paidAt && (
+	                  <div className="flex items-center gap-2 text-slate-600">
+	                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-700" />
+	                    {formatDate(po.paidAt, dateLocale)}{" "}
+	                    {t(uiLocale, "purchase.detail.timeline.paid")}
+	                    {po.paidByName
+	                      ? `${t(uiLocale, "purchase.detail.timeline.by.prefix")} ${po.paidByName}`
+	                      : ""}
+	                  </div>
+	                )}
                 {po.expectedAt &&
                   po.status !== "RECEIVED" &&
-                  po.status !== "CANCELLED" && (
-                    <div className="flex items-center gap-2 text-slate-500">
-                      <span className="h-1.5 w-1.5 rounded-full border border-slate-300 bg-white" />
-                      คาดว่า {formatDate(po.expectedAt)}
-                    </div>
-                  )}
-                {po.dueDate && po.outstandingBase > 0 && (
-                  <div className="flex items-center gap-2 text-slate-500">
-                    <span className="h-1.5 w-1.5 rounded-full border border-slate-300 bg-white" />
-                    ครบกำหนดชำระ {formatDate(po.dueDate)}
-                  </div>
-                )}
-              </div>
+	                  po.status !== "CANCELLED" && (
+	                    <div className="flex items-center gap-2 text-slate-500">
+	                      <span className="h-1.5 w-1.5 rounded-full border border-slate-300 bg-white" />
+	                      {t(uiLocale, "purchase.detail.timeline.expected.prefix")}{" "}
+	                      {formatDate(po.expectedAt, dateLocale)}
+	                    </div>
+	                  )}
+	                {po.dueDate && po.outstandingBase > 0 && (
+	                  <div className="flex items-center gap-2 text-slate-500">
+	                    <span className="h-1.5 w-1.5 rounded-full border border-slate-300 bg-white" />
+	                    {t(uiLocale, "purchase.detail.timeline.dueDate.prefix")}{" "}
+	                    {formatDate(po.dueDate, dateLocale)}
+	                  </div>
+	                )}
+	              </div>
 
-              {/* Items */}
-              <div className="space-y-1.5">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                  รายการสินค้า ({po.items.length})
-                </p>
+	              {/* Items */}
+	              <div className="space-y-1.5">
+	                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+	                  {t(uiLocale, "purchase.detail.items.title")} ({po.items.length})
+	                </p>
                 {po.items.map((item) => (
                   <div
                     key={item.id}
@@ -4925,49 +5132,59 @@ function PODetailSheet({
                       </p>
                       <p className="text-xs text-slate-500">
                         {item.qtyOrdered} ×{" "}
-                        {fmtPrice(item.unitCostBase, storeCurrency)}
-                        {item.qtyReceived > 0 &&
-                          item.qtyReceived !== item.qtyOrdered && (
-                            <span className="ml-1 text-amber-600">
-                              (ได้รับ {item.qtyReceived})
-                            </span>
-                          )}
-                      </p>
+	                        {fmtPrice(item.unitCostBase, storeCurrency, numberLocale)}
+	                        {item.qtyReceived > 0 &&
+	                          item.qtyReceived !== item.qtyOrdered && (
+	                            <span className="ml-1 text-amber-600">
+	                              {t(uiLocale, "purchase.detail.items.receivedQty.prefix")}{" "}
+	                              {item.qtyReceived}
+	                              {t(uiLocale, "purchase.detail.items.receivedQty.suffix")}
+	                            </span>
+	                          )}
+	                      </p>
                     </div>
                     <span className="text-sm font-medium text-slate-900">
                       {fmtPrice(
                         item.unitCostBase * item.qtyOrdered,
                         storeCurrency,
+                        numberLocale,
                       )}
                     </span>
                   </div>
                 ))}
               </div>
 
-              {/* Cost summary */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-slate-600">สินค้า</span>
-                  <span>{fmtPrice(po.totalCostBase, storeCurrency)}</span>
-                </div>
-                {po.shippingCost > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">ค่าขนส่ง</span>
-                    <span>{fmtPrice(po.shippingCost, storeCurrency)}</span>
-                  </div>
-                )}
-                {po.otherCost > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">ค่าอื่นๆ</span>
-                    <span>{fmtPrice(po.otherCost, storeCurrency)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between border-t border-slate-200 pt-1 font-semibold">
-                  <span>รวม</span>
-                  <span>
-                    {fmtPrice(
-                      po.totalCostBase + po.shippingCost + po.otherCost,
+	              {/* Cost summary */}
+	              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+	                <div className="flex justify-between">
+	                  <span className="text-slate-600">
+	                    {t(uiLocale, "purchase.summary.products")}
+	                  </span>
+	                  <span>{fmtPrice(po.totalCostBase, storeCurrency, numberLocale)}</span>
+	                </div>
+	                {po.shippingCost > 0 && (
+	                  <div className="flex justify-between">
+	                    <span className="text-slate-600">
+	                      {t(uiLocale, "purchase.summary.shipping")}
+	                    </span>
+	                    <span>{fmtPrice(po.shippingCost, storeCurrency, numberLocale)}</span>
+	                  </div>
+	                )}
+	                {po.otherCost > 0 && (
+	                  <div className="flex justify-between">
+	                    <span className="text-slate-600">
+	                      {t(uiLocale, "purchase.summary.other")}
+	                    </span>
+	                    <span>{fmtPrice(po.otherCost, storeCurrency, numberLocale)}</span>
+	                  </div>
+	                )}
+	                <div className="flex justify-between border-t border-slate-200 pt-1 font-semibold">
+	                  <span>{t(uiLocale, "purchase.summary.totalShort")}</span>
+	                  <span>
+	                    {fmtPrice(
+	                      po.totalCostBase + po.shippingCost + po.otherCost,
                       storeCurrency,
+                      numberLocale,
                     )}
                   </span>
                 </div>
@@ -4980,29 +5197,29 @@ function PODetailSheet({
               {/* Action buttons by status */}
               {!isEditMode && (
                 <>
-                  {po.status === "DRAFT" && (
-                    <div className="grid grid-cols-2 gap-2">
+	                  {po.status === "DRAFT" && (
+	                    <div className="grid grid-cols-2 gap-2">
                       <Button
                         variant="outline"
                         className="h-11 rounded-xl border-red-200 text-xs text-red-600 hover:bg-red-50"
-                        onClick={() => handleStatusChange("CANCELLED")}
-                        disabled={updating}
-                      >
-                        ยกเลิก
-                      </Button>
+	                        onClick={() => handleStatusChange("CANCELLED")}
+	                        disabled={updating}
+	                      >
+	                        {t(uiLocale, "purchase.status.cancelled")}
+	                      </Button>
                       <Button
                         className="h-11 rounded-xl text-xs"
                         onClick={() => handleStatusChange("ORDERED")}
                         disabled={updating}
                       >
-                        {updating ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          "ยืนยันสั่งซื้อ"
-                        )}
-                      </Button>
-                    </div>
-                  )}
+	                        {updating ? (
+	                          <Loader2 className="h-4 w-4 animate-spin" />
+	                        ) : (
+	                          t(uiLocale, "purchase.detail.statusCta.ordered")
+	                        )}
+	                      </Button>
+	                    </div>
+	                  )}
                   {po.status === "ORDERED" && (
                     <div className="space-y-2">
                       <Button
@@ -5013,12 +5230,12 @@ function PODetailSheet({
                         {updating ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
-                          <>
-                            <Truck className="mr-1 h-3.5 w-3.5" />
-                            ซัพพลายเออร์ส่งแล้ว
-                          </>
-                        )}
-                      </Button>
+	                          <>
+	                            <Truck className="mr-1 h-3.5 w-3.5" />
+	                            {t(uiLocale, "purchase.detail.statusCta.shipped")}
+	                          </>
+	                        )}
+	                      </Button>
                       <Button
                         className="h-11 w-full rounded-xl bg-emerald-600 text-xs hover:bg-emerald-700"
                         onClick={() => handleStatusChange("RECEIVED")}
@@ -5027,12 +5244,12 @@ function PODetailSheet({
                         {updating ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
-                          <>
-                            <Package className="mr-1 h-3.5 w-3.5" />
-                            รับสินค้า
-                          </>
-                        )}
-                      </Button>
+	                          <>
+	                            <Package className="mr-1 h-3.5 w-3.5" />
+	                            {t(uiLocale, "purchase.detail.statusCta.received")}
+	                          </>
+	                        )}
+	                      </Button>
                     </div>
                   )}
                   {po.status === "SHIPPED" && (
@@ -5045,29 +5262,31 @@ function PODetailSheet({
                         {updating ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
-                          <>
-                            <Package className="mr-1 h-3.5 w-3.5" />
-                            รับสินค้า
-                          </>
-                        )}
-                      </Button>
+	                          <>
+	                            <Package className="mr-1 h-3.5 w-3.5" />
+	                            {t(uiLocale, "purchase.detail.statusCta.received")}
+	                          </>
+	                        )}
+	                      </Button>
                       <Button
                         variant="outline"
                         className="h-11 w-full rounded-xl border-red-200 text-xs text-red-600 hover:bg-red-50"
-                        onClick={() => handleStatusChange("CANCELLED")}
-                        disabled={updating}
-                      >
-                        ยกเลิก
-                      </Button>
+	                        onClick={() => handleStatusChange("CANCELLED")}
+	                        disabled={updating}
+	                      >
+	                        {t(uiLocale, "purchase.status.cancelled")}
+	                      </Button>
                     </div>
                   )}
                 </>
               )}
             </>
           ) : (
-            <div className="space-y-3 py-8 text-center">
-              <p className="text-sm text-slate-400">{detailError ?? "ไม่พบข้อมูล"}</p>
-              {poId && (
+	            <div className="space-y-3 py-8 text-center">
+	              <p className="text-sm text-slate-400">
+	                {detailError ?? t(uiLocale, "purchase.detail.error.notFound")}
+	              </p>
+	              {poId && (
                 <Button
                   type="button"
                   variant="outline"
@@ -5075,11 +5294,11 @@ function PODetailSheet({
                   onClick={() => {
                     void retryLoadDetail();
                   }}
-                >
-                  ลองใหม่
-                </Button>
-              )}
-            </div>
+	                >
+	                  {t(uiLocale, "purchase.action.retry")}
+	                </Button>
+	              )}
+	            </div>
           )}
       </div>
     </SlideUpSheet>

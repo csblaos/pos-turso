@@ -2,19 +2,11 @@ import { notFound, redirect } from "next/navigation";
 
 import { ReceiptPrintActions } from "@/components/app/receipt-print-actions";
 import { getSession } from "@/lib/auth/session";
+import { DEFAULT_UI_LOCALE, uiLocaleToDateLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
 import { currencyLabel, currencySymbol, parseStoreCurrency, vatModeLabel } from "@/lib/finance/store-financial";
 import { getUserPermissionsForCurrentSession, isPermissionGranted } from "@/lib/rbac/access";
 import { getOrderDetail } from "@/lib/orders/queries";
-
-const paymentMethodLabel = (
-  method: "CASH" | "LAO_QR" | "ON_CREDIT" | "COD" | "BANK_TRANSFER",
-) => {
-  if (method === "LAO_QR") return "QR โอนเงิน";
-  if (method === "ON_CREDIT") return "ค้างจ่าย";
-  if (method === "COD") return "COD";
-  if (method === "BANK_TRANSFER") return "โอนเงิน";
-  return "เงินสด";
-};
 
 export default async function PrintReceiptPage({
   params,
@@ -53,12 +45,22 @@ export default async function PrintReceiptPage({
     notFound();
   }
 
+  const uiLocale = session.uiLocale ?? DEFAULT_UI_LOCALE;
+  const numberLocale = uiLocaleToDateLocale(uiLocale);
+  const paymentMethodLabel = (method: typeof order.paymentMethod) => {
+    if (method === "LAO_QR") return t(uiLocale, "orders.paymentMethod.LAO_QR");
+    if (method === "ON_CREDIT") return t(uiLocale, "orders.paymentMethod.ON_CREDIT");
+    if (method === "COD") return t(uiLocale, "orders.paymentMethod.COD");
+    if (method === "BANK_TRANSFER") return t(uiLocale, "orders.paymentMethod.BANK_TRANSFER");
+    return t(uiLocale, "orders.paymentMethod.CASH");
+  };
+
   return (
     <>
       <style>{`
         @media print {
           header,
-          nav[aria-label="เมนูหลัก"] {
+          nav {
             display: none !important;
           }
           main {
@@ -67,18 +69,28 @@ export default async function PrintReceiptPage({
         }
       `}</style>
       <main className="mx-auto w-[80mm] bg-white p-2 text-[12px] leading-tight text-black">
-        <h1 className="text-center text-sm font-semibold">ใบเสร็จรับเงิน</h1>
-        <p className="text-center text-[11px]">เลขที่ {order.orderNo}</p>
-        <p className="mt-2">ลูกค้า: {order.customerName || order.contactDisplayName || "ลูกค้าทั่วไป"}</p>
-        <p>วันที่: {new Date(order.createdAt).toLocaleString("th-TH")}</p>
+        <h1 className="text-center text-sm font-semibold">{t(uiLocale, "orders.print.receipt.title")}</h1>
+        <p className="text-center text-[11px]">
+          {t(uiLocale, "orders.print.receipt.noPrefix")} {order.orderNo}
+        </p>
+        <p className="mt-2">
+          {t(uiLocale, "orders.print.receipt.customerPrefix")}{" "}
+          {order.customerName ||
+            order.contactDisplayName ||
+            t(uiLocale, "orders.codReconcile.customer.walkIn")}
+        </p>
+        <p>
+          {t(uiLocale, "orders.print.receipt.datePrefix")}{" "}
+          {new Date(order.createdAt).toLocaleString(numberLocale)}
+        </p>
         <hr className="my-2 border-dashed" />
 
         <table className="w-full text-[11px]">
           <thead>
             <tr>
-              <th className="text-left">รายการ</th>
-              <th className="text-right">จำนวน</th>
-              <th className="text-right">รวม</th>
+              <th className="text-left">{t(uiLocale, "orders.print.receipt.table.item")}</th>
+              <th className="text-right">{t(uiLocale, "orders.print.receipt.table.qty")}</th>
+              <th className="text-right">{t(uiLocale, "orders.print.receipt.table.total")}</th>
             </tr>
           </thead>
           <tbody>
@@ -92,7 +104,7 @@ export default async function PrintReceiptPage({
                   {item.qty} {item.unitCode}
                 </td>
                 <td className="py-1 text-right">
-                  {item.lineTotal.toLocaleString("th-TH")}
+                  {item.lineTotal.toLocaleString(numberLocale)}
                 </td>
               </tr>
             ))}
@@ -103,39 +115,39 @@ export default async function PrintReceiptPage({
 
         <div className="space-y-1 text-[11px]">
           <p className="flex justify-between">
-            <span>ยอดสินค้า</span>
-            <span>{order.subtotal.toLocaleString("th-TH")}</span>
+            <span>{t(uiLocale, "orders.print.receipt.summary.subtotal")}</span>
+            <span>{order.subtotal.toLocaleString(numberLocale)}</span>
           </p>
           <p className="flex justify-between">
-            <span>ส่วนลด</span>
-            <span>{order.discount.toLocaleString("th-TH")}</span>
+            <span>{t(uiLocale, "orders.print.receipt.summary.discount")}</span>
+            <span>{order.discount.toLocaleString(numberLocale)}</span>
           </p>
           <p className="flex justify-between">
             <span>VAT</span>
             <span>
-              {order.vatAmount.toLocaleString("th-TH")} ({vatModeLabel(order.storeVatMode)})
+              {order.vatAmount.toLocaleString(numberLocale)} ({vatModeLabel(order.storeVatMode)})
             </span>
           </p>
           <p className="flex justify-between">
-            <span>ค่าส่ง</span>
-            <span>{order.shippingFeeCharged.toLocaleString("th-TH")}</span>
+            <span>{t(uiLocale, "orders.print.receipt.summary.shipping")}</span>
+            <span>{order.shippingFeeCharged.toLocaleString(numberLocale)}</span>
           </p>
           <p className="flex justify-between font-semibold">
-            <span>ยอดสุทธิ</span>
-            <span>{order.total.toLocaleString("th-TH")} {storeCurrencyDisplay}</span>
+            <span>{t(uiLocale, "orders.print.receipt.summary.netTotal")}</span>
+            <span>{order.total.toLocaleString(numberLocale)} {storeCurrencyDisplay}</span>
           </p>
           <p className="flex justify-between">
-            <span>สกุลชำระ</span>
+            <span>{t(uiLocale, "orders.print.receipt.summary.paymentCurrency")}</span>
             <span>{currencyLabel(order.paymentCurrency)}</span>
           </p>
           <p className="flex justify-between">
-            <span>วิธีชำระ</span>
+            <span>{t(uiLocale, "orders.print.receipt.summary.paymentMethod")}</span>
             <span>{paymentMethodLabel(order.paymentMethod)}</span>
           </p>
         </div>
 
         <hr className="my-2 border-dashed" />
-        <p className="text-center text-[11px]">ขอบคุณที่ใช้บริการ</p>
+        <p className="text-center text-[11px]">{t(uiLocale, "orders.print.receipt.thanks")}</p>
         <ReceiptPrintActions autoPrint={autoPrint} returnTo={returnTo} />
       </main>
     </>

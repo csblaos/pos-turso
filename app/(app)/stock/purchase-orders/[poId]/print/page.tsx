@@ -5,6 +5,9 @@ import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { stores } from "@/lib/db/schema";
 import { currencySymbol } from "@/lib/finance/store-financial";
+import { uiLocaleToDateLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
+import { getRequestUiLocale } from "@/lib/i18n/request-locale";
 import {
   getUserPermissionsForCurrentSession,
   isPermissionGranted,
@@ -18,6 +21,8 @@ export default async function PrintPurchaseOrderPage({
 }: {
   params: Promise<{ poId: string }>;
 }) {
+  const uiLocale = await getRequestUiLocale();
+  const numberLocale = uiLocaleToDateLocale(uiLocale);
   const session = await getSession();
   if (!session) {
     redirect("/login");
@@ -54,36 +59,39 @@ export default async function PrintPurchaseOrderPage({
   }
 
   const symbol = currencySymbol(storeRow.currency);
-  const formatMoney = (value: number) => `${symbol}${value.toLocaleString("th-TH")}`;
+  const formatMoney = (value: number) => `${symbol}${value.toLocaleString(numberLocale)}`;
   const grandTotal = po.totalCostBase + po.shippingCost + po.otherCost;
 
   return (
     <main className="mx-auto w-full max-w-[210mm] bg-white p-6 text-black sm:p-8 print:max-w-none print:p-0">
       <header className="mb-6 border-b border-slate-300 pb-4">
-        <p className="text-xs text-slate-500">Purchase Order</p>
-        <h1 className="text-2xl font-semibold">ใบสั่งซื้อ (PO)</h1>
+        <p className="text-xs text-slate-500">{t(uiLocale, "purchase.print.meta")}</p>
+        <h1 className="text-2xl font-semibold">{t(uiLocale, "purchase.print.title")}</h1>
         <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
           <div>
             <p className="font-medium">{storeRow.name}</p>
             <p className="text-slate-600">{storeRow.address || "-"}</p>
-            <p className="text-slate-600">โทร {storeRow.phoneNumber || "-"}</p>
+            <p className="text-slate-600">
+              {t(uiLocale, "common.phone.prefix")} {storeRow.phoneNumber || "-"}
+            </p>
           </div>
           <div className="space-y-1 text-sm sm:text-right">
             <p>
-              <span className="text-slate-500">เลขที่ PO:</span> {po.poNumber}
+              <span className="text-slate-500">{t(uiLocale, "purchase.print.poNumber")}</span>{" "}
+              {po.poNumber}
             </p>
             <p>
-              <span className="text-slate-500">วันที่สร้าง:</span>{" "}
-              {new Date(po.createdAt).toLocaleDateString("th-TH")}
+              <span className="text-slate-500">{t(uiLocale, "purchase.print.createdAt")}</span>{" "}
+              {new Date(po.createdAt).toLocaleDateString(numberLocale)}
             </p>
             <p>
-              <span className="text-slate-500">วันที่ยืนยัน:</span>{" "}
+              <span className="text-slate-500">{t(uiLocale, "purchase.print.orderedAt")}</span>{" "}
               {po.orderedAt
-                ? new Date(po.orderedAt).toLocaleDateString("th-TH")
+                ? new Date(po.orderedAt).toLocaleDateString(numberLocale)
                 : "-"}
             </p>
             <p>
-              <span className="text-slate-500">ซัพพลายเออร์:</span>{" "}
+              <span className="text-slate-500">{t(uiLocale, "purchase.print.supplier")}</span>{" "}
               {po.supplierName || "-"}
             </p>
           </div>
@@ -94,11 +102,13 @@ export default async function PrintPurchaseOrderPage({
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-y border-slate-300 bg-slate-50 text-left">
-              <th className="px-2 py-2">รายการ</th>
-              <th className="px-2 py-2">SKU</th>
-              <th className="px-2 py-2 text-right">จำนวน</th>
-              <th className="px-2 py-2 text-right">ราคา/หน่วย</th>
-              <th className="px-2 py-2 text-right">รวม</th>
+              <th className="px-2 py-2">{t(uiLocale, "purchase.print.table.item")}</th>
+              <th className="px-2 py-2">{t(uiLocale, "products.label.sku")}</th>
+              <th className="px-2 py-2 text-right">{t(uiLocale, "purchase.print.table.qty")}</th>
+              <th className="px-2 py-2 text-right">
+                {t(uiLocale, "purchase.print.table.unitPrice")}
+              </th>
+              <th className="px-2 py-2 text-right">{t(uiLocale, "purchase.print.table.total")}</th>
             </tr>
           </thead>
           <tbody>
@@ -106,7 +116,9 @@ export default async function PrintPurchaseOrderPage({
               <tr key={item.id} className="border-b border-slate-200">
                 <td className="px-2 py-2">{item.productName}</td>
                 <td className="px-2 py-2 text-slate-600">{item.productSku}</td>
-                <td className="px-2 py-2 text-right">{item.qtyOrdered.toLocaleString("th-TH")}</td>
+                <td className="px-2 py-2 text-right">
+                  {item.qtyOrdered.toLocaleString(numberLocale)}
+                </td>
                 <td className="px-2 py-2 text-right">{formatMoney(item.unitCostBase)}</td>
                 <td className="px-2 py-2 text-right">
                   {formatMoney(item.unitCostBase * item.qtyOrdered)}
@@ -119,26 +131,26 @@ export default async function PrintPurchaseOrderPage({
 
       <section className="mt-5 ml-auto w-full max-w-xs space-y-1 text-sm">
         <p className="flex justify-between">
-          <span className="text-slate-600">ยอดสินค้า</span>
+          <span className="text-slate-600">{t(uiLocale, "purchase.print.summary.items")}</span>
           <span>{formatMoney(po.totalCostBase)}</span>
         </p>
         <p className="flex justify-between">
-          <span className="text-slate-600">ค่าขนส่ง</span>
+          <span className="text-slate-600">{t(uiLocale, "purchase.print.summary.shipping")}</span>
           <span>{formatMoney(po.shippingCost)}</span>
         </p>
         <p className="flex justify-between">
-          <span className="text-slate-600">ค่าอื่นๆ</span>
+          <span className="text-slate-600">{t(uiLocale, "purchase.print.summary.other")}</span>
           <span>{formatMoney(po.otherCost)}</span>
         </p>
         <p className="flex justify-between border-t border-slate-300 pt-1 text-base font-semibold">
-          <span>ยอดรวมทั้งสิ้น</span>
+          <span>{t(uiLocale, "purchase.print.summary.grandTotal")}</span>
           <span>{formatMoney(grandTotal)}</span>
         </p>
       </section>
 
       <section className="mt-6 grid gap-5 text-sm sm:grid-cols-2">
         <div>
-          <p className="mb-2 font-medium">หมายเหตุ</p>
+          <p className="mb-2 font-medium">{t(uiLocale, "purchase.print.note.title")}</p>
           <p className="min-h-16 rounded border border-slate-300 p-2 text-slate-700">
             {po.note || "-"}
           </p>
@@ -146,17 +158,21 @@ export default async function PrintPurchaseOrderPage({
         <div className="space-y-6">
           <div>
             <p className="mb-7 border-b border-slate-400" />
-            <p className="text-center text-xs text-slate-600">ผู้อนุมัติ / ผู้สั่งซื้อ</p>
+            <p className="text-center text-xs text-slate-600">
+              {t(uiLocale, "purchase.print.signature.approverBuyer")}
+            </p>
           </div>
           <div>
             <p className="mb-7 border-b border-slate-400" />
-            <p className="text-center text-xs text-slate-600">ซัพพลายเออร์</p>
+            <p className="text-center text-xs text-slate-600">
+              {t(uiLocale, "purchase.print.signature.supplier")}
+            </p>
           </div>
         </div>
       </section>
 
       <p className="mt-6 text-center text-xs text-slate-500 print:hidden">
-        ใช้คำสั่งพิมพ์ของเบราว์เซอร์ (Cmd+P) เพื่อพิมพ์หรือบันทึกเป็น PDF
+        {t(uiLocale, "purchase.print.footer.hint")}
       </p>
     </main>
   );

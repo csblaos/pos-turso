@@ -16,6 +16,9 @@ import { BarcodeScannerPanel } from "@/components/app/barcode-scanner-panel";
 import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch } from "@/lib/auth/client-token";
+import { uiLocaleToDateLocale } from "@/lib/i18n/locales";
+import { t, type MessageKey } from "@/lib/i18n/messages";
+import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 import type {
   InventoryMovementView,
   StockProductOption,
@@ -35,12 +38,6 @@ type StockLedgerProps = {
 type MovementType = "IN" | "ADJUST" | "RETURN";
 type AdjustMode = "INCREASE" | "DECREASE";
 
-const movementLabel: Record<MovementType, string> = {
-  IN: "รับเข้า",
-  ADJUST: "ปรับสต็อก",
-  RETURN: "รับคืน",
-};
-
 const movementBadgeClass: Record<InventoryMovementView["type"], string> = {
   IN: "bg-emerald-100 text-emerald-700",
   OUT: "bg-rose-100 text-rose-700",
@@ -50,13 +47,19 @@ const movementBadgeClass: Record<InventoryMovementView["type"], string> = {
   RETURN: "bg-purple-100 text-purple-700",
 };
 
-const movementTypeLabelMap: Record<InventoryMovementView["type"], string> = {
-  IN: "รับเข้า",
-  OUT: "ตัดออก",
-  RESERVE: "จอง",
-  RELEASE: "ยกเลิกจอง",
-  ADJUST: "ปรับสต็อก",
-  RETURN: "รับคืน",
+const movementLabelKey: Record<MovementType, MessageKey> = {
+  IN: "stock.movementType.IN",
+  ADJUST: "stock.movementType.ADJUST",
+  RETURN: "stock.movementType.RETURN",
+};
+
+const movementTypeLabelKeyMap: Record<InventoryMovementView["type"], MessageKey> = {
+  IN: "stock.movementType.IN",
+  OUT: "stock.movementType.OUT",
+  RESERVE: "stock.movementType.RESERVE",
+  RELEASE: "stock.movementType.RELEASE",
+  ADJUST: "stock.movementType.ADJUST",
+  RETURN: "stock.movementType.RETURN",
 };
 
 export function StockLedger({
@@ -72,6 +75,8 @@ export function StockLedger({
 
   const router = useRouter();
   const [, startTransition] = useTransition();
+  const uiLocale = useUiLocale();
+  const numberLocale = uiLocaleToDateLocale(uiLocale);
 
   const [productItems, setProductItems] = useState(products);
   const [movementItems, setMovementItems] = useState(recentMovements);
@@ -230,12 +235,12 @@ export function StockLedger({
           setShowSearchDropdown(true);
         }
       } catch {
-        toast.error("ค้นหาสินค้าไม่สำเร็จ");
+        toast.error(t(uiLocale, "stock.recording.toast.searchFailed"));
       } finally {
         setIsSearching(false);
       }
     },
-    [],
+    [uiLocale],
   );
 
   useEffect(() => {
@@ -321,16 +326,20 @@ export function StockLedger({
         
         if (exactMatch) {
           selectProductFromSearch(exactMatch);
-          toast.success(`พบสินค้า: ${exactMatch.name}`);
+          toast.success(
+            `${t(uiLocale, "stock.recording.toast.foundProduct.prefix")} ${exactMatch.name}`,
+          );
         } else if (products.length > 0) {
           selectProductFromSearch(products[0]);
-          toast.success(`พบสินค้า: ${products[0].name}`);
+          toast.success(
+            `${t(uiLocale, "stock.recording.toast.foundProduct.prefix")} ${products[0].name}`,
+          );
         } else {
-          toast.error("ไม่พบสินค้าที่มีบาร์โค้ดนี้");
+          toast.error(t(uiLocale, "stock.recording.toast.barcodeNotFound"));
         }
       }
     } catch {
-      toast.error("ค้นหาสินค้าไม่สำเร็จ");
+      toast.error(t(uiLocale, "stock.recording.toast.searchFailed"));
     } finally {
       setIsSearching(false);
     }
@@ -398,7 +407,7 @@ export function StockLedger({
 
   const submitMovement = async () => {
     if (!canCreate) {
-      setErrorMessage("คุณไม่มีสิทธิ์บันทึกสต็อก");
+      setErrorMessage(t(uiLocale, "stock.recording.error.noPermission"));
       return;
     }
 
@@ -428,7 +437,7 @@ export function StockLedger({
       | null;
 
     if (!response.ok) {
-      setErrorMessage(data?.message ?? "บันทึกสต็อกไม่สำเร็จ");
+      setErrorMessage(data?.message ?? t(uiLocale, "stock.recording.error.createFailed"));
       setLoading(false);
       return;
     }
@@ -467,14 +476,14 @@ export function StockLedger({
           qtyBase: qtyBasePreview,
           note: note.trim() ? note.trim() : null,
           createdAt: now,
-          createdByName: "คุณ",
+          createdByName: t(uiLocale, "common.actor.you"),
         },
         ...previous,
       ]);
       setMovementPage(1);
     }
 
-    setSuccessMessage("บันทึกรายการสต็อกเรียบร้อย");
+    setSuccessMessage(t(uiLocale, "stock.recording.success.saved"));
     setNote("");
     setQty("1");
     setLoading(false);
@@ -486,11 +495,11 @@ export function StockLedger({
   return (
     <section className="space-y-4">
       <article className="space-y-3 rounded-xl border bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold">บันทึกการเคลื่อนไหวสต็อก</h2>
+        <h2 className="text-sm font-semibold">{t(uiLocale, "stock.recording.form.title")}</h2>
 
         <div className="space-y-2">
           <label className="text-xs text-muted-foreground" htmlFor="stock-product-search">
-            สินค้า
+            {t(uiLocale, "stock.recording.form.field.product")}
           </label>
           
           <div className="relative">
@@ -508,7 +517,7 @@ export function StockLedger({
                       setShowSearchDropdown(true);
                     }
                   }}
-                  placeholder="ค้นหาสินค้า (SKU, ชื่อ, บาร์โค้ด)..."
+                  placeholder={t(uiLocale, "stock.recording.search.placeholder")}
                   className="h-10 w-full rounded-md border pl-9 pr-9 text-sm outline-none ring-primary focus:ring-2"
                   disabled={loading}
                 />
@@ -555,11 +564,14 @@ export function StockLedger({
                       <p className="text-xs text-muted-foreground">{product.sku}</p>
                       <p className="text-sm font-medium">{product.name}</p>
                       {product.barcode && (
-                        <p className="text-xs text-slate-500">บาร์โค้ด: {product.barcode}</p>
+                        <p className="text-xs text-slate-500">
+                          {t(uiLocale, "products.label.barcode")}: {product.barcode}
+                        </p>
                       )}
                       {product.stock && (
                         <p className="mt-1 text-xs text-blue-600">
-                          สต็อก: {product.stock.onHand.toLocaleString("th-TH")} {product.baseUnitCode}
+                          {t(uiLocale, "stock.recording.searchResult.stock.prefix")}{" "}
+                          {product.stock.onHand.toLocaleString(numberLocale)} {product.baseUnitCode}
                         </p>
                       )}
                     </div>
@@ -571,35 +583,46 @@ export function StockLedger({
           
           {selectedProduct && currentStock !== null && (
             <div className="rounded-lg bg-blue-50 p-3 text-sm">
-              <p className="font-medium text-blue-900">📦 สต็อกปัจจุบัน</p>
+              <p className="font-medium text-blue-900">
+                {t(uiLocale, "stock.recording.currentStock.title")}
+              </p>
               <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
                 <div>
-                  <p className="text-blue-700">คงเหลือ</p>
+                  <p className="text-blue-700">
+                    {t(uiLocale, "stock.recording.currentStock.onHand")}
+                  </p>
                   <p className="font-semibold text-blue-900">
-                    {currentStock.onHand.toLocaleString("th-TH")}
+                    {currentStock.onHand.toLocaleString(numberLocale)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-blue-700">จอง</p>
+                  <p className="text-blue-700">
+                    {t(uiLocale, "stock.recording.currentStock.reserved")}
+                  </p>
                   <p className="font-semibold text-blue-900">
-                    {currentStock.reserved.toLocaleString("th-TH")}
+                    {currentStock.reserved.toLocaleString(numberLocale)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-blue-700">พร้อมขาย</p>
+                  <p className="text-blue-700">
+                    {t(uiLocale, "stock.recording.currentStock.available")}
+                  </p>
                   <p className={`font-semibold ${currentStock.available < 0 ? "text-red-600" : "text-blue-900"}`}>
-                    {currentStock.available.toLocaleString("th-TH")}
+                    {currentStock.available.toLocaleString(numberLocale)}
                   </p>
                 </div>
               </div>
               
               {qtyBasePreview !== null && (
                 <div className="mt-2 border-t border-blue-200 pt-2">
-                  <p className="text-blue-700">หลังทำรายการนี้</p>
+                  <p className="text-blue-700">
+                    {t(uiLocale, "stock.recording.currentStock.afterThis")}
+                  </p>
                   <p className={`font-semibold ${(currentStock.onHand + qtyBasePreview) < 0 ? "text-red-600" : "text-emerald-600"}`}>
-                    {(currentStock.onHand + qtyBasePreview).toLocaleString("th-TH")} {selectedProduct.baseUnitCode}
+                    {(currentStock.onHand + qtyBasePreview).toLocaleString(numberLocale)}{" "}
+                    {selectedProduct.baseUnitCode}
                     {" "}
-                    ({qtyBasePreview > 0 ? "+" : ""}{qtyBasePreview.toLocaleString("th-TH")})
+                    ({qtyBasePreview > 0 ? "+" : ""}{qtyBasePreview.toLocaleString(numberLocale)})
                   </p>
                 </div>
               )}
@@ -607,14 +630,16 @@ export function StockLedger({
           )}
           
           {loadingStock && (
-            <p className="text-xs text-slate-500">กำลังโหลดข้อมูลสต็อก...</p>
+            <p className="text-xs text-slate-500">
+              {t(uiLocale, "stock.recording.loading.currentStock")}
+            </p>
           )}
         </div>
 
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-2">
             <label className="text-xs text-muted-foreground" htmlFor="stock-type">
-              ประเภท
+              {t(uiLocale, "stock.recording.form.field.type")}
             </label>
             <select
               id="stock-type"
@@ -625,7 +650,7 @@ export function StockLedger({
             >
               {movementTypeOptions.map((type) => (
                 <option key={type} value={type}>
-                  {movementLabel[type]}
+                  {t(uiLocale, movementLabelKey[type])}
                 </option>
               ))}
             </select>
@@ -633,7 +658,7 @@ export function StockLedger({
 
           <div className="space-y-2">
             <label className="text-xs text-muted-foreground" htmlFor="stock-unit">
-              หน่วย
+              {t(uiLocale, "stock.recording.form.field.unit")}
             </label>
             <select
               id="stock-unit"
@@ -654,7 +679,7 @@ export function StockLedger({
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-2">
             <label className="text-xs text-muted-foreground" htmlFor="stock-qty">
-              จำนวน
+              {t(uiLocale, "stock.recording.form.field.qty")}
             </label>
             <input
               id="stock-qty"
@@ -671,7 +696,7 @@ export function StockLedger({
           {movementType === "ADJUST" ? (
             <div className="space-y-2">
               <label className="text-xs text-muted-foreground" htmlFor="stock-adjust-mode">
-                รูปแบบการปรับ
+                {t(uiLocale, "stock.recording.form.field.adjustMode")}
               </label>
               <select
                 id="stock-adjust-mode"
@@ -680,8 +705,12 @@ export function StockLedger({
                 className="h-10 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
                 disabled={loading}
               >
-                <option value="INCREASE">ปรับเพิ่ม</option>
-                <option value="DECREASE">ปรับลด</option>
+                <option value="INCREASE">
+                  {t(uiLocale, "stock.recording.form.adjustMode.increase")}
+                </option>
+                <option value="DECREASE">
+                  {t(uiLocale, "stock.recording.form.adjustMode.decrease")}
+                </option>
               </select>
             </div>
           ) : null}
@@ -689,7 +718,7 @@ export function StockLedger({
 
         <div className="space-y-2">
           <label className="text-xs text-muted-foreground" htmlFor="stock-note">
-            หมายเหตุ
+            {t(uiLocale, "stock.recording.form.field.noteOptional")}
           </label>
           <textarea
             id="stock-note"
@@ -702,20 +731,24 @@ export function StockLedger({
 
         <p className="text-xs text-blue-700">
           {selectedUnit && qtyBasePreview !== null
-            ? `รายการนี้จะบันทึกเป็น ${qtyBasePreview.toLocaleString("th-TH")} ${selectedProduct?.baseUnitCode ?? "หน่วยหลัก"}`
-            : "กรุณากรอกจำนวนให้แปลงเป็นหน่วยหลักได้"}
+            ? `${t(uiLocale, "stock.recording.form.preview.prefix")} ${qtyBasePreview.toLocaleString(numberLocale)} ${selectedProduct?.baseUnitCode ?? t(uiLocale, "stock.recording.form.preview.fallbackBaseUnit")}`
+            : t(uiLocale, "stock.recording.form.preview.invalidQty")}
         </p>
 
         <Button className="h-10 w-full" onClick={submitMovement} disabled={loading || !canCreate}>
-          {loading ? "กำลังบันทึก..." : "บันทึกสต็อก"}
+          {loading
+            ? t(uiLocale, "stock.recording.form.submit.saving")
+            : t(uiLocale, "stock.recording.form.submit")}
         </Button>
       </article>
 
       <article className="space-y-3 rounded-xl border bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold">สรุปสต็อกปัจจุบัน</h2>
+        <h2 className="text-sm font-semibold">{t(uiLocale, "stock.ledger.summary.title")}</h2>
 
         {productItems.length === 0 ? (
-          <p className="text-sm text-muted-foreground">ยังไม่มีสินค้าในร้าน</p>
+          <p className="text-sm text-muted-foreground">
+            {t(uiLocale, "stock.ledger.summary.empty")}
+          </p>
         ) : (
           <div className="space-y-2">
             {productItems.map((product) => (
@@ -725,7 +758,7 @@ export function StockLedger({
                     <p className="text-xs text-muted-foreground">{product.sku}</p>
                     <p className="text-sm font-medium">{product.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      หน่วยหลัก {product.baseUnitCode}
+                      {t(uiLocale, "products.form.baseUnit.label")} {product.baseUnitCode}
                     </p>
                   </div>
                   <span
@@ -733,23 +766,33 @@ export function StockLedger({
                       product.active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"
                     }`}
                   >
-                    {product.active ? "ใช้งาน" : "ปิดใช้งาน"}
+                    {product.active
+                      ? t(uiLocale, "products.status.active")
+                      : t(uiLocale, "products.summary.inactive")}
                   </span>
                 </div>
 
                 <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
                   <div className="rounded bg-slate-50 p-2">
-                    <p className="text-muted-foreground">คงเหลือ</p>
-                    <p className="font-semibold">{product.onHand.toLocaleString("th-TH")}</p>
+                    <p className="text-muted-foreground">
+                      {t(uiLocale, "stock.recording.currentStock.onHand")}
+                    </p>
+                    <p className="font-semibold">{product.onHand.toLocaleString(numberLocale)}</p>
                   </div>
                   <div className="rounded bg-slate-50 p-2">
-                    <p className="text-muted-foreground">จอง</p>
-                    <p className="font-semibold">{product.reserved.toLocaleString("th-TH")}</p>
+                    <p className="text-muted-foreground">
+                      {t(uiLocale, "stock.recording.currentStock.reserved")}
+                    </p>
+                    <p className="font-semibold">
+                      {product.reserved.toLocaleString(numberLocale)}
+                    </p>
                   </div>
                   <div className="rounded bg-slate-50 p-2">
-                    <p className="text-muted-foreground">พร้อมขาย</p>
+                    <p className="text-muted-foreground">
+                      {t(uiLocale, "stock.recording.currentStock.available")}
+                    </p>
                     <p className={`font-semibold ${product.available < 0 ? "text-red-600" : ""}`}>
-                      {product.available.toLocaleString("th-TH")}
+                      {product.available.toLocaleString(numberLocale)}
                     </p>
                   </div>
                 </div>
@@ -758,7 +801,9 @@ export function StockLedger({
 
             <div className="flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-xs">
               <p className="text-muted-foreground">
-                แสดงแล้ว {productItems.length.toLocaleString("th-TH")} รายการ
+                {t(uiLocale, "stock.ledger.products.shown.prefix")}{" "}
+                {productItems.length.toLocaleString(numberLocale)}{" "}
+                {t(uiLocale, "stock.ledger.products.shown.suffix")}
               </p>
               <div className="flex items-center gap-2">
                 {hasMoreProducts ? (
@@ -769,10 +814,12 @@ export function StockLedger({
                     onClick={loadMoreProducts}
                     disabled={isLoadingMoreProducts}
                   >
-                    {isLoadingMoreProducts ? "กำลังโหลด..." : "โหลดเพิ่ม"}
+                    {isLoadingMoreProducts
+                      ? t(uiLocale, "products.list.loadingMore")
+                      : t(uiLocale, "products.list.loadMore")}
                   </Button>
                 ) : (
-                  <span className="text-slate-400">ครบแล้ว</span>
+                  <span className="text-slate-400">{t(uiLocale, "common.pagination.done")}</span>
                 )}
               </div>
             </div>
@@ -784,10 +831,12 @@ export function StockLedger({
       </article>
 
       <article className="space-y-3 rounded-xl border bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold">สมุดบัญชีสต็อกล่าสุด</h2>
+        <h2 className="text-sm font-semibold">{t(uiLocale, "stock.ledger.movements.title")}</h2>
 
         {movementItems.length === 0 ? (
-          <p className="text-sm text-muted-foreground">ยังไม่มีประวัติการเคลื่อนไหว</p>
+          <p className="text-sm text-muted-foreground">
+            {t(uiLocale, "stock.ledger.movements.empty")}
+          </p>
         ) : (
           <div className="space-y-2">
             {paginatedMovements.map((movement) => (
@@ -798,29 +847,36 @@ export function StockLedger({
                     <p className="text-sm font-medium">{movement.productName}</p>
                   </div>
                   <span className={`rounded-full px-2 py-1 text-xs ${movementBadgeClass[movement.type]}`}>
-                    {movementTypeLabelMap[movement.type]}
+                    {t(uiLocale, movementTypeLabelKeyMap[movement.type])}
                   </span>
                 </div>
 
                 <p className="mt-2 text-sm">
-                  จำนวนฐาน {movement.qtyBase.toLocaleString("th-TH")}
+                  {t(uiLocale, "stock.movement.baseQty.label")}{" "}
+                  {movement.qtyBase.toLocaleString(numberLocale)}
                 </p>
 
                 {movement.note ? (
-                  <p className="mt-1 text-xs text-muted-foreground">หมายเหตุ: {movement.note}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t(uiLocale, "stock.movement.note.prefix")} {movement.note}
+                  </p>
                 ) : null}
 
                 <p className="mt-1 text-xs text-muted-foreground">
-                  โดย {movement.createdByName ?? "-"} • {new Date(movement.createdAt).toLocaleString("th-TH")}
+                  {t(uiLocale, "stock.movement.by.prefix")}{" "}
+                  {movement.createdByName ?? "-"} •{" "}
+                  {new Date(movement.createdAt).toLocaleString(numberLocale)}
                 </p>
               </div>
             ))}
 
             <div className="flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-xs">
               <p className="text-muted-foreground">
-                หน้า {currentMovementPage.toLocaleString("th-TH")} /{" "}
-                {movementPageCount.toLocaleString("th-TH")} (
-                {movementItems.length.toLocaleString("th-TH")} รายการ)
+                {t(uiLocale, "stock.history.pagination.pagePrefix")}{" "}
+                {currentMovementPage.toLocaleString(numberLocale)} /{" "}
+                {movementPageCount.toLocaleString(numberLocale)} (
+                {movementItems.length.toLocaleString(numberLocale)}{" "}
+                {t(uiLocale, "stock.history.pagination.itemsSuffix")})
               </p>
               <div className="flex items-center gap-2">
                 <Button
@@ -832,7 +888,7 @@ export function StockLedger({
                     setMovementPage((previous) => Math.max(1, previous - 1))
                   }
                 >
-                  ก่อนหน้า
+                  {t(uiLocale, "stock.history.pagination.prev")}
                 </Button>
                 <Button
                   type="button"
@@ -845,7 +901,7 @@ export function StockLedger({
                     )
                   }
                 >
-                  ถัดไป
+                  {t(uiLocale, "stock.history.pagination.next")}
                 </Button>
               </div>
             </div>
@@ -860,16 +916,18 @@ export function StockLedger({
       <SlideUpSheet
         isOpen={showScannerPermission}
         onClose={() => setShowScannerPermission(false)}
-        title="ขออนุญาตใช้กล้อง"
-        description="ระบบต้องใช้กล้องเพื่อสแกนบาร์โค้ดสินค้า"
+        title={t(uiLocale, "products.scannerPermission.title")}
+        description={t(uiLocale, "products.scannerPermission.description")}
       >
         <div className="space-y-3">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-            <p className="font-medium text-slate-700">ทำไมต้องใช้กล้อง?</p>
+            <p className="font-medium text-slate-700">
+              {t(uiLocale, "products.scannerPermission.whyTitle")}
+            </p>
             <ul className="mt-2 list-disc space-y-1 pl-4">
-              <li>สแกนบาร์โค้ดได้เร็วขึ้น</li>
-              <li>ลดความผิดพลาดจากการพิมพ์</li>
-              <li>ใช้งานได้ทันทีในหน้านี้</li>
+              <li>{t(uiLocale, "products.scannerPermission.bullet.fast")}</li>
+              <li>{t(uiLocale, "products.scannerPermission.bullet.fewerTypos")}</li>
+              <li>{t(uiLocale, "products.scannerPermission.bullet.ready")}</li>
             </ul>
           </div>
 
@@ -880,7 +938,7 @@ export function StockLedger({
               className="h-10 flex-1"
               onClick={() => setShowScannerPermission(false)}
             >
-              ยกเลิก
+              {t(uiLocale, "common.action.cancel")}
             </Button>
             <Button
               type="button"
@@ -892,7 +950,7 @@ export function StockLedger({
                 setShowScanner(true);
               }}
             >
-              อนุญาตและสแกน
+              {t(uiLocale, "products.scannerPermission.allowAndScan")}
             </Button>
           </div>
         </div>
@@ -902,8 +960,8 @@ export function StockLedger({
       <SlideUpSheet
         isOpen={showScanner}
         onClose={() => setShowScanner(false)}
-        title="สแกนบาร์โค้ด"
-        description="ส่องกล้องไปที่บาร์โค้ดสินค้า"
+        title={t(uiLocale, "products.scanner.title")}
+        description={t(uiLocale, "products.scanner.description")}
       >
         <BarcodeScannerPanel
           isOpen={showScanner}

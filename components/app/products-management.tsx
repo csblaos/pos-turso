@@ -48,6 +48,10 @@ import {
   productUpsertSchema,
 } from "@/lib/products/validation";
 import { currencySymbol, type StoreCurrency } from "@/lib/finance/store-financial";
+import type { UiLocale } from "@/lib/i18n/locales";
+import { uiLocaleToDateLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
+import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 import { compressRasterImageFile, validateRasterImageFile } from "@/lib/media/client-image";
 import { RASTER_IMAGE_ACCEPT } from "@/lib/media/image-upload";
 
@@ -105,14 +109,14 @@ function parseStatusFilter(value: string | null): StatusFilter {
 
 const PRODUCT_PAGE_SIZE = 30;
 
-const fmtNumber = (n: number) => n.toLocaleString("th-TH");
-const fmtPrice = (n: number, cur: StoreCurrency) =>
-  `${currencySymbol(cur)}${n.toLocaleString("th-TH")}`;
-const fmtDateTime = (iso: string | null) => {
+const fmtNumber = (n: number, locale = "th-TH") => n.toLocaleString(locale);
+const fmtPrice = (n: number, cur: StoreCurrency, locale = "th-TH") =>
+  `${currencySymbol(cur)}${n.toLocaleString(locale)}`;
+const fmtDateTime = (iso: string | null, locale = "th-TH") => {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString("th-TH", {
+  return date.toLocaleString(locale, {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -120,11 +124,15 @@ const fmtDateTime = (iso: string | null) => {
     minute: "2-digit",
   });
 };
-const costSourceLabel: Record<ProductListItem["costTracking"]["source"], string> = {
-  MANUAL: "แก้ไขมือ",
-  PURCHASE_ORDER: "รับเข้า PO",
-  UNKNOWN: "ไม่พบประวัติ",
-};
+
+function getCostSourceLabel(
+  uiLocale: UiLocale,
+  source: ProductListItem["costTracking"]["source"],
+): string {
+  if (source === "MANUAL") return t(uiLocale, "products.cost.source.MANUAL");
+  if (source === "PURCHASE_ORDER") return t(uiLocale, "products.cost.source.PURCHASE_ORDER");
+  return t(uiLocale, "products.cost.source.NONE");
+}
 const LAO_TO_LATIN_MAP: Record<string, string> = {
   "ກ": "k",
   "ຂ": "kh",
@@ -260,6 +268,9 @@ export function ProductsManagement({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const uiLocale = useUiLocale();
+  const dateLocale = uiLocaleToDateLocale(uiLocale);
+  const numberLocale = dateLocale;
 
   /* ── Data state ── */
   const [productItems, setProductItems] = useState(initialProducts);
@@ -365,7 +376,9 @@ export function ProductsManagement({
     return {
       outThreshold,
       lowThreshold,
-      badgeLabel: hasOverride ? "กำหนดเฉพาะสินค้า" : "ใช้ค่าร้าน",
+      badgeLabel: hasOverride
+        ? t(uiLocale, "products.stockThresholds.badge.override")
+        : t(uiLocale, "products.stockThresholds.badge.storeDefault"),
     };
   };
 
@@ -732,12 +745,12 @@ export function ProductsManagement({
         setImageFile(optimizedFile);
         setIsImageMarkedForRemoval(false);
       } catch {
-        toast.error("เตรียมรูปสินค้าไม่สำเร็จ กรุณาลองใช้ไฟล์ JPG, PNG หรือ WebP อื่น");
+        toast.error(t(uiLocale, "products.image.error.prepareFailed"));
       } finally {
         setIsImageProcessing(false);
       }
     },
-    [],
+    [uiLocale],
   );
 
   const fetchModelSuggestions = useCallback(
@@ -1102,7 +1115,7 @@ export function ProductsManagement({
 
         if (requestId !== productListRequestIdRef.current) return;
         if (!res.ok) {
-          toast.error(data?.message ?? "โหลดรายการสินค้าไม่สำเร็จ");
+          toast.error(data?.message ?? t(uiLocale, "products.error.loadListFailed"));
           return;
         }
 
@@ -1132,7 +1145,7 @@ export function ProductsManagement({
         if (error instanceof DOMException && error.name === "AbortError") {
           return;
         }
-        toast.error("โหลดรายการสินค้าไม่สำเร็จ");
+        toast.error(t(uiLocale, "products.error.loadListFailed"));
       } finally {
         if (isLoadMoreRequest) {
           if (loadMoreRequestId === loadMoreRequestIdRef.current) {
@@ -1153,6 +1166,7 @@ export function ProductsManagement({
       selectedCategoryId,
       sortOption,
       statusFilter,
+      uiLocale,
     ],
   );
 
@@ -1426,26 +1440,29 @@ export function ProductsManagement({
   const unsavedCloseConfirmContent = useMemo(() => {
     if (unsavedCloseTarget === "CREATE_EDIT_SHEET") {
       return {
-        title: mode === "create" ? "ยืนยันปิดฟอร์มเพิ่มสินค้า" : "ยืนยันยกเลิกการแก้ไขสินค้า",
-        description: "มีข้อมูลที่แก้ไขค้างอยู่ ถ้าปิดตอนนี้ข้อมูลที่ยังไม่บันทึกจะหาย",
-        confirmLabel: "ปิดและทิ้งข้อมูล",
+        title:
+          mode === "create"
+            ? t(uiLocale, "products.unsavedConfirm.create.title")
+            : t(uiLocale, "products.unsavedConfirm.edit.title"),
+        description: t(uiLocale, "products.unsavedConfirm.common.description"),
+        confirmLabel: t(uiLocale, "products.unsavedConfirm.common.confirm"),
       };
     }
 
     if (unsavedCloseTarget === "DETAIL_SHEET") {
       return {
-        title: "ยืนยันปิดหน้ารายละเอียดสินค้า",
-        description: "มีการแก้ไขต้นทุนที่ยังไม่บันทึก ถ้าปิดตอนนี้ข้อมูลจะหาย",
-        confirmLabel: "ปิดและทิ้งการแก้ไข",
+        title: t(uiLocale, "products.unsavedConfirm.detail.title"),
+        description: t(uiLocale, "products.unsavedConfirm.detail.description"),
+        confirmLabel: t(uiLocale, "products.unsavedConfirm.detail.confirm"),
       };
     }
 
     return {
-      title: "ยืนยันยกเลิกการแก้ไขต้นทุน",
-      description: "มีการแก้ไขต้นทุนที่ยังไม่บันทึก ต้องการทิ้งการแก้ไขนี้หรือไม่",
-      confirmLabel: "ทิ้งการแก้ไข",
+      title: t(uiLocale, "products.unsavedConfirm.cost.title"),
+      description: t(uiLocale, "products.unsavedConfirm.cost.description"),
+      confirmLabel: t(uiLocale, "products.unsavedConfirm.cost.confirm"),
     };
-  }, [mode, unsavedCloseTarget]);
+  }, [mode, uiLocale, unsavedCloseTarget]);
 
   const duplicateProduct = (product: ProductListItem) => {
     if (!canCreate) return;
@@ -1475,7 +1492,7 @@ export function ProductsManagement({
     setHasManualSku(true);
     form.reset({
       sku: `${product.sku}-COPY`,
-      name: `${product.name} (สำเนา)`,
+      name: `${product.name} ${t(uiLocale, "products.duplicate.nameSuffix")}`,
       barcode: "",
       baseUnitId: product.baseUnitId,
       priceBase: product.priceBase,
@@ -1583,7 +1600,7 @@ export function ProductsManagement({
   /* ── Submit product ── */
   const onSubmit = form.handleSubmit(async (values) => {
     if (isImageProcessing) {
-      toast.error("กำลังเตรียมรูปสินค้า กรุณารอสักครู่แล้วลองบันทึกอีกครั้ง");
+      toast.error(t(uiLocale, "products.image.error.processingInProgress"));
       return;
     }
 
@@ -1686,7 +1703,9 @@ export function ProductsManagement({
           shouldValidate: true,
         });
         setHasManualSku(true);
-        toast.success(`SKU ซ้ำ ระบบปรับเป็น ${finalCreatedSku}`);
+        toast.success(
+          `${t(uiLocale, "products.toast.skuAutoAdjusted.prefix")} ${finalCreatedSku}`,
+        );
       }
     } else {
       response = await authFetch(`/api/products/${editingProductId}`, {
@@ -1702,7 +1721,7 @@ export function ProductsManagement({
 
     if (!response.ok) {
       setProductItems(prevProducts);
-      toast.error(data?.message ?? "บันทึกสินค้าไม่สำเร็จ");
+      toast.error(data?.message ?? t(uiLocale, "products.error.saveFailed"));
       setLoadingKey(null);
       return;
     }
@@ -1717,7 +1736,7 @@ export function ProductsManagement({
       });
 
       if (!removeRes.ok) {
-        toast.error("ลบรูปสินค้าไม่สำเร็จ");
+        toast.error(t(uiLocale, "products.image.error.removeFailed"));
       } else {
         setProductItems((prev) =>
           prev.map((item) =>
@@ -1739,7 +1758,7 @@ export function ProductsManagement({
         body: fd,
       });
       if (!imgRes.ok) {
-        toast.error("อัปโหลดรูปสินค้าไม่สำเร็จ");
+        toast.error(t(uiLocale, "products.image.error.uploadFailed"));
       }
     }
 
@@ -1748,7 +1767,7 @@ export function ProductsManagement({
     }
 
     if (mode === "create" && values.variant.enabled && submitIntent === "save-and-next") {
-      toast.success("บันทึกแล้ว เพิ่ม Variant ถัดไปได้เลย");
+      toast.success(t(uiLocale, "products.toast.savedAddNextVariant"));
       setLoadingKey(null);
       setImageFile(null);
       setImagePreview(null);
@@ -1774,7 +1793,11 @@ export function ProductsManagement({
       return;
     }
 
-    toast.success(mode === "create" ? "สร้างสินค้าเรียบร้อย" : "อัปเดตสินค้าเรียบร้อย");
+    toast.success(
+      mode === "create"
+        ? t(uiLocale, "products.toast.saved.create")
+        : t(uiLocale, "products.toast.saved.update"),
+    );
     setLoadingKey(null);
     submitIntentRef.current = "save";
     closeCreateSheetImmediate();
@@ -1814,11 +1837,13 @@ export function ProductsManagement({
       );
       const d = await res.json().catch(() => null);
       toast.error(
-        (d as { message?: string })?.message ?? "เปลี่ยนสถานะไม่สำเร็จ",
+        (d as { message?: string })?.message ?? t(uiLocale, "products.error.setActiveFailed"),
       );
     } else {
       toast.success(
-        nextActive ? "เปิดใช้งานสินค้าแล้ว" : "ปิดใช้งานสินค้าแล้ว",
+        nextActive
+          ? t(uiLocale, "products.toast.activated")
+          : t(uiLocale, "products.toast.deactivated"),
       );
       clearProductListCache();
       router.refresh();
@@ -1971,7 +1996,7 @@ export function ProductsManagement({
     if (!detailProduct) return;
     const reason = costReasonDraft.trim();
     if (reason.length < 3) {
-      toast.error("กรุณากรอกเหตุผลอย่างน้อย 3 ตัวอักษร");
+      toast.error(t(uiLocale, "products.cost.validation.reasonTooShort"));
       return;
     }
 
@@ -1992,10 +2017,10 @@ export function ProductsManagement({
       | null;
 
     if (!res.ok) {
-      toast.error(data?.message ?? "บันทึกต้นทุนไม่สำเร็จ");
+      toast.error(data?.message ?? t(uiLocale, "products.cost.error.saveFailed"));
     } else {
       if (data?.unchanged) {
-        toast("ต้นทุนเท่าเดิม ไม่มีการเปลี่ยนแปลง");
+        toast(t(uiLocale, "products.cost.toast.noChanges"));
         setEditingCost(false);
         setCostReasonDraft("");
         setLoadingKey(null);
@@ -2012,7 +2037,7 @@ export function ProductsManagement({
                 costTracking: {
                   source: "MANUAL",
                   updatedAt,
-                  actorName: "คุณ",
+                  actorName: t(uiLocale, "common.actor.you"),
                   reason,
                   reference: null,
                 },
@@ -2028,14 +2053,14 @@ export function ProductsManagement({
               costTracking: {
                 source: "MANUAL",
                 updatedAt,
-                actorName: "คุณ",
+                actorName: t(uiLocale, "common.actor.you"),
                 reason,
                 reference: null,
               },
             }
           : prev,
       );
-      toast.success("อัปเดตต้นทุนเรียบร้อย");
+      toast.success(t(uiLocale, "products.cost.toast.saved"));
       setEditingCost(false);
       setCostReasonDraft("");
       clearProductListCache();
@@ -2045,10 +2070,17 @@ export function ProductsManagement({
     setLoadingKey(null);
   };
 
-  const copyTextToClipboard = useCallback(async (value: string, fieldLabel: string) => {
+  const copyTextToClipboard = useCallback(async (value: string, field: "sku" | "barcode") => {
     const trimmed = value.trim();
     if (!trimmed) {
-      toast.error(`ไม่มี${fieldLabel}ให้คัดลอก`);
+      toast.error(
+        t(
+          uiLocale,
+          field === "sku"
+            ? "products.clipboard.sku.error.empty"
+            : "products.clipboard.barcode.error.empty",
+        ),
+      );
       return;
     }
 
@@ -2066,11 +2098,25 @@ export function ProductsManagement({
         document.execCommand("copy");
         document.body.removeChild(textarea);
       }
-      toast.success(`คัดลอก${fieldLabel}แล้ว`);
+      toast.success(
+        t(
+          uiLocale,
+          field === "sku"
+            ? "products.clipboard.sku.toast.copied"
+            : "products.clipboard.barcode.toast.copied",
+        ),
+      );
     } catch {
-      toast.error(`คัดลอก${fieldLabel}ไม่สำเร็จ`);
+      toast.error(
+        t(
+          uiLocale,
+          field === "sku"
+            ? "products.clipboard.sku.error.copyFailed"
+            : "products.clipboard.barcode.error.copyFailed",
+        ),
+      );
     }
-  }, []);
+  }, [uiLocale]);
 
   /* ── Generate internal barcode ── */
   const generateBarcode = async () => {
@@ -2081,13 +2127,15 @@ export function ProductsManagement({
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data?.message ?? "สร้างบาร์โค้ดไม่สำเร็จ");
+        toast.error(data?.message ?? t(uiLocale, "products.barcode.error.generateFailed"));
         return;
       }
       form.setValue("barcode", data.barcode, { shouldDirty: true });
-      toast.success(`สร้างบาร์โค้ด ${data.barcode} แล้ว`);
+      toast.success(
+        `${t(uiLocale, "products.barcode.toast.generated.prefix")} ${data.barcode} ${t(uiLocale, "products.barcode.toast.generated.suffix")}`,
+      );
     } catch {
-      toast.error("สร้างบาร์โค้ดไม่สำเร็จ");
+      toast.error(t(uiLocale, "products.barcode.error.generateFailed"));
     } finally {
       setLoadingKey(null);
     }
@@ -2101,12 +2149,12 @@ export function ProductsManagement({
     const axisTwoValues = matrixUseSecondAxis ? parseMatrixValues(matrixAxisTwoValues) : [];
 
     if (!axisOneName || axisOneValues.length === 0) {
-      toast.error("กรุณากรอกแกนหลักและค่าของแกนหลักอย่างน้อย 1 ค่า");
+      toast.error(t(uiLocale, "products.matrix.error.axisOneMissing"));
       return;
     }
 
     if (matrixUseSecondAxis && (!axisTwoName || axisTwoValues.length === 0)) {
-      toast.error("หากเปิดแกนที่ 2 ต้องระบุชื่อแกนและค่าอย่างน้อย 1 ค่า");
+      toast.error(t(uiLocale, "products.matrix.error.axisTwoMissing"));
       return;
     }
 
@@ -2170,7 +2218,9 @@ export function ProductsManagement({
         shouldDirty: true,
       });
     }
-    toast.success(`สร้างตารางรุ่นย่อย ${nextRows.length} รายการ`);
+    toast.success(
+      `${t(uiLocale, "products.matrix.toast.tableCreated.prefix")} ${nextRows.length} ${t(uiLocale, "products.matrix.toast.tableCreated.suffix")}`,
+    );
   };
 
   const updateMatrixRow = (
@@ -2185,7 +2235,7 @@ export function ProductsManagement({
   const fillMatrixBarcodes = async () => {
     const missingRows = matrixRows.filter((row) => !row.barcode.trim());
     if (missingRows.length === 0) {
-      toast("ทุกรายการมีบาร์โค้ดแล้ว");
+      toast(t(uiLocale, "products.matrix.toast.allHaveBarcodes"));
       return;
     }
 
@@ -2201,7 +2251,10 @@ export function ProductsManagement({
           | { barcode?: string; message?: string }
           | null;
         if (!res.ok || !data?.barcode) {
-          toast.error(data?.message ?? `สร้างบาร์โค้ดไม่สำเร็จ (${row.variantLabel})`);
+          toast.error(
+            data?.message ??
+              `${t(uiLocale, "products.matrix.barcode.error.generateFailedWithLabel.prefix")}${row.variantLabel}${t(uiLocale, "products.matrix.barcode.error.generateFailedWithLabel.suffix")}`,
+          );
           continue;
         }
 
@@ -2213,7 +2266,9 @@ export function ProductsManagement({
     }
 
     if (successCount > 0) {
-      toast.success(`สร้างบาร์โค้ดแล้ว ${successCount} รายการ`);
+      toast.success(
+        `${t(uiLocale, "products.matrix.toast.barcodesGenerated.prefix")} ${successCount} ${t(uiLocale, "products.matrix.toast.barcodesGenerated.suffix")}`,
+      );
     }
   };
 
@@ -2221,16 +2276,16 @@ export function ProductsManagement({
     const values = form.getValues();
     const variant = values.variant;
     if (!variant?.enabled) {
-      toast.error("กรุณาเปิดโหมดสินค้าแบบ Variant ก่อน");
+      toast.error(t(uiLocale, "products.matrix.error.variantModeRequired"));
       return;
     }
     const modelName = String(variant.modelName ?? "").trim();
     if (!modelName) {
-      toast.error("กรุณากรอกชื่อสินค้าแม่ (Model)");
+      toast.error(t(uiLocale, "products.matrix.error.modelRequired"));
       return;
     }
     if (matrixRows.length === 0) {
-      toast.error("ยังไม่มีรุ่นย่อยในตาราง");
+      toast.error(t(uiLocale, "products.matrix.error.noRows"));
       return;
     }
 
@@ -2238,11 +2293,13 @@ export function ProductsManagement({
     for (const row of matrixRows) {
       const sku = row.sku.trim();
       if (!sku) {
-        toast.error(`กรุณากรอก SKU สำหรับรุ่นย่อย "${row.variantLabel}"`);
+        toast.error(
+          `${t(uiLocale, "products.matrix.error.skuRequiredForVariant.prefix")} "${row.variantLabel}"`,
+        );
         return;
       }
       if (duplicateSku.has(sku)) {
-        toast.error(`SKU ซ้ำในตาราง: ${sku}`);
+        toast.error(`${t(uiLocale, "products.matrix.error.duplicateSkuInTable.prefix")} ${sku}`);
         return;
       }
       duplicateSku.add(sku);
@@ -2283,7 +2340,9 @@ export function ProductsManagement({
           | null;
 
         if (!res.ok) {
-          errors.push(`${row.variantLabel}: ${data?.message ?? "บันทึกไม่สำเร็จ"}`);
+          errors.push(
+            `${row.variantLabel}: ${data?.message ?? t(uiLocale, "products.matrix.error.saveFailed")}`,
+          );
           continue;
         }
 
@@ -2301,7 +2360,9 @@ export function ProductsManagement({
     }
 
     if (createdCount > 0) {
-      toast.success(`สร้างรุ่นย่อยสำเร็จ ${createdCount}/${matrixRows.length} รายการ`);
+      toast.success(
+        `${t(uiLocale, "products.matrix.toast.variantsCreated.prefix")} ${createdCount}/${matrixRows.length} ${t(uiLocale, "products.matrix.toast.variantsCreated.suffix")}`,
+      );
       clearProductListCache();
       router.refresh();
     }
@@ -2328,14 +2389,16 @@ export function ProductsManagement({
             ? "EAN8"
             : "CODE128";
       const safeName = escapeHtml(product.name);
-      const safePrice = escapeHtml(fmtPrice(product.priceBase, currency));
-      const safeTitle = escapeHtml(`พิมพ์บาร์โค้ด — ${product.name}`);
+      const safePrice = escapeHtml(fmtPrice(product.priceBase, currency, numberLocale));
+      const safeTitle = escapeHtml(
+        `${t(uiLocale, "products.barcode.print.windowTitle.prefix")} ${product.name}`,
+      );
       const barcodeValueJson = JSON.stringify(product.barcode);
       const barcodeFormatJson = JSON.stringify(barcodeFormat);
 
       const printWindow = window.open("", "_blank", "width=420,height=320");
       if (!printWindow) {
-        toast.error("ไม่สามารถเปิดหน้าต่างพิมพ์ได้ — กรุณาอนุญาต popup");
+        toast.error(t(uiLocale, "products.barcode.error.popupBlocked"));
         return;
       }
 
@@ -2395,7 +2458,7 @@ export function ProductsManagement({
 </html>`);
       printWindow.document.close();
     },
-    [currency],
+    [currency, numberLocale, uiLocale],
   );
 
   /* ── Open scanner with context ── */
@@ -2416,7 +2479,9 @@ export function ProductsManagement({
       // If scanning from within the form → just fill the field
       if (scanContext === "form") {
         form.setValue("barcode", barcode, { shouldDirty: true });
-        toast.success(`ใส่บาร์โค้ด ${barcode} แล้ว`);
+        toast.success(
+          `${t(uiLocale, "products.scanner.toast.filledBarcode.prefix")} ${barcode} ${t(uiLocale, "products.scanner.toast.filledBarcode.suffix")}`,
+        );
         return;
       }
 
@@ -2450,15 +2515,16 @@ export function ProductsManagement({
       // Not found → ask to create new product with barcode
       if (canCreate) {
         toast(
-          (t) => (
+          (toastInstance) => (
             <div className="flex items-center gap-3">
               <span className="text-sm">
-                ไม่พบสินค้า <strong>{barcode}</strong>
+                {t(uiLocale, "products.scanner.notFound.toast.prefix")}{" "}
+                <strong>{barcode}</strong>
               </span>
               <button
                 className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white"
                 onClick={() => {
-                  toast.dismiss(t.id);
+                  toast.dismiss(toastInstance.id);
                   setMode("create");
                   setEditingProductId(null);
                   setImageFile(null);
@@ -2475,14 +2541,16 @@ export function ProductsManagement({
                   setShowCreateSheet(true);
                 }}
               >
-                + สร้างสินค้า
+                {t(uiLocale, "products.scanner.notFound.toast.createButton")}
               </button>
             </div>
           ),
           { duration: 6000 },
         );
       } else {
-        toast.error(`ไม่พบสินค้าที่มีบาร์โค้ด "${barcode}"`);
+        toast.error(
+          `${t(uiLocale, "products.scanner.error.notFoundBarcode.prefix")}${barcode}${t(uiLocale, "products.scanner.error.notFoundBarcode.suffix")}`,
+        );
       }
     })();
   };
@@ -2536,9 +2604,24 @@ export function ProductsManagement({
       {/* ── Summary strip (clickable status filter) ── */}
       <div className="grid grid-cols-3 gap-2">
         {([
-          { key: "all" as StatusFilter, count: totalCount, label: "ทั้งหมด", color: "text-slate-900" },
-          { key: "active" as StatusFilter, count: activeCount, label: "ใช้งาน", color: "text-emerald-600" },
-          { key: "inactive" as StatusFilter, count: inactiveCount, label: "ปิดใช้งาน", color: "text-slate-400" },
+          {
+            key: "all" as StatusFilter,
+            count: totalCount,
+            label: t(uiLocale, "products.summary.all"),
+            color: "text-slate-900",
+          },
+          {
+            key: "active" as StatusFilter,
+            count: activeCount,
+            label: t(uiLocale, "products.summary.active"),
+            color: "text-emerald-600",
+          },
+          {
+            key: "inactive" as StatusFilter,
+            count: inactiveCount,
+            label: t(uiLocale, "products.summary.inactive"),
+            color: "text-slate-400",
+          },
         ]).map((card) => (
           <button
             key={card.key}
@@ -2555,7 +2638,7 @@ export function ProductsManagement({
             }}
           >
             <p className={`text-lg font-bold ${card.color}`}>
-              {fmtNumber(card.count)}
+              {fmtNumber(card.count, numberLocale)}
             </p>
             <p className="text-[11px] text-muted-foreground">{card.label}</p>
           </button>
@@ -2572,7 +2655,7 @@ export function ProductsManagement({
               onChange={(e) => {
                 setQuery(e.target.value);
               }}
-              placeholder="ค้นหา SKU, ชื่อ, บาร์โค้ด"
+              placeholder={t(uiLocale, "products.search.placeholder")}
               className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none ring-blue-500 focus:ring-2"
             />
             {query && (
@@ -2589,7 +2672,7 @@ export function ProductsManagement({
             type="button"
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-100"
             onClick={() => openScanner("search")}
-            aria-label="สแกนบาร์โค้ด"
+            aria-label={t(uiLocale, "products.search.scanAria")}
           >
             <ScanBarcode className="h-5 w-5" />
           </button>
@@ -2603,7 +2686,7 @@ export function ProductsManagement({
               className="hidden h-10 shrink-0 items-center gap-1.5 rounded-xl bg-blue-600 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 active:scale-[0.98] sm:inline-flex"
             >
               <Plus className="h-4 w-4" />
-              เพิ่มสินค้า
+              {t(uiLocale, "products.action.create")}
             </button>
           )}
         </div>
@@ -2621,10 +2704,10 @@ export function ProductsManagement({
             }}
             className="h-8 appearance-none rounded-lg border border-slate-200 bg-white py-1 pl-7 pr-7 text-xs text-slate-700 outline-none ring-blue-500 focus:ring-1"
           >
-            <option value="">ทุกหมวดหมู่</option>
+            <option value="">{t(uiLocale, "products.filter.allCategories")}</option>
             {categories.map((cat) => (
               <option key={cat.id} value={cat.id}>
-                {cat.name} ({cat.productCount})
+                {cat.name} ({fmtNumber(cat.productCount, numberLocale)})
               </option>
             ))}
           </select>
@@ -2640,24 +2723,26 @@ export function ProductsManagement({
             }}
             className="h-8 appearance-none rounded-lg border border-slate-200 bg-white py-1 pl-7 pr-7 text-xs text-slate-700 outline-none ring-blue-500 focus:ring-1"
           >
-            <option value="newest">ใหม่สุด</option>
-            <option value="name-asc">ชื่อ A→Z</option>
-            <option value="name-desc">ชื่อ Z→A</option>
-            <option value="price-asc">ราคา ต่ำ→สูง</option>
-            <option value="price-desc">ราคา สูง→ต่ำ</option>
+            <option value="newest">{t(uiLocale, "products.sort.newest")}</option>
+            <option value="name-asc">{t(uiLocale, "products.sort.nameAsc")}</option>
+            <option value="name-desc">{t(uiLocale, "products.sort.nameDesc")}</option>
+            <option value="price-asc">{t(uiLocale, "products.sort.priceAsc")}</option>
+            <option value="price-desc">{t(uiLocale, "products.sort.priceDesc")}</option>
           </select>
         </div>
 
         {/* Result count */}
         <span className="text-[11px] text-muted-foreground">
-          {fmtNumber(totalMatchingCount)}
+          {fmtNumber(totalMatchingCount, numberLocale)}
         </span>
       </div>
 
       {/* ── Product list ── */}
       <div className="space-y-2">
         {isFilterLoading && productItems.length > 0 && (
-          <p className="px-1 text-[11px] text-muted-foreground">กำลังอัปเดตรายการ...</p>
+          <p className="px-1 text-[11px] text-muted-foreground">
+            {t(uiLocale, "products.list.updating")}
+          </p>
         )}
 
         {isFilterLoading && productItems.length === 0 ? (
@@ -2682,8 +2767,8 @@ export function ProductsManagement({
             <Package className="h-10 w-10 text-slate-300" />
             <p className="text-sm text-muted-foreground">
               {query || selectedCategoryId || statusFilter !== "all"
-                ? "ไม่พบสินค้าที่ตรงกัน"
-                : "ยังไม่มีสินค้า"}
+                ? t(uiLocale, "products.list.noMatches")
+                : t(uiLocale, "products.list.empty")}
             </p>
             {!isFilterLoading &&
               !query &&
@@ -2696,7 +2781,7 @@ export function ProductsManagement({
                 onClick={beginCreate}
               >
                 <Plus className="mr-1 h-4 w-4" />
-                เพิ่มสินค้าแรก
+                {t(uiLocale, "products.action.createFirst")}
               </Button>
               )}
           </div>
@@ -2736,11 +2821,12 @@ export function ProductsManagement({
                     {product.categoryName ? ` · ${product.categoryName}` : ""}
                   </p>
                   <p className="mt-0.5 text-[11px] text-slate-400">
-                    Barcode: {product.barcode ?? "—"}
+                    {t(uiLocale, "products.label.barcode")}: {product.barcode ?? "—"}
                   </p>
                   {(product.modelName || product.variantLabel) && (
                     <p className="mt-0.5 text-[11px] text-blue-600">
-                      {product.modelName ?? "Model"} · {product.variantLabel ?? "Variant"}
+                      {product.modelName ?? t(uiLocale, "products.label.model")} ·{" "}
+                      {product.variantLabel ?? t(uiLocale, "products.label.variant")}
                     </p>
                   )}
                 </div>
@@ -2748,7 +2834,7 @@ export function ProductsManagement({
                 {/* Price + Status */}
                 <div className="shrink-0 text-right">
                   <p className="text-sm font-semibold text-slate-900">
-                    {fmtPrice(product.priceBase, currency)}
+                    {fmtPrice(product.priceBase, currency, numberLocale)}
                   </p>
                   <span
                     className={`inline-block rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
@@ -2757,7 +2843,9 @@ export function ProductsManagement({
                         : "bg-slate-200 text-slate-500"
                     }`}
                   >
-                    {product.active ? "ใช้งาน" : "ปิด"}
+                    {product.active
+                      ? t(uiLocale, "products.status.active")
+                      : t(uiLocale, "products.status.inactive")}
                   </span>
                 </div>
 
@@ -2779,8 +2867,11 @@ export function ProductsManagement({
             disabled={isLoadMoreLoading || isFilterLoading}
           >
             {isLoadMoreLoading
-              ? "กำลังโหลด..."
-              : `โหลดเพิ่มเติม (${fmtNumber(Math.max(totalMatchingCount - productItems.length, 0))} รายการ)`}
+              ? t(uiLocale, "products.list.loadingMore")
+              : `${t(uiLocale, "products.list.loadMore")} (${fmtNumber(
+                  Math.max(totalMatchingCount - productItems.length, 0),
+                  numberLocale,
+                )} ${t(uiLocale, "products.items")})`}
           </Button>
         )}
       </div>
@@ -2796,7 +2887,7 @@ export function ProductsManagement({
             bottom:
               "calc(var(--bottom-tab-nav-height) + env(safe-area-inset-bottom) + 0.75rem)",
           }}
-          aria-label="เพิ่มสินค้า"
+          aria-label={t(uiLocale, "products.action.addAria")}
         >
           <Plus className="h-6 w-6" />
         </button>
@@ -2808,7 +2899,11 @@ export function ProductsManagement({
       <SlideUpSheet
         isOpen={showCreateSheet}
         onClose={requestCloseCreateSheet}
-        title={mode === "create" ? "เพิ่มสินค้าใหม่" : "แก้ไขสินค้า"}
+        title={
+          mode === "create"
+            ? t(uiLocale, "products.sheet.title.create")
+            : t(uiLocale, "products.sheet.title.edit")
+        }
         panelMaxWidthClass="min-[1200px]:max-w-3xl"
         closeOnBackdrop={false}
         disabled={loadingKey !== null}
@@ -2829,7 +2924,7 @@ export function ProductsManagement({
               onClick={requestCloseCreateSheet}
               disabled={loadingKey !== null}
             >
-              ยกเลิก
+              {t(uiLocale, "products.action.cancel")}
             </Button>
             {!isMatrixBulkMode && (
               <Button
@@ -2842,10 +2937,10 @@ export function ProductsManagement({
                 disabled={loadingKey !== null}
               >
                 {loadingKey === "create" || loadingKey === `update-${editingProductId}`
-                  ? "กำลังบันทึก..."
+                  ? t(uiLocale, "products.action.saving")
                   : mode === "create"
-                    ? "บันทึกสินค้า"
-                    : "บันทึกการแก้ไข"}
+                    ? t(uiLocale, "products.action.saveCreate")
+                    : t(uiLocale, "products.action.saveEdit")}
                 {Object.keys(form.formState.errors).length > 0 && (
                   <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
                     {Object.keys(form.formState.errors).length}
@@ -2864,7 +2959,7 @@ export function ProductsManagement({
                 }}
                 disabled={loadingKey !== null}
               >
-                บันทึกและเพิ่ม Variant ถัดไป
+                {t(uiLocale, "products.action.saveAndAddNextVariant")}
               </Button>
             )}
             {isMatrixBulkMode && (
@@ -2875,8 +2970,11 @@ export function ProductsManagement({
                 disabled={loadingKey !== null || matrixRows.length === 0}
               >
                 {loadingKey === "matrix-bulk-create"
-                  ? "กำลังบันทึกรุ่นย่อย..."
-                  : `ตรวจสอบและบันทึกหลายรุ่นย่อย (${fmtNumber(matrixRows.length)} รายการ)`}
+                  ? t(uiLocale, "products.action.savingVariants")
+                  : `${t(uiLocale, "products.action.reviewAndSaveVariants")} (${fmtNumber(
+                      matrixRows.length,
+                      numberLocale,
+                    )} ${t(uiLocale, "products.items")})`}
               </Button>
             )}
           </div>
@@ -2901,7 +2999,11 @@ export function ProductsManagement({
               {displayedImage ? (
                 <Image
                   src={displayedImage}
-                  alt={imageFile ? "รูปใหม่ที่เลือก" : "รูปสินค้าปัจจุบัน"}
+                  alt={
+                    imageFile
+                      ? t(uiLocale, "products.image.alt.newSelected")
+                      : t(uiLocale, "products.image.alt.current")
+                  }
                   fill
                   className="object-cover"
                   sizes="80px"
@@ -2909,7 +3011,7 @@ export function ProductsManagement({
               ) : (
                 <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 text-slate-400">
                   <Package className="h-5 w-5" />
-                  <span className="text-[10px]">เพิ่มรูป</span>
+                  <span className="text-[10px]">{t(uiLocale, "products.image.add")}</span>
                 </div>
               )}
             </button>
@@ -2923,17 +3025,19 @@ export function ProductsManagement({
               }}
             />
             <p className="text-xs text-muted-foreground">
-              รูปสินค้า (ไม่บังคับ)
+              {t(uiLocale, "products.image.labelOptional")}
               <br />
               {mode === "edit" && isImageMarkedForRemoval
-                ? "รูปนี้จะถูกลบเมื่อกดบันทึก"
+                ? t(uiLocale, "products.image.state.willRemoveOnSave")
                 : mode === "edit" && currentImageUrl && !imageFile
-                ? "กำลังแสดงรูปปัจจุบัน"
+                ? t(uiLocale, "products.image.state.showingCurrent")
                 : mode === "edit" && imageFile
-                  ? "กำลังแสดงรูปใหม่ (ยังไม่บันทึก)"
+                  ? t(uiLocale, "products.image.state.showingNewUnsaved")
                   : null}
               {mode === "edit" ? <br /> : null}
-              {isImageProcessing ? "กำลังเตรียมรูป..." : "สูงสุด 3 MB · จะถูกปรับเป็น 640px WebP"}
+              {isImageProcessing
+                ? t(uiLocale, "products.image.processing")
+                : t(uiLocale, "products.image.hint")}
             </p>
             {imageFile && (
               <button
@@ -2943,7 +3047,7 @@ export function ProductsManagement({
                   setImageFile(null);
                   if (imageInputRef.current) imageInputRef.current.value = "";
                 }}
-                aria-label="ลบรูปที่เลือก"
+                aria-label={t(uiLocale, "products.image.removeSelectedAria")}
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -2953,7 +3057,7 @@ export function ProductsManagement({
                 type="button"
                 className="shrink-0 rounded-lg border border-red-200 p-1.5 text-red-500 transition-colors hover:bg-red-50"
                 onClick={() => setIsImageMarkedForRemoval(true)}
-                aria-label="ตั้งค่าลบรูปปัจจุบัน"
+                aria-label={t(uiLocale, "products.image.markRemoveCurrentAria")}
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -2963,7 +3067,7 @@ export function ProductsManagement({
                 type="button"
                 className="shrink-0 rounded-lg border border-slate-200 p-1.5 text-slate-600 transition-colors hover:bg-slate-50"
                 onClick={() => setIsImageMarkedForRemoval(false)}
-                aria-label="ยกเลิกลบรูปปัจจุบัน"
+                aria-label={t(uiLocale, "products.image.cancelRemoveCurrentAria")}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -2976,7 +3080,7 @@ export function ProductsManagement({
               className="text-xs font-medium text-slate-700"
               htmlFor="pf-name"
             >
-              ชื่อสินค้า
+              {t(uiLocale, "products.form.name.label")}
             </label>
             <input
               id="pf-name"
@@ -2989,7 +3093,7 @@ export function ProductsManagement({
             />
             {mode === "create" && (
               <p className="text-[11px] text-muted-foreground">
-                กรอกชื่อก่อน ระบบจะช่วยสร้าง SKU ให้อัตโนมัติ (แก้เองได้)
+                {t(uiLocale, "products.form.name.hintAutoSku")}
               </p>
             )}
             {form.formState.errors.name && (
@@ -3007,7 +3111,7 @@ export function ProductsManagement({
                     className="text-xs font-medium text-slate-700"
                     htmlFor="pf-sku-reference-en"
                   >
-                    ชื่ออ้างอิงอังกฤษ (optional)
+                    {t(uiLocale, "products.form.skuReference.labelOptional")}
                   </label>
                   {skuReferenceName.trim().length === 0 ? (
                     <button
@@ -3016,7 +3120,7 @@ export function ProductsManagement({
                       disabled={loadingKey !== null}
                       onClick={() => setShowSkuReferenceField(false)}
                     >
-                      ซ่อน
+                      {t(uiLocale, "products.action.hide")}
                     </button>
                   ) : (
                     <button
@@ -3028,7 +3132,7 @@ export function ProductsManagement({
                         setShowSkuReferenceField(false);
                       }}
                     >
-                      ล้างค่า
+                      {t(uiLocale, "products.action.clear")}
                     </button>
                   )}
                 </div>
@@ -3043,10 +3147,10 @@ export function ProductsManagement({
                       setShowSkuReferenceField(true);
                     }
                   }}
-                  placeholder="เช่น Rice Cracker"
+                  placeholder={t(uiLocale, "products.form.skuReference.placeholder")}
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  ใช้ช่วยสร้าง SKU ให้แม่นขึ้น โดยไม่กระทบชื่อสินค้าที่แสดงจริง
+                  {t(uiLocale, "products.form.skuReference.hint")}
                 </p>
               </>
             ) : (
@@ -3056,7 +3160,7 @@ export function ProductsManagement({
                 disabled={loadingKey !== null}
                 onClick={() => setShowSkuReferenceField(true)}
               >
-                + เพิ่มชื่ออ้างอิงอังกฤษ (optional)
+                {t(uiLocale, "products.form.skuReference.addButton")}
               </button>
             )}
           </div>
@@ -3075,7 +3179,7 @@ export function ProductsManagement({
                 disabled={loadingKey !== null}
                 onClick={regenerateSkuFromName}
               >
-                สร้างใหม่
+                {t(uiLocale, "products.sku.regenerate")}
               </button>
             </div>
             <input
@@ -3090,19 +3194,21 @@ export function ProductsManagement({
             />
             {mode === "create" && (
               <p className="text-[11px] text-muted-foreground">
-                ระบบแปลงชื่อ (ลาว/ไทย/อังกฤษ) เป็น Latin ก่อนสร้าง SKU; ถ้าแปลงไม่ได้จะ fallback เป็นรหัสแบบ P-000001 หรือ CAT-000001
+                {t(uiLocale, "products.form.sku.hint.create.transliteration")}
               </p>
             )}
             {mode === "create" && (
               <p className="text-[11px] text-muted-foreground">
-                หลังแก้ SKU เอง ระบบจะไม่ auto ทับ และถ้าบันทึกแล้วซ้ำระบบจะเติม -2, -3 อัตโนมัติ
+                {t(uiLocale, "products.form.sku.hint.create.manualOverride")}
               </p>
             )}
             {mode === "edit" && (
               <p className="text-[11px] text-muted-foreground">
-                แก้ชื่อหรือชื่ออ้างอิงอังกฤษแล้วกด{" "}
-                <span className="font-medium">สร้างใหม่</span> ได้ แต่ระบบจะไม่ auto
-                เปลี่ยน SKU เอง
+                {t(uiLocale, "products.form.sku.hint.edit.regeneratePrefix")}{" "}
+                <span className="font-medium">
+                  {t(uiLocale, "products.form.sku.hint.edit.regenerateCta")}
+                </span>{" "}
+                {t(uiLocale, "products.form.sku.hint.edit.regenerateSuffix")}
               </p>
             )}
             {form.formState.errors.sku && (
@@ -3118,7 +3224,7 @@ export function ProductsManagement({
               className="text-xs font-medium text-slate-700"
               htmlFor="pf-barcode"
             >
-              บาร์โค้ด (ถ้ามี)
+              {t(uiLocale, "products.form.barcode.labelOptional")}
             </label>
             <div className="flex gap-2">
               <input
@@ -3132,7 +3238,7 @@ export function ProductsManagement({
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-colors hover:border-blue-400 hover:text-blue-600"
                 onClick={() => openScanner("form")}
                 disabled={loadingKey !== null}
-                aria-label="สแกนบาร์โค้ดใส่ช่อง"
+                aria-label={t(uiLocale, "products.form.barcode.scanAria")}
               >
                 <ScanBarcode className="h-4 w-4" />
               </button>
@@ -3142,10 +3248,10 @@ export function ProductsManagement({
                   className="flex h-10 shrink-0 items-center gap-1 rounded-lg border border-dashed border-amber-300 bg-amber-50 px-2.5 text-xs font-medium text-amber-700 transition-colors hover:border-amber-400 hover:bg-amber-100"
                   onClick={generateBarcode}
                   disabled={loadingKey !== null}
-                  title="สร้างบาร์โค้ดภายในร้าน (EAN-13)"
+                  title={t(uiLocale, "products.form.barcode.generateTitle")}
                 >
                   <Sparkles className="h-3.5 w-3.5" />
-                  สร้าง
+                  {t(uiLocale, "products.form.barcode.generate")}
                 </button>
               )}
             </div>
@@ -3158,7 +3264,7 @@ export function ProductsManagement({
                 className="text-xs font-medium text-slate-700"
                 htmlFor="pf-category"
               >
-                หมวดหมู่
+                {t(uiLocale, "products.form.category.label")}
               </label>
               <select
                 id="pf-category"
@@ -3166,7 +3272,7 @@ export function ProductsManagement({
                 disabled={loadingKey !== null}
                 {...form.register("categoryId")}
               >
-                <option value="">— ไม่ระบุ —</option>
+                <option value="">{t(uiLocale, "products.form.category.none")}</option>
                 {categories.map((cat) => (
                   <option key={cat.id} value={cat.id}>
                     {cat.name}
@@ -3207,7 +3313,7 @@ export function ProductsManagement({
                   }}
                 />
                 <span className="text-xs font-medium leading-5 text-slate-700">
-                  สินค้าแบบ Variant (มีสี/ขนาด/ตัวเลือก)
+                  {t(uiLocale, "products.variant.enabledLabel")}
                 </span>
               </label>
 
@@ -3218,7 +3324,9 @@ export function ProductsManagement({
                   disabled={loadingKey !== null}
                   onClick={() => setIsMatrixSectionExpanded((prev) => !prev)}
                 >
-                  {isMatrixSectionExpanded ? "ซ่อน Matrix" : "เปิด Matrix"}
+                  {isMatrixSectionExpanded
+                    ? t(uiLocale, "products.matrix.toggle.hide")
+                    : t(uiLocale, "products.matrix.toggle.show")}
                 </button>
               )}
             </div>
@@ -3228,14 +3336,13 @@ export function ProductsManagement({
                 <div className="rounded-lg bg-blue-50 px-3 py-2 text-[11px] text-blue-700">
                   {mode === "create" ? (
                     <>
-                      ฟอร์มนี้บันทึกได้ทีละ 1 SKU เท่านั้น หากต้องการหลายรุ่นย่อยให้ใช้ปุ่ม{" "}
-                      <span className="font-semibold">บันทึกและเพิ่ม Variant ถัดไป</span>
+                      {t(uiLocale, "products.variant.hint.createPrefix")}{" "}
+                      <span className="font-semibold">
+                        {t(uiLocale, "products.action.saveAndAddNextVariant")}
+                      </span>
                     </>
                   ) : (
-                    <>
-                      ฟอร์มแก้ไขนี้จัดการได้ทีละ 1 SKU เท่านั้น หากต้องการแก้หลายรุ่นย่อย
-                      ให้แก้ทีละ SKU เพื่อป้องกันข้อมูลผิดพลาด
-                    </>
+                    <>{t(uiLocale, "products.variant.hint.edit")}</>
                   )}
                 </div>
 
@@ -3244,13 +3351,13 @@ export function ProductsManagement({
                     className="text-xs font-medium text-slate-700"
                     htmlFor="pf-variant-model-name"
                   >
-                    ชื่อสินค้าแม่ (Model)
+                    {t(uiLocale, "products.variant.model.label")}
                   </label>
                   <input
                     id="pf-variant-model-name"
                     className="h-10 w-full rounded-lg border px-3 text-sm outline-none ring-blue-500 focus:ring-2"
                     disabled={loadingKey !== null}
-                    placeholder="เช่น กล่องอาหาร, เสื้อยืด"
+                    placeholder={t(uiLocale, "products.variant.model.placeholder")}
                     {...variantModelNameField}
                     autoComplete="off"
                     onFocus={() => {
@@ -3266,10 +3373,12 @@ export function ProductsManagement({
                   {isModelSuggestOpen && (
                     <div className="absolute z-30 mt-1 w-full rounded-lg border border-slate-200 bg-white p-1 shadow-xl">
                       {isModelSuggestLoading ? (
-                        <p className="px-2 py-1.5 text-xs text-slate-500">กำลังค้นหา...</p>
+                        <p className="px-2 py-1.5 text-xs text-slate-500">
+                          {t(uiLocale, "products.suggest.loading")}
+                        </p>
                       ) : modelSuggestions.length === 0 ? (
                         <p className="px-2 py-1.5 text-xs text-slate-500">
-                          ไม่พบชื่อเดิม สามารถพิมพ์ชื่อใหม่ได้
+                          {t(uiLocale, "products.suggest.noMatches")}
                         </p>
                       ) : (
                         <div className="max-h-44 overflow-y-auto">
@@ -3310,13 +3419,13 @@ export function ProductsManagement({
                       className="text-xs font-medium text-slate-700"
                       htmlFor="pf-variant-label"
                     >
-                      ชื่อ Variant
+                      {t(uiLocale, "products.variant.label.label")}
                     </label>
                     <input
                       id="pf-variant-label"
                       className="h-10 w-full rounded-lg border px-3 text-sm outline-none ring-blue-500 focus:ring-2"
                       disabled={loadingKey !== null}
-                      placeholder="เช่น 750ml / สีขาว"
+                      placeholder={t(uiLocale, "products.variant.label.placeholder")}
                       {...variantLabelField}
                       autoComplete="off"
                       onFocus={() => {
@@ -3330,16 +3439,18 @@ export function ProductsManagement({
                       }}
                     />
                     {isVariantLabelSuggestOpen && (
-                      <div className="absolute z-30 mt-1 w-full rounded-lg border border-slate-200 bg-white p-1 shadow-xl">
-                        {!watchedVariantModelName.trim() ? (
+                        <div className="absolute z-30 mt-1 w-full rounded-lg border border-slate-200 bg-white p-1 shadow-xl">
+                          {!watchedVariantModelName.trim() ? (
+                            <p className="px-2 py-1.5 text-xs text-slate-500">
+                              {t(uiLocale, "products.variant.label.needModelFirst")}
+                            </p>
+                          ) : isVariantLabelSuggestLoading ? (
                           <p className="px-2 py-1.5 text-xs text-slate-500">
-                            กรอกชื่อสินค้าแม่ก่อน เพื่อดูชื่อ Variant ที่เคยใช้
+                            {t(uiLocale, "products.suggest.loading")}
                           </p>
-                        ) : isVariantLabelSuggestLoading ? (
-                          <p className="px-2 py-1.5 text-xs text-slate-500">กำลังค้นหา...</p>
-                        ) : variantLabelSuggestions.length === 0 ? (
+                          ) : variantLabelSuggestions.length === 0 ? (
                           <p className="px-2 py-1.5 text-xs text-slate-500">
-                            ไม่พบชื่อเดิม สามารถพิมพ์ชื่อใหม่ได้
+                            {t(uiLocale, "products.suggest.noMatches")}
                           </p>
                         ) : (
                           <div className="max-h-44 overflow-y-auto">
@@ -3365,7 +3476,7 @@ export function ProductsManagement({
                       </div>
                     )}
                     <p className="text-[11px] text-muted-foreground">
-                      แนะนำชื่อเดิมจาก Model เดียวกัน (เลือกได้ หรือพิมพ์ใหม่เอง)
+                      {t(uiLocale, "products.variant.label.suggest.hint")}
                     </p>
                     {form.formState.errors.variant?.variantLabel && (
                       <p className="text-xs text-red-600">
@@ -3378,7 +3489,7 @@ export function ProductsManagement({
                       className="text-xs font-medium text-slate-700"
                       htmlFor="pf-variant-sort-order"
                     >
-                      ลำดับแสดง
+                      {t(uiLocale, "products.variant.sortOrder.label")}
                     </label>
                     <input
                       id="pf-variant-sort-order"
@@ -3394,7 +3505,7 @@ export function ProductsManagement({
                       }}
                     />
                     <p className="text-[11px] text-muted-foreground">
-                      ระบบตั้งให้อัตโนมัติจากลำดับถัดไป (ปรับเองได้)
+                      {t(uiLocale, "products.variant.sortOrder.hint")}
                     </p>
                     {form.formState.errors.variant?.variantSortOrder && (
                       <p className="text-xs text-red-600">
@@ -3406,7 +3517,9 @@ export function ProductsManagement({
 
                 <div className="space-y-2 rounded-lg bg-white/70 p-3 ring-1 ring-slate-200/80">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs font-medium text-slate-700">คุณสมบัติของ SKU นี้</p>
+                    <p className="text-xs font-medium text-slate-700">
+                      {t(uiLocale, "products.variant.options.title")}
+                    </p>
                     <button
                       type="button"
                       className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700"
@@ -3420,11 +3533,11 @@ export function ProductsManagement({
                         })
                       }
                     >
-                      + เพิ่มคุณสมบัติ
+                      {t(uiLocale, "products.variant.options.add")}
                     </button>
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    กรอกแค่ชื่อคุณสมบัติและค่าได้เลย ระบบจะสร้างรหัสให้อัตโนมัติ
+                    {t(uiLocale, "products.variant.options.hint")}
                   </p>
                   <button
                     type="button"
@@ -3433,13 +3546,13 @@ export function ProductsManagement({
                     onClick={() => setShowVariantCodeFields((prev) => !prev)}
                   >
                     {showVariantCodeFields
-                      ? "ซ่อนช่องรหัส (ขั้นสูง)"
-                      : "แสดงช่องรหัส (ขั้นสูง)"}
+                      ? t(uiLocale, "products.variant.options.toggleCodes.hide")
+                      : t(uiLocale, "products.variant.options.toggleCodes.show")}
                   </button>
 
                   {variantOptionFields.length === 0 && (
                     <p className="text-xs text-muted-foreground">
-                      ยังไม่มีคุณสมบัติ (บันทึกด้วยชื่อ Variant อย่างเดียวได้)
+                      {t(uiLocale, "products.variant.options.empty")}
                     </p>
                   )}
 
@@ -3449,13 +3562,13 @@ export function ProductsManagement({
                         <input
                           className="h-9 w-full min-w-0 rounded-md border px-2 text-sm outline-none ring-blue-500 focus:ring-2"
                           disabled={loadingKey !== null}
-                          placeholder="คุณสมบัติ (เช่น Size)"
+                          placeholder={t(uiLocale, "products.variant.options.field.attribute.placeholder")}
                           {...form.register(`variant.options.${idx}.attributeName`)}
                         />
                         <input
                           className="h-9 w-full min-w-0 rounded-md border px-2 text-sm outline-none ring-blue-500 focus:ring-2"
                           disabled={loadingKey !== null}
-                          placeholder="ค่า (เช่น 750ml)"
+                          placeholder={t(uiLocale, "products.variant.options.field.value.placeholder")}
                           {...form.register(`variant.options.${idx}.valueName`)}
                         />
                         <button
@@ -3465,7 +3578,9 @@ export function ProductsManagement({
                           disabled={loadingKey !== null}
                         >
                           <Minus className="h-4 w-4" />
-                          <span className="sm:hidden">ลบแถว</span>
+                          <span className="sm:hidden">
+                            {t(uiLocale, "products.variant.options.field.removeRow")}
+                          </span>
                         </button>
                       </div>
                       {showVariantCodeFields && (
@@ -3473,13 +3588,13 @@ export function ProductsManagement({
                           <input
                             className="h-9 rounded-md border px-2 text-xs outline-none ring-blue-500 focus:ring-2"
                             disabled={loadingKey !== null}
-                            placeholder="รหัสคุณสมบัติ (auto ได้)"
+                            placeholder={t(uiLocale, "products.variant.options.field.codeAttribute.placeholder")}
                             {...form.register(`variant.options.${idx}.attributeCode`)}
                           />
                           <input
                             className="h-9 rounded-md border px-2 text-xs outline-none ring-blue-500 focus:ring-2"
                             disabled={loadingKey !== null}
-                            placeholder="รหัสค่า (auto ได้)"
+                            placeholder={t(uiLocale, "products.variant.options.field.codeValue.placeholder")}
                             {...form.register(`variant.options.${idx}.valueCode`)}
                           />
                         </div>
@@ -3506,10 +3621,10 @@ export function ProductsManagement({
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="space-y-1">
                         <p className="text-xs font-semibold text-blue-800">
-                          สร้างหลายรุ่นย่อยอัตโนมัติ (Matrix)
+                          {t(uiLocale, "products.matrix.section.title")}
                         </p>
                         <p className="text-[11px] text-blue-700">
-                          ระบุแกนตัวเลือกแล้วให้ระบบสร้างตารางรุ่นย่อยพร้อม SKU
+                          {t(uiLocale, "products.matrix.section.description")}
                         </p>
                       </div>
                       <button
@@ -3518,7 +3633,9 @@ export function ProductsManagement({
                         disabled={loadingKey !== null}
                         onClick={() => setIsMatrixSectionExpanded((prev) => !prev)}
                       >
-                        {isMatrixSectionExpanded ? "ย่อส่วน Matrix" : "ขยายส่วน Matrix"}
+                        {isMatrixSectionExpanded
+                          ? t(uiLocale, "products.matrix.toggle.hide")
+                          : t(uiLocale, "products.matrix.toggle.show")}
                       </button>
                     </div>
 
@@ -3535,7 +3652,7 @@ export function ProductsManagement({
                                 setMatrixUseSecondAxis(false);
                               }}
                             >
-                              Color อย่างเดียว
+                              {t(uiLocale, "products.matrix.preset.colorOnly")}
                             </button>
                             <button
                               type="button"
@@ -3546,7 +3663,7 @@ export function ProductsManagement({
                                 setMatrixUseSecondAxis(false);
                               }}
                             >
-                              Size อย่างเดียว
+                              {t(uiLocale, "products.matrix.preset.sizeOnly")}
                             </button>
                             <button
                               type="button"
@@ -3558,7 +3675,7 @@ export function ProductsManagement({
                                 setMatrixUseSecondAxis(true);
                               }}
                             >
-                              Color + Size
+                              {t(uiLocale, "products.matrix.preset.colorAndSize")}
                             </button>
                           </div>
 
@@ -3567,14 +3684,14 @@ export function ProductsManagement({
                               className="h-9 rounded-md border border-blue-200 bg-white px-2 text-xs outline-none ring-blue-500 focus:ring-2"
                               value={matrixAxisOneName}
                               onChange={(event) => setMatrixAxisOneName(event.target.value)}
-                              placeholder="แกนหลัก (เช่น Color หรือ Size)"
+                              placeholder={t(uiLocale, "products.matrix.axisOne.name.placeholder")}
                               disabled={loadingKey !== null}
                             />
                             <input
                               className="h-9 rounded-md border border-blue-200 bg-white px-2 text-xs outline-none ring-blue-500 focus:ring-2"
                               value={matrixAxisOneValues}
                               onChange={(event) => setMatrixAxisOneValues(event.target.value)}
-                              placeholder="ค่าคั่นด้วย , เช่น White,Black หรือ 750ml,1000ml"
+                              placeholder={t(uiLocale, "products.matrix.axisOne.values.placeholder")}
                               disabled={loadingKey !== null}
                             />
                           </div>
@@ -3587,7 +3704,7 @@ export function ProductsManagement({
                               disabled={loadingKey !== null}
                               onChange={(event) => setMatrixUseSecondAxis(event.target.checked)}
                             />
-                            ใช้แกนที่ 2 (เช่น Size)
+                            {t(uiLocale, "products.matrix.axisTwo.enabledLabel")}
                           </label>
 
                           {matrixUseSecondAxis && (
@@ -3596,14 +3713,14 @@ export function ProductsManagement({
                                 className="h-9 rounded-md border border-blue-200 bg-white px-2 text-xs outline-none ring-blue-500 focus:ring-2"
                                 value={matrixAxisTwoName}
                                 onChange={(event) => setMatrixAxisTwoName(event.target.value)}
-                                placeholder="แกนที่ 2 (เช่น Size)"
+                                placeholder={t(uiLocale, "products.matrix.axisTwo.name.placeholder")}
                                 disabled={loadingKey !== null}
                               />
                               <input
                                 className="h-9 rounded-md border border-blue-200 bg-white px-2 text-xs outline-none ring-blue-500 focus:ring-2"
                                 value={matrixAxisTwoValues}
                                 onChange={(event) => setMatrixAxisTwoValues(event.target.value)}
-                                placeholder="ค่าคั่นด้วย , เช่น M,L,XL"
+                                placeholder={t(uiLocale, "products.matrix.axisTwo.values.placeholder")}
                                 disabled={loadingKey !== null}
                               />
                             </div>
@@ -3618,7 +3735,7 @@ export function ProductsManagement({
                             onClick={buildMatrixRows}
                             disabled={loadingKey !== null}
                           >
-                            สร้างตารางรุ่นย่อย
+                            {t(uiLocale, "products.matrix.action.createTable")}
                           </Button>
                           <Button
                             type="button"
@@ -3628,8 +3745,8 @@ export function ProductsManagement({
                             disabled={loadingKey !== null || matrixRows.length === 0}
                           >
                             {loadingKey === "matrix-gen-barcode"
-                              ? "กำลังสร้างบาร์โค้ด..."
-                              : "สร้างบาร์โค้ดที่ยังว่าง"}
+                              ? t(uiLocale, "products.matrix.action.fillMissingBarcodes.loading")
+                              : t(uiLocale, "products.matrix.action.fillMissingBarcodes")}
                           </Button>
                           <Button
                             type="button"
@@ -3641,21 +3758,24 @@ export function ProductsManagement({
                             }}
                             disabled={loadingKey !== null || matrixRows.length === 0}
                           >
-                            ล้างตาราง
+                            {t(uiLocale, "products.matrix.action.clearTable")}
                           </Button>
                         </div>
 
                         {matrixRows.length > 0 && (
                           <div className="space-y-2 rounded-lg bg-white/90 p-2 ring-1 ring-blue-200/70">
                             <p className="text-[11px] text-blue-700">
-                              ตารางรุ่นย่อย ({fmtNumber(matrixRows.length)} รายการ)
+                              {t(uiLocale, "products.matrix.rows.summary.prefix")}
+                              {fmtNumber(matrixRows.length, numberLocale)}{" "}
+                              {t(uiLocale, "products.matrix.rows.summary.suffix")}
                             </p>
                             <div className="space-y-2 md:max-h-[38dvh] md:overflow-y-auto md:pr-1">
                               {matrixRows.map((row, index) => (
                                 <div key={row.id} className="rounded-md bg-white p-2 ring-1 ring-slate-200/80">
                                   <div className="mb-2 flex items-center justify-between gap-2">
                                     <p className="text-[11px] font-medium text-slate-600">
-                                      แถวที่ {index + 1}
+                                      {t(uiLocale, "products.matrix.rows.rowLabel.prefix")}{" "}
+                                      {index + 1}
                                     </p>
                                     <button
                                       type="button"
@@ -3667,7 +3787,7 @@ export function ProductsManagement({
                                         )
                                       }
                                     >
-                                      ลบ
+                                      {t(uiLocale, "products.matrix.rows.delete")}
                                     </button>
                                   </div>
                                   <div className="grid gap-2 md:grid-cols-2">
@@ -3679,7 +3799,7 @@ export function ProductsManagement({
                                           variantLabel: event.target.value,
                                         })
                                       }
-                                      placeholder="ชื่อรุ่นย่อย"
+                                      placeholder={t(uiLocale, "products.matrix.rows.field.variantLabel.placeholder")}
                                       disabled={loadingKey !== null}
                                     />
                                     <input
@@ -3697,7 +3817,7 @@ export function ProductsManagement({
                                       onChange={(event) =>
                                         updateMatrixRow(row.id, { barcode: event.target.value })
                                       }
-                                      placeholder="Barcode (ไม่บังคับ)"
+                                      placeholder={t(uiLocale, "products.matrix.rows.field.barcode.placeholder")}
                                       disabled={loadingKey !== null}
                                     />
                                     <input
@@ -3711,7 +3831,7 @@ export function ProductsManagement({
                                           sortOrder: Number(event.target.value) || 0,
                                         })
                                       }
-                                      placeholder="ลำดับ"
+                                      placeholder={t(uiLocale, "products.matrix.rows.field.sortOrder.placeholder")}
                                       disabled={loadingKey !== null}
                                     />
                                   </div>
@@ -3719,7 +3839,7 @@ export function ProductsManagement({
                               ))}
                             </div>
                             <p className="rounded-md bg-blue-50 px-2 py-1.5 text-[11px] text-blue-700">
-                              ใช้ปุ่มด้านล่างเพื่อยืนยันและบันทึกหลายรุ่นย่อย
+                              {t(uiLocale, "products.matrix.rows.footerHint")}
                             </p>
                           </div>
                         )}
@@ -3738,7 +3858,7 @@ export function ProductsManagement({
                 className="text-xs font-medium text-slate-700"
                 htmlFor="pf-unit"
               >
-                หน่วยหลัก
+                {t(uiLocale, "products.form.baseUnit.label")}
               </label>
               <select
                 id="pf-unit"
@@ -3758,7 +3878,8 @@ export function ProductsManagement({
                 className="text-xs font-medium text-slate-700"
                 htmlFor="pf-price"
               >
-                ราคาขาย/{baseUnit?.code ?? "หน่วย"}
+                {t(uiLocale, "products.form.price.label.prefix")}
+                {baseUnit?.code ?? t(uiLocale, "products.form.price.label.fallbackUnit")}
               </label>
               <input
                 id="pf-price"
@@ -3781,11 +3902,14 @@ export function ProductsManagement({
           {/* Stock threshold overrides */}
           <div className="space-y-2 rounded-lg border border-slate-200 p-3">
             <p className="text-xs font-medium text-slate-700">
-              ตั้งค่าแจ้งเตือนสต็อก (Override)
+              {t(uiLocale, "products.form.stockThresholds.overrideTitle")}
             </p>
             <p className="text-[11px] text-muted-foreground">
-              เว้นว่างเพื่อใช้ค่าตั้งต้นของร้าน: หมด ≤ {fmtNumber(storeOutStockThreshold)},
-              ต่ำ ≤ {fmtNumber(storeLowStockThreshold)}
+              {t(uiLocale, "products.form.stockThresholds.hint.prefix")}{" "}
+              {t(uiLocale, "products.form.stockThresholds.hint.outPrefix")}{" "}
+              {fmtNumber(storeOutStockThreshold, numberLocale)},{" "}
+              {t(uiLocale, "products.form.stockThresholds.hint.lowPrefix")}{" "}
+              {fmtNumber(storeLowStockThreshold, numberLocale)}
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -3793,7 +3917,7 @@ export function ProductsManagement({
                   className="text-xs font-medium text-slate-700"
                   htmlFor="pf-out-threshold"
                 >
-                  สต็อกหมด (≤)
+                  {t(uiLocale, "products.detail.stockThresholds.outOfStock")}
                 </label>
                 <input
                   id="pf-out-threshold"
@@ -3816,7 +3940,7 @@ export function ProductsManagement({
                   className="text-xs font-medium text-slate-700"
                   htmlFor="pf-low-threshold"
                 >
-                  สต็อกต่ำ (≤)
+                  {t(uiLocale, "products.detail.stockThresholds.lowStock")}
                 </label>
                 <input
                   id="pf-low-threshold"
@@ -3841,7 +3965,7 @@ export function ProductsManagement({
           <div className="space-y-2 rounded-lg border border-slate-200 p-3">
             <div className="flex items-center justify-between">
               <p className="text-xs font-medium text-slate-700">
-                การแปลงหน่วย
+                {t(uiLocale, "products.form.conversions.title")}
               </p>
               <button
                 type="button"
@@ -3851,9 +3975,13 @@ export function ProductsManagement({
                   if (!nextAvailableConversionUnitId) return;
                   appendConversionUnit(nextAvailableConversionUnitId, 2);
                 }}
-                title={!nextAvailableConversionUnitId ? "ไม่มีหน่วยให้เพิ่มแล้ว" : undefined}
+                title={
+                  !nextAvailableConversionUnitId
+                    ? t(uiLocale, "products.form.conversions.addDisabledTitle")
+                    : undefined
+                }
               >
-                + เพิ่มหน่วย
+                {t(uiLocale, "products.form.conversions.add")}
               </button>
             </div>
 
@@ -3883,19 +4011,22 @@ export function ProductsManagement({
             )}
 
             <p className="text-[11px] text-muted-foreground">
-              หน่วยหลัก:{" "}
+              {t(uiLocale, "products.form.conversions.helper.baseUnitPrefix")}{" "}
               {baseUnit ? `${baseUnit.code} (${baseUnit.nameTh})` : "-"}
             </p>
             <p className="text-[11px] text-muted-foreground">
-              ตัวคูณต้องเทียบกับหน่วยหลักเสมอ เช่น 1 PACK = 12 {baseUnit?.code ?? "หน่วยหลัก"}, 1 BOX = 60 {baseUnit?.code ?? "หน่วยหลัก"}
+              {t(uiLocale, "products.form.conversions.helper.multiplierExample.prefix")}{" "}
+              {baseUnit?.code ?? t(uiLocale, "products.form.conversions.helper.multiplierExample.fallbackBaseUnit")}
+              {t(uiLocale, "products.form.conversions.helper.multiplierExample.infix")}{" "}
+              {baseUnit?.code ?? t(uiLocale, "products.form.conversions.helper.multiplierExample.fallbackBaseUnit")}
             </p>
             <p className="text-[11px] text-muted-foreground">
-              ราคาหน่วยแปลงใส่ได้แบบ optional ถ้าไม่ใส่ระบบจะคำนวณจาก ราคาขายหน่วยหลัก x ตัวคูณ
+              {t(uiLocale, "products.form.conversions.helper.priceOptional")}
             </p>
 
             {fields.length === 0 && (
               <p className="text-xs text-muted-foreground">
-                ยังไม่มีหน่วยแปลง
+                {t(uiLocale, "products.form.conversions.empty")}
               </p>
             )}
 
@@ -3947,7 +4078,7 @@ export function ProductsManagement({
                       type="number"
                       min={0}
                       step={1}
-                      placeholder="ราคา (ไม่บังคับ)"
+                      placeholder={t(uiLocale, "products.form.conversions.field.pricePerUnit.placeholder")}
                       className="order-4 h-9 rounded-md border px-2 text-sm outline-none ring-blue-500 focus:ring-2 sm:order-3"
                       disabled={loadingKey !== null}
                       {...form.register(`conversions.${idx}.pricePerUnit`)}
@@ -3966,13 +4097,15 @@ export function ProductsManagement({
                     <>
                       <p className="text-[11px] text-blue-700">
                         1 {selUnit.code} ={" "}
-                        {mult.toLocaleString("th-TH")} {baseUnit.code}
+                        {mult.toLocaleString(numberLocale)} {baseUnit.code}
                       </p>
                       <p className="text-[11px] text-slate-600">
-                        ราคาขาย 1 {selUnit.code} = {fmtPrice(effectivePricePerUnit, currency)}
+                        {t(uiLocale, "products.form.conversions.preview.pricePerUnit.prefix")}{" "}
+                        {selUnit.code} ={" "}
+                        {fmtPrice(effectivePricePerUnit, currency, numberLocale)}
                         {hasOverridePrice
-                          ? ` (กำหนดเอง, สูตรเดิม ${fmtPrice(computedPricePerUnit, currency)})`
-                          : " (อัตโนมัติจากหน่วยหลัก)"}
+                          ? ` ${t(uiLocale, "products.form.conversions.preview.pricePerUnit.note.custom.prefix")} ${fmtPrice(computedPricePerUnit, currency, numberLocale)}${t(uiLocale, "products.form.conversions.preview.pricePerUnit.note.custom.suffix")}`
+                          : ` ${t(uiLocale, "products.form.conversions.preview.pricePerUnit.note.auto")}`}
                       </p>
                     </>
                   ) : null}
@@ -4002,7 +4135,7 @@ export function ProductsManagement({
         isOpen={showDetailSheet}
         onClose={requestCloseDetailSheet}
         closeOnBackdrop={false}
-        title={detailProduct?.name ?? "รายละเอียดสินค้า"}
+        title={detailProduct?.name ?? t(uiLocale, "products.detail.sheet.titleFallback")}
         description={detailProduct ? `SKU: ${detailProduct.sku}` : undefined}
         footer={
           detailProduct ? (
@@ -4016,7 +4149,7 @@ export function ProductsManagement({
                       onClick={() => beginEdit(detailProduct)}
                     >
                       <Pencil className="mr-1 h-3 w-3" />
-                      แก้ไข
+                      {t(uiLocale, "products.detail.action.edit")}
                     </Button>
                   )}
                   {canCreate && (
@@ -4026,7 +4159,7 @@ export function ProductsManagement({
                       onClick={() => duplicateProduct(detailProduct)}
                     >
                       <Copy className="mr-1 h-3 w-3" />
-                      สำเนา
+                      {t(uiLocale, "products.detail.action.duplicate")}
                     </Button>
                   )}
                   {canArchive && (
@@ -4037,10 +4170,10 @@ export function ProductsManagement({
                       disabled={isDetailToggleActiveLoading}
                     >
                       {isDetailToggleActiveLoading
-                        ? "กำลังอัปเดต..."
+                        ? t(uiLocale, "products.detail.action.updating")
                         : detailProduct.active
-                          ? "ปิดใช้งาน"
-                          : "เปิดใช้งาน"}
+                          ? t(uiLocale, "products.detail.action.deactivate")
+                          : t(uiLocale, "products.detail.action.activate")}
                     </Button>
                   )}
                 </div>
@@ -4053,7 +4186,7 @@ export function ProductsManagement({
                   onClick={() => printBarcodeLabel(detailProduct)}
                 >
                   <Printer className="mr-1.5 h-3.5 w-3.5" />
-                  พิมพ์บาร์โค้ด
+                  {t(uiLocale, "products.detail.action.printBarcode")}
                 </Button>
               )}
             </div>
@@ -4069,7 +4202,7 @@ export function ProductsManagement({
                   type="button"
                   className="group relative h-24 w-24 overflow-hidden rounded-xl bg-slate-100 sm:h-28 sm:w-28"
                   onClick={() => setShowDetailImagePreview(true)}
-                  aria-label="ดูรูปเต็มจอ"
+                  aria-label={t(uiLocale, "products.detail.imagePreview.openAria")}
                 >
                   <Image
                     src={detailProduct.imageUrl}
@@ -4087,7 +4220,9 @@ export function ProductsManagement({
                 </div>
               )}
               {detailProduct.imageUrl && (
-                <p className="text-[11px] text-muted-foreground">แตะรูปเพื่อดูเต็มจอ</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {t(uiLocale, "products.detail.imagePreview.hint")}
+                </p>
               )}
             </div>
 
@@ -4095,12 +4230,15 @@ export function ProductsManagement({
             <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
               {(
                 [
-                  { key: "info", label: "ข้อมูล" },
-                  { key: "price", label: "ราคา" },
+                  { key: "info", label: t(uiLocale, "products.detail.tab.info") },
+                  { key: "price", label: t(uiLocale, "products.detail.tab.price") },
                   ...(canViewCost
-                    ? [{ key: "cost" as DetailTab, label: "ต้นทุน 🔒" }]
+                    ? [{ key: "cost" as DetailTab, label: t(uiLocale, "products.detail.tab.cost") }]
                     : []),
-                  { key: "conversions", label: "หน่วยแปลง" },
+                  {
+                    key: "conversions",
+                    label: t(uiLocale, "products.detail.tab.conversions"),
+                  },
                 ] as { key: DetailTab; label: string }[]
               ).map((tab) => (
                 <button
@@ -4135,52 +4273,56 @@ export function ProductsManagement({
                 {/* Tab — ข้อมูล */}
                 {detailTab === "info" && (
                   <div className="space-y-3">
-                    <InfoRow label="ชื่อ" value={detailProduct.name} />
+                    <InfoRow label={t(uiLocale, "products.detail.info.name")} value={detailProduct.name} />
                     <InfoRow
                       label="SKU"
                       value={detailProduct.sku}
                       action={{
-                        label: "คัดลอก",
-                        ariaLabel: "คัดลอก SKU",
+                        label: t(uiLocale, "products.action.copy"),
+                        ariaLabel: t(uiLocale, "products.action.copySkuAria"),
                         onClick: () => {
-                          void copyTextToClipboard(detailProduct.sku, "SKU");
+                          void copyTextToClipboard(detailProduct.sku, "sku");
                         },
                       }}
                     />
                     <InfoRow
-                      label="บาร์โค้ด"
+                      label={t(uiLocale, "products.label.barcode")}
                       value={detailProduct.barcode ?? "—"}
                       action={
                         detailProduct.barcode
                           ? {
-                              label: "คัดลอก",
-                              ariaLabel: "คัดลอกบาร์โค้ด",
+                              label: t(uiLocale, "products.action.copy"),
+                              ariaLabel: t(uiLocale, "products.action.copyBarcodeAria"),
                               onClick: () => {
-                                void copyTextToClipboard(detailProduct.barcode ?? "", "บาร์โค้ด");
+                                void copyTextToClipboard(detailProduct.barcode ?? "", "barcode");
                               },
                             }
                           : undefined
                       }
                     />
                     <InfoRow
-                      label="สินค้าแม่ (Model)"
+                      label={t(uiLocale, "products.detail.info.model")}
                       value={detailProduct.modelName ?? "—"}
                     />
                     <InfoRow
-                      label="รุ่นย่อย"
+                      label={t(uiLocale, "products.detail.info.variant")}
                       value={detailProduct.variantLabel ?? "—"}
                     />
                     <InfoRow
-                      label="หมวดหมู่"
-                      value={detailProduct.categoryName ?? "— ไม่ระบุ —"}
+                      label={t(uiLocale, "products.form.category.label")}
+                      value={detailProduct.categoryName ?? t(uiLocale, "products.form.category.none")}
                     />
                     <InfoRow
-                      label="หน่วยหลัก"
+                      label={t(uiLocale, "products.detail.info.baseUnit")}
                       value={`${detailProduct.baseUnitCode} (${detailProduct.baseUnitNameTh})`}
                     />
                     <InfoRow
-                      label="สถานะ"
-                      value={detailProduct.active ? "ใช้งาน" : "ปิดใช้งาน"}
+                      label={t(uiLocale, "products.detail.info.status")}
+                      value={
+                        detailProduct.active
+                          ? t(uiLocale, "products.status.active")
+                          : t(uiLocale, "products.status.inactive")
+                      }
                     />
 
                     {(() => {
@@ -4189,7 +4331,7 @@ export function ProductsManagement({
                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                           <div className="flex items-center justify-between">
                             <p className="text-xs font-medium text-slate-700">
-                              เกณฑ์แจ้งเตือนสต็อก
+                              {t(uiLocale, "products.detail.stockThresholds.title")}
                             </p>
                             <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600">
                               {thresholds.badgeLabel}
@@ -4197,7 +4339,9 @@ export function ProductsManagement({
                           </div>
                           <div className="mt-2 space-y-1">
                             <div className="flex items-center justify-between text-xs">
-                              <span className="text-slate-500">สต็อกคงเหลือปัจจุบัน</span>
+                              <span className="text-slate-500">
+                                {t(uiLocale, "products.detail.stockThresholds.currentStock")}
+                              </span>
                               <span
                                 className={`font-semibold ${
                                   detailProduct.stockAvailable <= thresholds.outThreshold
@@ -4207,20 +4351,24 @@ export function ProductsManagement({
                                       : "text-emerald-700"
                                 }`}
                               >
-                                {detailProduct.stockAvailable.toLocaleString("th-TH")}{" "}
+                                {detailProduct.stockAvailable.toLocaleString(numberLocale)}{" "}
                                 {detailProduct.baseUnitCode}
                               </span>
                             </div>
                             <div className="flex items-center justify-between text-xs">
-                              <span className="text-slate-500">สต็อกหมด (≤)</span>
+                              <span className="text-slate-500">
+                                {t(uiLocale, "products.detail.stockThresholds.outOfStock")}
+                              </span>
                               <span className="font-semibold text-slate-900">
-                                {thresholds.outThreshold.toLocaleString("th-TH")}
+                                {thresholds.outThreshold.toLocaleString(numberLocale)}
                               </span>
                             </div>
                             <div className="flex items-center justify-between text-xs">
-                              <span className="text-slate-500">สต็อกต่ำ (≤)</span>
+                              <span className="text-slate-500">
+                                {t(uiLocale, "products.detail.stockThresholds.lowStock")}
+                              </span>
                               <span className="font-semibold text-slate-900">
-                                {thresholds.lowThreshold.toLocaleString("th-TH")}
+                                {thresholds.lowThreshold.toLocaleString(numberLocale)}
                               </span>
                             </div>
                           </div>
@@ -4231,7 +4379,7 @@ export function ProductsManagement({
                     {detailProduct.variantOptions.length > 0 && (
                       <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
                         <p className="text-xs font-medium text-blue-800">
-                          คุณสมบัติของรุ่นย่อย
+                          {t(uiLocale, "products.detail.variantOptions.title")}
                         </p>
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {detailProduct.variantOptions.map((option) => (
@@ -4254,16 +4402,17 @@ export function ProductsManagement({
                   <div className="space-y-3">
                     <div className="rounded-xl bg-blue-50 p-4 text-center">
                       <p className="text-2xl font-bold text-blue-700">
-                        {fmtPrice(detailProduct.priceBase, currency)}
+                        {fmtPrice(detailProduct.priceBase, currency, numberLocale)}
                       </p>
                       <p className="text-xs text-blue-600">
-                        ราคาขาย / {detailProduct.baseUnitCode}
+                        {t(uiLocale, "products.detail.price.pricePerBaseUnit")} /{" "}
+                        {detailProduct.baseUnitCode}
                       </p>
                     </div>
                     {detailProduct.conversions.length > 0 && (
                       <div className="space-y-1">
                         <p className="text-xs font-medium text-slate-700">
-                          ราคาตามหน่วยแปลง
+                          {t(uiLocale, "products.detail.price.byConversionsTitle")}
                         </p>
                         {detailProduct.conversions.map((c) => (
                           <div
@@ -4278,6 +4427,7 @@ export function ProductsManagement({
                                 c.pricePerUnit ??
                                   detailProduct.priceBase * c.multiplierToBase,
                                 currency,
+                                numberLocale,
                               )}
                             </span>
                           </div>
@@ -4293,7 +4443,8 @@ export function ProductsManagement({
                     {editingCost ? (
                       <div className="space-y-2">
                         <label className="text-xs font-medium text-slate-700">
-                          ต้นทุน / {detailProduct.baseUnitCode}
+                          {t(uiLocale, "products.detail.cost.costPerBaseUnit")} /{" "}
+                          {detailProduct.baseUnitCode}
                         </label>
                         <input
                           type="number"
@@ -4305,17 +4456,17 @@ export function ProductsManagement({
                         />
                         <div className="space-y-1">
                           <label className="text-xs font-medium text-slate-700">
-                            เหตุผลที่แก้ไขต้นทุน
+                            {t(uiLocale, "products.cost.edit.reason.label")}
                           </label>
                           <textarea
                             value={costReasonDraft}
                             onChange={(event) => setCostReasonDraft(event.target.value)}
                             maxLength={240}
-                            placeholder="เช่น ปรับจากใบกำกับล่าสุด, แก้ค่าที่คีย์ผิด"
+                            placeholder={t(uiLocale, "products.cost.edit.reason.placeholder")}
                             className="min-h-20 w-full rounded-lg border px-3 py-2 text-sm outline-none ring-blue-500 focus:ring-2"
                           />
                           <p className="text-[11px] text-slate-500">
-                            ต้องกรอกอย่างน้อย 3 ตัวอักษร เพื่อเก็บ audit trail
+                            {t(uiLocale, "products.cost.edit.reason.hint")}
                           </p>
                         </div>
                         <div className="flex gap-2">
@@ -4326,7 +4477,7 @@ export function ProductsManagement({
                             onClick={requestCancelCostEdit}
                             disabled={loadingKey !== null}
                           >
-                            ยกเลิก
+                            {t(uiLocale, "products.action.cancel")}
                           </Button>
                           <Button
                             type="button"
@@ -4337,8 +4488,8 @@ export function ProductsManagement({
                             }
                           >
                             {loadingKey === `cost-${detailProduct.id}`
-                              ? "กำลังบันทึก..."
-                              : "บันทึก"}
+                              ? t(uiLocale, "products.action.saving")
+                              : t(uiLocale, "products.action.save")}
                           </Button>
                         </div>
                       </div>
@@ -4348,18 +4499,20 @@ export function ProductsManagement({
                         <div className="grid grid-cols-2 gap-2">
                           <div className="rounded-xl bg-blue-50 p-3 text-center">
                             <p className="text-lg font-bold text-blue-700">
-                              {fmtPrice(detailProduct.priceBase, currency)}
+                              {fmtPrice(detailProduct.priceBase, currency, numberLocale)}
                             </p>
                             <p className="text-[10px] text-blue-500">
-                              ราคาขาย / {detailProduct.baseUnitCode}
+                              {t(uiLocale, "products.detail.price.pricePerBaseUnit")} /{" "}
+                              {detailProduct.baseUnitCode}
                             </p>
                           </div>
                           <div className="rounded-xl bg-amber-50 p-3 text-center">
                             <p className="text-lg font-bold text-amber-700">
-                              {fmtPrice(detailProduct.costBase, currency)}
+                              {fmtPrice(detailProduct.costBase, currency, numberLocale)}
                             </p>
                             <p className="text-[10px] text-amber-500">
-                              ต้นทุน / {detailProduct.baseUnitCode}
+                              {t(uiLocale, "products.detail.cost.costPerBaseUnit")} /{" "}
+                              {detailProduct.baseUnitCode}
                             </p>
                           </div>
                         </div>
@@ -4368,17 +4521,22 @@ export function ProductsManagement({
                         {detailProduct.priceBase > 0 && (
                           <div className="rounded-lg bg-slate-50 px-3 py-2.5">
                             <div className="flex items-center justify-between">
-                              <span className="text-xs text-slate-500">กำไร/หน่วยหลัก</span>
+                              <span className="text-xs text-slate-500">
+                                {t(uiLocale, "products.detail.cost.profitPerBaseUnit")}
+                              </span>
                               <span className="text-sm font-semibold text-emerald-700">
                                 {fmtPrice(
                                   detailProduct.priceBase -
                                     detailProduct.costBase,
                                   currency,
+                                  numberLocale,
                                 )}
                               </span>
                             </div>
                             <div className="mt-1 flex items-center justify-between">
-                              <span className="text-xs text-slate-500">อัตรากำไร</span>
+                              <span className="text-xs text-slate-500">
+                                {t(uiLocale, "products.detail.cost.margin")}
+                              </span>
                               <span className="text-sm font-semibold text-emerald-700">
                                 {detailProduct.costBase > 0
                                   ? `${(((detailProduct.priceBase - detailProduct.costBase) / detailProduct.costBase) * 100).toFixed(1)}%`
@@ -4389,29 +4547,31 @@ export function ProductsManagement({
                         )}
 
                         <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-                          <p className="text-xs font-medium text-slate-700">ที่มาของต้นทุนล่าสุด</p>
+                          <p className="text-xs font-medium text-slate-700">
+                            {t(uiLocale, "products.detail.cost.latestCostSource.title")}
+                          </p>
                           <div className="mt-1 space-y-1 text-xs text-slate-600">
                             <p>
-                              แหล่งที่มา:{" "}
+                              {t(uiLocale, "products.detail.cost.latestCostSource.source")}{" "}
                               <span className="font-medium text-slate-800">
-                                {costSourceLabel[detailProduct.costTracking.source]}
+                                {getCostSourceLabel(uiLocale, detailProduct.costTracking.source)}
                               </span>
                             </p>
                             <p>
-                              อัปเดตเมื่อ:{" "}
+                              {t(uiLocale, "products.detail.cost.latestCostSource.updatedAt")}{" "}
                               <span className="font-medium text-slate-800">
-                                {fmtDateTime(detailProduct.costTracking.updatedAt)}
+                                {fmtDateTime(detailProduct.costTracking.updatedAt, dateLocale)}
                               </span>
                             </p>
                             <p>
-                              โดย:{" "}
+                              {t(uiLocale, "products.detail.cost.latestCostSource.actor")}{" "}
                               <span className="font-medium text-slate-800">
                                 {detailProduct.costTracking.actorName ?? "—"}
                               </span>
                             </p>
                             {detailProduct.costTracking.reference && (
                               <p>
-                                อ้างอิง:{" "}
+                                {t(uiLocale, "products.detail.cost.latestCostSource.reference")}{" "}
                                 <span className="font-medium text-slate-800">
                                   {detailProduct.costTracking.reference}
                                 </span>
@@ -4419,7 +4579,7 @@ export function ProductsManagement({
                             )}
                             {detailProduct.costTracking.reason && (
                               <p>
-                                หมายเหตุ:{" "}
+                                {t(uiLocale, "products.detail.cost.latestCostSource.note")}{" "}
                                 <span className="font-medium text-slate-800">
                                   {detailProduct.costTracking.reason}
                                 </span>
@@ -4439,7 +4599,7 @@ export function ProductsManagement({
                             }}
                             disabled={loadingKey !== null}
                           >
-                            แก้ไขต้นทุน
+                            {t(uiLocale, "products.detail.cost.editCost")}
                           </Button>
                         )}
                       </>
@@ -4452,7 +4612,7 @@ export function ProductsManagement({
                   <div className="space-y-2">
                     {detailProduct.conversions.length === 0 ? (
                       <p className="py-6 text-center text-xs text-muted-foreground">
-                        ไม่มีหน่วยแปลง
+                        {t(uiLocale, "products.detail.conversions.empty")}
                       </p>
                     ) : (
                       detailProduct.conversions.map((c) => (
@@ -4464,7 +4624,7 @@ export function ProductsManagement({
                             {c.unitCode} ({c.unitNameTh})
                           </span>
                           <span className="text-xs text-muted-foreground">
-                            1 {c.unitCode} = {fmtNumber(c.multiplierToBase)}{" "}
+                            1 {c.unitCode} = {fmtNumber(c.multiplierToBase, numberLocale)}{" "}
                             {detailProduct.baseUnitCode}
                           </span>
                           <span className="text-xs font-medium text-slate-700">
@@ -4491,27 +4651,27 @@ export function ProductsManagement({
             type="button"
             className="absolute inset-0"
             onClick={() => setShowDetailImagePreview(false)}
-            aria-label="ปิดตัวอย่างรูป"
+            aria-label={t(uiLocale, "products.detail.imagePreview.overlay.backdropCloseAria")}
           />
           <div
             className="relative z-10 flex h-full w-full items-center justify-center p-4"
             role="dialog"
             aria-modal="true"
-            aria-label="ตัวอย่างรูปสินค้าเต็มจอ"
+            aria-label={t(uiLocale, "products.detail.imagePreview.overlay.dialogAria")}
           >
             <button
               ref={detailImageCloseButtonRef}
               type="button"
               className="absolute right-4 top-4 z-20 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-black/30 text-white"
               onClick={() => setShowDetailImagePreview(false)}
-              aria-label="ปิด"
+              aria-label={t(uiLocale, "products.detail.imagePreview.overlay.closeButtonAria")}
             >
               <X className="h-5 w-5" />
             </button>
             <div className="relative h-full w-full max-w-4xl">
               <Image
                 src={detailProduct.imageUrl}
-                alt={`${detailProduct.name} (เต็มจอ)`}
+                alt={`${detailProduct.name} ${t(uiLocale, "products.detail.imagePreview.fullscreenAltSuffix")}`}
                 fill
                 className="object-contain"
                 sizes="100vw"
@@ -4534,7 +4694,7 @@ export function ProductsManagement({
           <button
             type="button"
             className="absolute inset-0"
-            aria-label="ปิดกล่องยืนยัน"
+            aria-label={t(uiLocale, "products.modal.closeAria")}
             onClick={closeUnsavedCloseConfirm}
           />
           <div
@@ -4563,7 +4723,7 @@ export function ProductsManagement({
                 onClick={closeUnsavedCloseConfirm}
                 disabled={loadingKey !== null}
               >
-                กลับไปแก้ไข
+                {t(uiLocale, "products.unsavedConfirm.common.cancel")}
               </Button>
               <Button
                 type="button"
@@ -4590,7 +4750,7 @@ export function ProductsManagement({
           <button
             type="button"
             className="absolute inset-0"
-            aria-label="ปิดกล่องยืนยัน"
+            aria-label={t(uiLocale, "products.modal.closeAria")}
             onClick={closeDeactivateConfirm}
           />
           <div
@@ -4605,11 +4765,12 @@ export function ProductsManagement({
             aria-describedby="deactivate-product-description"
           >
             <p id="deactivate-product-title" className="text-sm font-semibold text-slate-900">
-              ยืนยันปิดใช้งานสินค้า
+              {t(uiLocale, "products.deactivateConfirm.title")}
             </p>
             <p id="deactivate-product-description" className="mt-2 text-xs text-slate-600">
-              สินค้า <span className="font-medium text-slate-900">{detailProduct.name}</span>{" "}
-              จะถูกซ่อนจากรายการที่ใช้งานจนกว่าจะเปิดใช้งานอีกครั้ง
+              {t(uiLocale, "products.deactivateConfirm.descriptionPrefix")}{" "}
+              <span className="font-medium text-slate-900">{detailProduct.name}</span>{" "}
+              {t(uiLocale, "products.deactivateConfirm.descriptionSuffix")}
             </p>
             <div className="mt-4 grid grid-cols-2 gap-2">
               <Button
@@ -4620,7 +4781,7 @@ export function ProductsManagement({
                 onClick={closeDeactivateConfirm}
                 disabled={isDetailToggleActiveLoading}
               >
-                ยกเลิก
+                {t(uiLocale, "products.action.cancel")}
               </Button>
               <Button
                 type="button"
@@ -4628,7 +4789,7 @@ export function ProductsManagement({
                 onClick={confirmDeactivateProduct}
                 disabled={isDetailToggleActiveLoading}
               >
-                ยืนยันปิดใช้งาน
+                {t(uiLocale, "products.deactivateConfirm.confirm")}
               </Button>
             </div>
           </div>
@@ -4641,16 +4802,18 @@ export function ProductsManagement({
       <SlideUpSheet
         isOpen={showScannerPermissionSheet}
         onClose={() => setShowScannerPermissionSheet(false)}
-        title="ขออนุญาตใช้กล้อง"
-        description="ระบบต้องใช้กล้องเพื่อสแกนบาร์โค้ดสินค้า"
+        title={t(uiLocale, "products.scannerPermission.title")}
+        description={t(uiLocale, "products.scannerPermission.description")}
       >
         <div className="space-y-3">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-            <p className="font-medium text-slate-700">ทำไมต้องใช้กล้อง?</p>
+            <p className="font-medium text-slate-700">
+              {t(uiLocale, "products.scannerPermission.whyTitle")}
+            </p>
             <ul className="mt-2 list-disc space-y-1 pl-4">
-              <li>สแกนบาร์โค้ดได้เร็วขึ้น</li>
-              <li>ลดความผิดพลาดจากการพิมพ์</li>
-              <li>ใช้งานได้ทันทีในหน้านี้</li>
+              <li>{t(uiLocale, "products.scannerPermission.bullet.fast")}</li>
+              <li>{t(uiLocale, "products.scannerPermission.bullet.fewerTypos")}</li>
+              <li>{t(uiLocale, "products.scannerPermission.bullet.ready")}</li>
             </ul>
           </div>
 
@@ -4661,7 +4824,7 @@ export function ProductsManagement({
               className="h-10 flex-1"
               onClick={() => setShowScannerPermissionSheet(false)}
             >
-              ยกเลิก
+              {t(uiLocale, "products.action.cancel")}
             </Button>
             <Button
               type="button"
@@ -4673,7 +4836,7 @@ export function ProductsManagement({
                 setShowScannerSheet(true);
               }}
             >
-              อนุญาตและสแกน
+              {t(uiLocale, "products.scannerPermission.allowAndScan")}
             </Button>
           </div>
         </div>
@@ -4685,8 +4848,8 @@ export function ProductsManagement({
       <SlideUpSheet
         isOpen={showScannerSheet}
         onClose={() => setShowScannerSheet(false)}
-        title="สแกนบาร์โค้ด"
-        description="ส่องกล้องไปที่บาร์โค้ดสินค้า"
+        title={t(uiLocale, "products.scanner.title")}
+        description={t(uiLocale, "products.scanner.description")}
       >
         <BarcodeScannerPanel
           isOpen={showScannerSheet}

@@ -2,6 +2,8 @@ import { notFound, redirect } from "next/navigation";
 
 import { OrderDetailView } from "@/components/app/order-detail-view";
 import { getSession } from "@/lib/auth/session";
+import { DEFAULT_UI_LOCALE } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
 import {
   getUserPermissionsForCurrentSession,
   isPermissionGranted,
@@ -33,11 +35,13 @@ export default async function OrderDetailPage({
   const canSelfApproveCancel =
     session.activeRoleName === "Owner" || session.activeRoleName === "Manager";
 
+  const uiLocale = session.uiLocale ?? DEFAULT_UI_LOCALE;
+
   if (!canView) {
     return (
       <section className="space-y-4">
-        <h1 className="text-xl font-semibold">รายละเอียดออเดอร์</h1>
-        <p className="text-sm text-red-600">คุณไม่มีสิทธิ์ดูหน้านี้</p>
+        <h1 className="text-xl font-semibold">{t(uiLocale, "orders.detail.title")}</h1>
+        <p className="text-sm text-red-600">{t(uiLocale, "orders.detail.noAccess")}</p>
       </section>
     );
   }

@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { authFetch } from "@/lib/auth/client-token";
+import { uiLocaleToDateLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
+import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 
 type CodReconcileRow = {
   id: string;
@@ -55,12 +58,7 @@ const createIdempotencyKey = () => {
   return `cod-reconcile-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
 
-const toProviderLabel = (row: CodReconcileRow) =>
-  row.shippingProvider?.trim() ||
-  row.shippingCarrier?.trim() ||
-  "ไม่ระบุ";
-
-const formatDateTime = (value: string | null) => {
+const formatDateTime = (value: string | null, locale: string) => {
   if (!value) {
     return "-";
   }
@@ -68,7 +66,7 @@ const formatDateTime = (value: string | null) => {
   if (!Number.isFinite(parsed.getTime())) {
     return "-";
   }
-  return parsed.toLocaleString("th-TH", {
+  return parsed.toLocaleString(locale, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -78,6 +76,8 @@ const formatDateTime = (value: string | null) => {
 };
 
 export function OrdersCodReconcile() {
+  const uiLocale = useUiLocale();
+  const numberLocale = uiLocaleToDateLocale(uiLocale);
   const today = localDateString(new Date());
   const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(today);
@@ -125,7 +125,7 @@ export function OrdersCodReconcile() {
         | null;
 
       if (!res.ok || !data?.ok || !data.page) {
-        setErrorMessage(data?.message ?? "โหลดรายการ COD ไม่สำเร็จ");
+        setErrorMessage(data?.message ?? t(uiLocale, "orders.codReconcile.error.loadFailed"));
         return;
       }
 
@@ -144,11 +144,11 @@ export function OrdersCodReconcile() {
         return next;
       });
     } catch {
-      setErrorMessage("โหลดรายการ COD ไม่สำเร็จ");
+      setErrorMessage(t(uiLocale, "orders.codReconcile.error.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, provider, keyword, page]);
+  }, [dateFrom, dateTo, provider, keyword, page, uiLocale]);
 
   useEffect(() => {
     void loadData();
@@ -263,7 +263,7 @@ export function OrdersCodReconcile() {
 
   const onSettleSelected = async () => {
     if (selectedRows.length <= 0) {
-      setErrorMessage("กรุณาเลือกรายการอย่างน้อย 1 ออเดอร์");
+      setErrorMessage(t(uiLocale, "orders.codReconcile.error.selectAtLeastOne"));
       return;
     }
 
@@ -275,7 +275,7 @@ export function OrdersCodReconcile() {
       return parseNonNegativeInt(draft.codAmount) === null || parseNonNegativeInt(draft.codFee) === null;
     });
     if (hasInvalid) {
-      setErrorMessage("กรุณากรอกยอดโอนจริงและ codFee ให้ถูกต้อง");
+      setErrorMessage(t(uiLocale, "orders.codReconcile.error.invalidInput"));
       return;
     }
 
@@ -309,7 +309,7 @@ export function OrdersCodReconcile() {
         | null;
 
       if (!res.ok || !data?.ok) {
-        setErrorMessage(data?.message ?? "ปิดยอด COD ไม่สำเร็จ");
+        setErrorMessage(data?.message ?? t(uiLocale, "orders.codReconcile.error.settleFailed"));
         return;
       }
 
@@ -318,24 +318,34 @@ export function OrdersCodReconcile() {
       const failedMessages = (data.results ?? [])
         .filter((item) => !item.ok)
         .slice(0, 3)
-        .map((item) => `${item.orderNo ?? "-"}: ${item.message ?? "ไม่สำเร็จ"}`);
+        .map(
+          (item) =>
+            `${item.orderNo ?? "-"}: ${item.message ?? t(uiLocale, "orders.codReconcile.result.failedFallback")}`,
+        );
 
       if (failedCount > 0) {
         setErrorMessage(
-          `ปิดยอดสำเร็จ ${settledCount} รายการ, ไม่สำเร็จ ${failedCount} รายการ` +
+          `${t(uiLocale, "orders.codReconcile.result.summaryMixed.prefixSuccess")} ${settledCount} ${t(uiLocale, "orders.codReconcile.result.summaryMixed.itemSuffix")}, ${t(uiLocale, "orders.codReconcile.result.summaryMixed.infixFailed")} ${failedCount} ${t(uiLocale, "orders.codReconcile.result.summaryMixed.itemSuffix")}` +
             (failedMessages.length > 0 ? ` (${failedMessages.join(" | ")})` : ""),
         );
       } else {
-        setSuccessMessage(`ปิดยอด COD สำเร็จ ${settledCount} รายการ`);
+        setSuccessMessage(
+          `${t(uiLocale, "orders.codReconcile.result.success")} ${settledCount} ${t(uiLocale, "orders.codReconcile.result.summaryMixed.itemSuffix")}`,
+        );
       }
 
       await loadData();
     } catch {
-      setErrorMessage("ปิดยอด COD ไม่สำเร็จ");
+      setErrorMessage(t(uiLocale, "orders.codReconcile.error.settleFailed"));
     } finally {
       setSubmitting(false);
     }
   };
+
+  const toProviderLabel = (row: CodReconcileRow) =>
+    row.shippingProvider?.trim() ||
+    row.shippingCarrier?.trim() ||
+    t(uiLocale, "orders.codReconcile.provider.unknown");
 
   return (
     <section className="space-y-4">
@@ -366,7 +376,7 @@ export function OrdersCodReconcile() {
               setKeyword(event.target.value);
               setPage(1);
             }}
-            placeholder="ค้นหาเลขออเดอร์/ชื่อลูกค้า"
+            placeholder={t(uiLocale, "orders.codReconcile.filters.search.placeholder")}
             className="h-10 rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
           />
           <select
@@ -377,7 +387,7 @@ export function OrdersCodReconcile() {
             }}
             className="h-10 rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
           >
-            <option value="">ทุกขนส่ง</option>
+            <option value="">{t(uiLocale, "orders.codReconcile.filters.provider.all")}</option>
             {providers.map((providerOption) => (
               <option key={providerOption} value={providerOption}>
                 {providerOption}
@@ -385,7 +395,7 @@ export function OrdersCodReconcile() {
             ))}
           </select>
           <Button type="button" className="h-10" onClick={() => void loadData()} disabled={loading}>
-            รีเฟรช
+            {t(uiLocale, "orders.codReconcile.filters.refresh")}
           </Button>
         </div>
       </article>
@@ -393,7 +403,9 @@ export function OrdersCodReconcile() {
       <article className="rounded-xl border bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm font-medium">
-            รายการ COD รอปิดยอด {codPage.total.toLocaleString("th-TH")} รายการ
+            {t(uiLocale, "orders.codReconcile.list.titlePrefix")}{" "}
+            {codPage.total.toLocaleString(numberLocale)}{" "}
+            {t(uiLocale, "orders.codReconcile.list.itemsSuffix")}
           </p>
           <button
             type="button"
@@ -401,45 +413,60 @@ export function OrdersCodReconcile() {
             onClick={toggleSelectAll}
             disabled={rows.length <= 0}
           >
-            {allSelected ? "ยกเลิกทั้งหมด" : "เลือกทั้งหมดในหน้านี้"}
+            {allSelected
+              ? t(uiLocale, "orders.codReconcile.list.deselectAll")
+              : t(uiLocale, "orders.codReconcile.list.selectAll")}
           </button>
         </div>
 
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-lg border bg-slate-50 p-3">
-            <p className="text-xs text-slate-500">ยอดที่ต้องได้ (รายการที่เลือก)</p>
+            <p className="text-xs text-slate-500">
+              {t(uiLocale, "orders.codReconcile.selected.expected")}
+            </p>
             <p className="text-base font-semibold text-slate-900">
-              {selectedSummary.expected.toLocaleString("th-TH")} LAK
+              {selectedSummary.expected.toLocaleString(numberLocale)} LAK
             </p>
           </div>
           <div className="rounded-lg border bg-slate-50 p-3">
-            <p className="text-xs text-slate-500">ยอดโอนจริง (รายการที่เลือก)</p>
+            <p className="text-xs text-slate-500">
+              {t(uiLocale, "orders.codReconcile.selected.actual")}
+            </p>
             <p className="text-base font-semibold text-slate-900">
-              {selectedSummary.actual.toLocaleString("th-TH")} LAK
+              {selectedSummary.actual.toLocaleString(numberLocale)} LAK
             </p>
           </div>
           <div className="rounded-lg border bg-slate-50 p-3">
-            <p className="text-xs text-slate-500">codFee (รายการที่เลือก)</p>
+            <p className="text-xs text-slate-500">
+              {t(uiLocale, "orders.codReconcile.selected.fee")}
+            </p>
             <p className="text-base font-semibold text-slate-900">
-              {selectedSummary.fee.toLocaleString("th-TH")} LAK
+              {selectedSummary.fee.toLocaleString(numberLocale)} LAK
             </p>
           </div>
           <div className="rounded-lg border bg-slate-50 p-3">
-            <p className="text-xs text-slate-500">ส่วนต่างรับเงิน (รายการที่เลือก)</p>
+            <p className="text-xs text-slate-500">
+              {t(uiLocale, "orders.codReconcile.selected.diff")}
+            </p>
             <p
               className={`text-base font-semibold ${
                 selectedDiff < 0 ? "text-rose-700" : selectedDiff > 0 ? "text-emerald-700" : "text-slate-900"
               }`}
             >
-              {selectedDiff.toLocaleString("th-TH")} LAK
+              {selectedDiff.toLocaleString(numberLocale)} LAK
             </p>
           </div>
         </div>
         <div className="mt-2 text-xs text-slate-500">
           <p>
-            ร่างข้อมูลทั้งหน้าปัจจุบัน • ต้องได้ {pageDraftSummary.expected.toLocaleString("th-TH")} LAK • โอนจริง{" "}
-            {pageDraftSummary.actual.toLocaleString("th-TH")} LAK • codFee{" "}
-            {pageDraftSummary.fee.toLocaleString("th-TH")} LAK • ส่วนต่าง{" "}
+            {t(uiLocale, "orders.codReconcile.pageDraft.summary.prefix")} •{" "}
+            {t(uiLocale, "orders.codReconcile.pageDraft.summary.expectedPrefix")}{" "}
+            {pageDraftSummary.expected.toLocaleString(numberLocale)} LAK •{" "}
+            {t(uiLocale, "orders.codReconcile.pageDraft.summary.actualPrefix")}{" "}
+            {pageDraftSummary.actual.toLocaleString(numberLocale)} LAK •{" "}
+            {t(uiLocale, "orders.codReconcile.pageDraft.summary.feePrefix")}{" "}
+            {pageDraftSummary.fee.toLocaleString(numberLocale)} LAK •{" "}
+            {t(uiLocale, "orders.codReconcile.pageDraft.summary.diffPrefix")}{" "}
             <span
               className={
                 pageDraftSummary.diff < 0
@@ -449,12 +476,14 @@ export function OrdersCodReconcile() {
                     : "text-slate-600"
               }
             >
-              {pageDraftSummary.diff.toLocaleString("th-TH")} LAK
+              {pageDraftSummary.diff.toLocaleString(numberLocale)} LAK
             </span>
           </p>
           {pageDraftSummary.invalidCount > 0 ? (
             <p className="text-red-600">
-              มี {pageDraftSummary.invalidCount.toLocaleString("th-TH")} รายการที่กรอกยอดไม่ถูกต้อง
+              {t(uiLocale, "orders.codReconcile.pageDraft.invalidCount.prefix")}{" "}
+              {pageDraftSummary.invalidCount.toLocaleString(numberLocale)}{" "}
+              {t(uiLocale, "orders.codReconcile.pageDraft.invalidCount.suffix")}
             </p>
           ) : null}
         </div>
@@ -462,7 +491,7 @@ export function OrdersCodReconcile() {
         <div className="mt-3 space-y-2">
           {rows.length <= 0 ? (
             <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-              ไม่พบรายการ COD ที่รอปิดยอดตามเงื่อนไขที่เลือก
+              {t(uiLocale, "orders.codReconcile.empty")}
             </p>
           ) : (
             rows.map((row) => {
@@ -495,22 +524,30 @@ export function OrdersCodReconcile() {
                       {row.orderNo}
                     </label>
                     <p className="text-xs text-slate-500">
-                      ส่งเมื่อ: {formatDateTime(row.shippedAt)} • {toProviderLabel(row)}
+                      {t(uiLocale, "orders.codReconcile.shippedAt.prefix")}{" "}
+                      {formatDateTime(row.shippedAt, numberLocale)} • {toProviderLabel(row)}
                     </p>
                   </div>
                   <p className="mt-1 text-xs text-slate-600">
-                    ลูกค้า: {row.customerName || row.contactDisplayName || "ลูกค้าทั่วไป"}
+                    {t(uiLocale, "orders.codReconcile.customer.prefix")}{" "}
+                    {row.customerName ||
+                      row.contactDisplayName ||
+                      t(uiLocale, "orders.codReconcile.customer.walkIn")}
                   </p>
 
                   <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
                     <div className="rounded-md bg-slate-50 p-2 text-xs">
-                      <p className="text-slate-500">ยอดที่ต้องได้</p>
+                      <p className="text-slate-500">
+                        {t(uiLocale, "orders.codReconcile.field.expected")}
+                      </p>
                       <p className="font-medium">
-                        {row.expectedCodAmount.toLocaleString("th-TH")} LAK
+                        {row.expectedCodAmount.toLocaleString(numberLocale)} LAK
                       </p>
                     </div>
                     <div className="space-y-1 text-xs">
-                      <p className="text-slate-500">ยอดโอนจริง</p>
+                      <p className="text-slate-500">
+                        {t(uiLocale, "orders.codReconcile.field.actual")}
+                      </p>
                       <input
                         type="number"
                         min={0}
@@ -529,7 +566,7 @@ export function OrdersCodReconcile() {
                       />
                     </div>
                     <div className="space-y-1 text-xs">
-                      <p className="text-slate-500">codFee</p>
+                      <p className="text-slate-500">{t(uiLocale, "orders.codReconcile.field.fee")}</p>
                       <input
                         type="number"
                         min={0}
@@ -548,19 +585,21 @@ export function OrdersCodReconcile() {
                       />
                     </div>
                     <div className="rounded-md bg-slate-50 p-2 text-xs">
-                      <p className="text-slate-500">ส่วนต่างรับเงิน</p>
+                      <p className="text-slate-500">{t(uiLocale, "orders.codReconcile.field.diff")}</p>
                       <p
                         className={`font-medium ${
                           rowDiff < 0 ? "text-rose-700" : rowDiff > 0 ? "text-emerald-700" : "text-slate-900"
                         }`}
                       >
-                        {rowDiff.toLocaleString("th-TH")} LAK
+                        {rowDiff.toLocaleString(numberLocale)} LAK
                       </p>
                     </div>
                   </div>
 
                   {parsedAmount === null || parsedFee === null ? (
-                    <p className="mt-2 text-xs text-red-600">กรอกยอดให้ถูกต้อง (จำนวนเต็มและไม่ติดลบ)</p>
+                    <p className="mt-2 text-xs text-red-600">
+                      {t(uiLocale, "orders.codReconcile.validation.correctAmounts")}
+                    </p>
                   ) : null}
                 </div>
               );
@@ -571,19 +610,27 @@ export function OrdersCodReconcile() {
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
           <div className="text-xs text-slate-600">
             <p>
-              เลือกแล้ว {selectedRows.length.toLocaleString("th-TH")} รายการ • ยอดที่ต้องได้{" "}
-              {selectedSummary.expected.toLocaleString("th-TH")} LAK
+              {t(uiLocale, "orders.codReconcile.selected.summary.prefix")}{" "}
+              {selectedRows.length.toLocaleString(numberLocale)}{" "}
+              {t(uiLocale, "orders.codReconcile.list.itemsSuffix")} •{" "}
+              {t(uiLocale, "orders.codReconcile.selected.summary.expectedPrefix")}{" "}
+              {selectedSummary.expected.toLocaleString(numberLocale)} LAK
             </p>
             <p>
-              ยอดโอนจริง {selectedSummary.actual.toLocaleString("th-TH")} LAK • codFee{" "}
-              {selectedSummary.fee.toLocaleString("th-TH")} LAK • ส่วนต่าง{" "}
+              {t(uiLocale, "orders.codReconcile.selected.summary.actualPrefix")}{" "}
+              {selectedSummary.actual.toLocaleString(numberLocale)} LAK •{" "}
+              {t(uiLocale, "orders.codReconcile.selected.summary.feePrefix")}{" "}
+              {selectedSummary.fee.toLocaleString(numberLocale)} LAK •{" "}
+              {t(uiLocale, "orders.codReconcile.selected.summary.diffPrefix")}{" "}
               <span className={selectedDiff < 0 ? "text-rose-700" : selectedDiff > 0 ? "text-emerald-700" : ""}>
-                {selectedDiff.toLocaleString("th-TH")} LAK
+                {selectedDiff.toLocaleString(numberLocale)} LAK
               </span>
             </p>
             {selectedInvalidCount > 0 ? (
               <p className="text-red-600">
-                รายการที่เลือกมีข้อมูลไม่ถูกต้อง {selectedInvalidCount.toLocaleString("th-TH")} รายการ
+                {t(uiLocale, "orders.codReconcile.selected.invalid.prefix")}{" "}
+                {selectedInvalidCount.toLocaleString(numberLocale)}{" "}
+                {t(uiLocale, "orders.codReconcile.list.itemsSuffix")}
               </p>
             ) : null}
           </div>
@@ -592,7 +639,9 @@ export function OrdersCodReconcile() {
             onClick={() => void onSettleSelected()}
             disabled={submitting || selectedRows.length <= 0}
           >
-            {submitting ? "กำลังปิดยอด..." : "ยืนยันปิดยอดที่เลือก"}
+            {submitting
+              ? t(uiLocale, "orders.codReconcile.action.submitting")
+              : t(uiLocale, "orders.codReconcile.action.confirm")}
           </Button>
         </div>
 
@@ -603,10 +652,12 @@ export function OrdersCodReconcile() {
             disabled={loading || page <= 1}
             onClick={() => setPage((prev) => Math.max(1, prev - 1))}
           >
-            ก่อนหน้า
+            {t(uiLocale, "orders.codReconcile.pagination.prev")}
           </button>
           <p>
-            หน้า {codPage.page.toLocaleString("th-TH")} / {codPage.pageCount.toLocaleString("th-TH")}
+            {t(uiLocale, "orders.codReconcile.pagination.pagePrefix")}{" "}
+            {codPage.page.toLocaleString(numberLocale)} /{" "}
+            {codPage.pageCount.toLocaleString(numberLocale)}
           </p>
           <button
             type="button"
@@ -614,7 +665,7 @@ export function OrdersCodReconcile() {
             disabled={loading || page >= codPage.pageCount}
             onClick={() => setPage((prev) => Math.min(codPage.pageCount, prev + 1))}
           >
-            ถัดไป
+            {t(uiLocale, "orders.codReconcile.pagination.next")}
           </button>
         </div>
       </article>

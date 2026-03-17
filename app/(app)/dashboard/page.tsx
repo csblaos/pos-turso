@@ -12,6 +12,8 @@ import {
   type DashboardViewData,
 } from "@/server/services/dashboard.service";
 import { createPerfScope } from "@/server/perf/perf";
+import { DEFAULT_UI_LOCALE } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
 
 const emptyDashboardData: DashboardViewData = {
   metrics: {
@@ -45,6 +47,7 @@ export default async function DashboardPage() {
       redirect("/login");
     }
 
+    const uiLocale = session.uiLocale ?? DEFAULT_UI_LOCALE;
     const canView = isPermissionGranted(permissionKeys, "dashboard.view");
     const canViewInventory = isPermissionGranted(permissionKeys, "inventory.view");
     const canViewReports = isPermissionGranted(permissionKeys, "reports.view");
@@ -57,8 +60,8 @@ export default async function DashboardPage() {
 
       return (
         <section className="space-y-2">
-          <h1 className="text-xl font-semibold">แดชบอร์ด</h1>
-          <p className="text-sm text-red-600">คุณไม่มีสิทธิ์เข้าถึงแดชบอร์ด</p>
+          <h1 className="text-xl font-semibold">{t(uiLocale, "dashboard.page.title")}</h1>
+          <p className="text-sm text-red-600">{t(uiLocale, "dashboard.page.noAccess")}</p>
         </section>
       );
     }

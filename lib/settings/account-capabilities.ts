@@ -1,4 +1,6 @@
 import { isPermissionGranted } from "@/lib/rbac/access";
+import { type UiLocale } from "@/lib/i18n/locales";
+import { type MessageKey, t } from "@/lib/i18n/messages";
 
 export type UserCapability = {
   id: string;
@@ -10,60 +12,60 @@ export type UserCapability = {
 type CapabilityConfig = {
   id: string;
   permissionKey: string;
-  title: string;
-  description: string;
+  titleKey: MessageKey;
+  descriptionKey: MessageKey;
 };
 
 const capabilityConfigs: CapabilityConfig[] = [
   {
     id: "settings.view",
     permissionKey: "settings.view",
-    title: "เข้าหน้าตั้งค่า",
-    description: "ดูข้อมูลตั้งค่าร้านและบัญชี",
+    titleKey: "settings.permissions.capability.settings.view.title",
+    descriptionKey: "settings.permissions.capability.settings.view.description",
   },
   {
     id: "settings.update",
     permissionKey: "settings.update",
-    title: "แก้ไขข้อมูลร้าน",
-    description: "เปลี่ยนชื่อร้าน โลโก้ ที่อยู่ และข้อมูลพื้นฐาน",
+    titleKey: "settings.permissions.capability.settings.update.title",
+    descriptionKey: "settings.permissions.capability.settings.update.description",
   },
   {
     id: "members.view",
     permissionKey: "members.view",
-    title: "ดูสมาชิกทีม",
-    description: "ดูรายชื่อผู้ใช้และสมาชิกในร้าน",
+    titleKey: "settings.permissions.capability.members.view.title",
+    descriptionKey: "settings.permissions.capability.members.view.description",
   },
   {
     id: "rbac.roles.view",
     permissionKey: "rbac.roles.view",
-    title: "จัดการบทบาทและสิทธิ์",
-    description: "กำหนดว่าแต่ละตำแหน่งทำอะไรได้บ้าง",
+    titleKey: "settings.permissions.capability.rbac.roles.view.title",
+    descriptionKey: "settings.permissions.capability.rbac.roles.view.description",
   },
   {
     id: "units.view",
     permissionKey: "units.view",
-    title: "จัดการหน่วยสินค้า",
-    description: "ตั้งค่าหน่วยสินค้า เช่น ชิ้น แพ็ค กล่อง",
+    titleKey: "settings.permissions.capability.units.view.title",
+    descriptionKey: "settings.permissions.capability.units.view.description",
   },
   {
     id: "reports.view",
     permissionKey: "reports.view",
-    title: "ดูรายงาน",
-    description: "ดูยอดขายและข้อมูลสรุปผลการขาย",
+    titleKey: "settings.permissions.capability.reports.view.title",
+    descriptionKey: "settings.permissions.capability.reports.view.description",
   },
   {
     id: "connections.view",
     permissionKey: "connections.view",
-    title: "ดูการเชื่อมต่อช่องทาง",
-    description: "ตรวจสอบสถานะ Facebook Page และ WhatsApp",
+    titleKey: "settings.permissions.capability.connections.view.title",
+    descriptionKey: "settings.permissions.capability.connections.view.description",
   },
 ];
 
-export function buildUserCapabilities(permissionKeys: string[]): UserCapability[] {
+export function buildUserCapabilities(permissionKeys: string[], uiLocale: UiLocale): UserCapability[] {
   return capabilityConfigs.map((item) => ({
     id: item.id,
-    title: item.title,
-    description: item.description,
+    title: t(uiLocale, item.titleKey),
+    description: t(uiLocale, item.descriptionKey),
     granted: isPermissionGranted(permissionKeys, item.permissionKey),
   }));
 }

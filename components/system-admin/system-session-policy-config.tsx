@@ -4,6 +4,8 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { authFetch } from "@/lib/auth/client-token";
+import { t } from "@/lib/i18n/messages";
+import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 
 type SystemSessionPolicyConfigProps = {
   initialConfig: {
@@ -12,6 +14,7 @@ type SystemSessionPolicyConfigProps = {
 };
 
 export function SystemSessionPolicyConfig({ initialConfig }: SystemSessionPolicyConfigProps) {
+  const uiLocale = useUiLocale();
   const [defaultSessionLimit, setDefaultSessionLimit] = useState(
     String(initialConfig.defaultSessionLimit),
   );
@@ -22,7 +25,7 @@ export function SystemSessionPolicyConfig({ initialConfig }: SystemSessionPolicy
   const save = async () => {
     const parsed = Number(defaultSessionLimit);
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > 10) {
-      setErrorMessage("Default session limit ต้องเป็นตัวเลข 1-10");
+      setErrorMessage(t(uiLocale, "systemAdmin.sessionPolicy.error.invalidLimit"));
       setSuccessMessage(null);
       return;
     }
@@ -51,7 +54,7 @@ export function SystemSessionPolicyConfig({ initialConfig }: SystemSessionPolicy
       | null;
 
     if (!response.ok) {
-      setErrorMessage(data?.message ?? "บันทึก Session Policy ไม่สำเร็จ");
+      setErrorMessage(data?.message ?? t(uiLocale, "systemAdmin.sessionPolicy.error.saveFailed"));
       setIsSubmitting(false);
       return;
     }
@@ -60,20 +63,20 @@ export function SystemSessionPolicyConfig({ initialConfig }: SystemSessionPolicy
       setDefaultSessionLimit(String(data.config.defaultSessionLimit));
     }
 
-    setSuccessMessage("บันทึก Session Policy แล้ว");
+    setSuccessMessage(t(uiLocale, "systemAdmin.sessionPolicy.message.saved"));
     setIsSubmitting(false);
   };
 
   return (
     <article className="space-y-3 rounded-xl border bg-white p-4">
-      <h2 className="text-sm font-semibold">Global Session Policy</h2>
+      <h2 className="text-sm font-semibold">{t(uiLocale, "systemAdmin.sessionPolicy.title")}</h2>
       <p className="text-sm text-muted-foreground">
-        กำหนดจำนวน session เริ่มต้นต่อผู้ใช้ (ใช้เมื่อ user ไม่ได้ตั้งค่า override)
+        {t(uiLocale, "systemAdmin.sessionPolicy.description")}
       </p>
 
       <div className="space-y-2">
         <label className="text-xs text-muted-foreground" htmlFor="global-session-limit">
-          Default Session Limit (1-10)
+          {t(uiLocale, "systemAdmin.sessionPolicy.field.defaultSessionLimit")}
         </label>
         <input
           id="global-session-limit"
@@ -88,7 +91,9 @@ export function SystemSessionPolicyConfig({ initialConfig }: SystemSessionPolicy
       </div>
 
       <Button className="h-10 w-full" onClick={save} disabled={isSubmitting}>
-        {isSubmitting ? "กำลังบันทึก..." : "บันทึก Session Policy"}
+        {isSubmitting
+          ? t(uiLocale, "systemAdmin.sessionPolicy.action.saving")
+          : t(uiLocale, "systemAdmin.sessionPolicy.action.save")}
       </Button>
 
       {successMessage ? <p className="text-sm text-emerald-700">{successMessage}</p> : null}

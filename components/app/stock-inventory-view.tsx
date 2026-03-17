@@ -15,6 +15,9 @@ import {
   StockTabToolbar,
 } from "@/components/app/stock-tab-feedback";
 import { authFetch } from "@/lib/auth/client-token";
+import { uiLocaleToDateLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
+import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 import type { StockProductOption } from "@/lib/inventory/queries";
 import type { CategoryItem, ProductListItem } from "@/lib/products/service";
 
@@ -81,6 +84,8 @@ export function StockInventoryView({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const uiLocale = useUiLocale();
+  const numberLocale = uiLocaleToDateLocale(uiLocale);
   const tabQuery = searchParams.get("tab");
   const isInventoryTabActive = tabQuery === null || tabQuery === "inventory";
   const searchQueryFromUrl = searchParams.get(INVENTORY_Q_QUERY_KEY)?.trim() ?? "";
@@ -273,9 +278,9 @@ export function StockInventoryView({
     items.sort((a, b) => {
       switch (sortBy) {
         case "sku":
-          return a.sku.localeCompare(b.sku, "th");
+          return a.sku.localeCompare(b.sku, uiLocale);
         case "name":
-          return a.name.localeCompare(b.name, "th");
+          return a.name.localeCompare(b.name, uiLocale);
         case "stock-low":
           return a.available - b.available;
         case "stock-high":
@@ -286,7 +291,7 @@ export function StockInventoryView({
     });
 
     return items;
-  }, [filter, productItems, resolveThresholds, searchQuery, sortBy]);
+  }, [filter, productItems, resolveThresholds, searchQuery, sortBy, uiLocale]);
 
   const stats = useMemo(() => {
     let low = 0;
@@ -342,11 +347,11 @@ export function StockInventoryView({
         | null;
 
       if (!res.ok) {
-        throw new Error(data?.message ?? "โหลดรายการสต็อกไม่สำเร็จ");
+        throw new Error(data?.message ?? t(uiLocale, "stock.inventory.error.loadFailed"));
       }
 
       if (!Array.isArray(data?.products)) {
-        throw new Error("รูปแบบข้อมูลรายการสต็อกไม่ถูกต้อง");
+        throw new Error(t(uiLocale, "stock.inventory.error.invalidData"));
       }
 
       return {
@@ -355,7 +360,7 @@ export function StockInventoryView({
         page: Number(data.page ?? page),
       };
     },
-    [pageSize, selectedCategoryId],
+    [pageSize, selectedCategoryId, uiLocale],
   );
 
   const refreshInventoryData = useCallback(async () => {
@@ -369,12 +374,12 @@ export function StockInventoryView({
       setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่";
+        error instanceof Error ? error.message : t(uiLocale, "stock.error.serverUnreachableRetry");
       setDataError(message);
     } finally {
       setIsRefreshingData(false);
     }
-  }, [fetchStockProductsPage]);
+  }, [fetchStockProductsPage, uiLocale]);
 
   useEffect(() => {
     if (!isInventoryTabActive) {
@@ -417,7 +422,7 @@ export function StockInventoryView({
           const message =
             error instanceof Error
               ? error.message
-              : "โหลดสินค้าหน้าถัดไปไม่สำเร็จ";
+              : t(uiLocale, "stock.inventory.error.loadMoreFailed");
           toast.error(message);
         }
         return false;
@@ -425,7 +430,7 @@ export function StockInventoryView({
         setIsLoadingMoreProducts(false);
       }
     },
-    [fetchStockProductsPage, hasMoreProducts, isLoadingMoreProducts, productPage],
+    [fetchStockProductsPage, hasMoreProducts, isLoadingMoreProducts, productPage, uiLocale],
   );
 
   const resolveProductFromBarcode = useCallback(async (barcode: string) => {
@@ -461,7 +466,7 @@ export function StockInventoryView({
         const matchedProduct = await resolveProductFromBarcode(trimmed);
         if (!matchedProduct) {
           setSearchQuery(trimmed);
-          toast.error("ไม่พบสินค้าที่มีบาร์โค้ดนี้");
+          toast.error(t(uiLocale, "stock.recording.toast.barcodeNotFound"));
           return;
         }
 
@@ -474,7 +479,7 @@ export function StockInventoryView({
           matchedProduct.categoryId !== selectedCategoryId
         ) {
           toast(
-            `พบสินค้า: ${matchedProduct.name} แต่ไม่อยู่ในหมวดที่เลือก (ล้างตัวกรองหมวดเพื่อดูรายการ)`,
+            `${t(uiLocale, "stock.recording.toast.foundProduct.prefix")} ${matchedProduct.name} ${t(uiLocale, "stock.inventory.toast.notInSelectedCategory.suffix")}`,
           );
           return;
         }
@@ -484,7 +489,9 @@ export function StockInventoryView({
         );
 
         if (inCurrentList) {
-          toast.success(`พบสินค้า: ${matchedProduct.name}`);
+          toast.success(
+            `${t(uiLocale, "stock.recording.toast.foundProduct.prefix")} ${matchedProduct.name}`,
+          );
           highlightProduct(matchedProduct.id);
           return;
         }
@@ -512,16 +519,18 @@ export function StockInventoryView({
         }
 
         if (loaded) {
-          toast.success(`พบสินค้า: ${matchedProduct.name}`);
+          toast.success(
+            `${t(uiLocale, "stock.recording.toast.foundProduct.prefix")} ${matchedProduct.name}`,
+          );
           highlightProduct(matchedProduct.id);
           return;
         }
 
         toast.success(
-          `พบสินค้า: ${matchedProduct.name} (อยู่นอกหน้ารายการที่โหลดตอนนี้)`,
+          `${t(uiLocale, "stock.recording.toast.foundProduct.prefix")} ${matchedProduct.name} ${t(uiLocale, "stock.inventory.toast.outsideLoadedList.suffix")}`,
         );
       } catch {
-        toast.error("ค้นหาสินค้าจากบาร์โค้ดไม่สำเร็จ");
+        toast.error(t(uiLocale, "stock.inventory.toast.searchBarcodeFailed"));
       } finally {
         setIsSearchingByBarcode(false);
       }
@@ -534,6 +543,7 @@ export function StockInventoryView({
       productPage,
       resolveProductFromBarcode,
       selectedCategoryId,
+      uiLocale,
     ],
   );
 
@@ -565,7 +575,7 @@ export function StockInventoryView({
               : "bg-white hover:bg-slate-50"
           }`}
         >
-          <p className="text-xs text-slate-600">สต็อกหมด</p>
+          <p className="text-xs text-slate-600">{t(uiLocale, "stock.inventory.stat.out")}</p>
           <p className="text-2xl font-bold text-red-600">{stats.out}</p>
         </button>
 
@@ -578,7 +588,7 @@ export function StockInventoryView({
               : "bg-white hover:bg-slate-50"
           }`}
         >
-          <p className="text-xs text-slate-600">สต็อกต่ำ</p>
+          <p className="text-xs text-slate-600">{t(uiLocale, "stock.inventory.stat.low")}</p>
           <p className="text-2xl font-bold text-amber-600">{stats.low}</p>
         </button>
 
@@ -591,9 +601,9 @@ export function StockInventoryView({
               : "bg-white hover:bg-slate-50"
           }`}
         >
-          <p className="text-xs text-slate-600">ทั้งหมด</p>
+          <p className="text-xs text-slate-600">{t(uiLocale, "common.filter.all")}</p>
           <p className="text-2xl font-bold text-emerald-600">
-            {productItems.length.toLocaleString("th-TH")}
+            {productItems.length.toLocaleString(numberLocale)}
           </p>
         </button>
       </div>
@@ -607,7 +617,7 @@ export function StockInventoryView({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="ค้นหาสินค้า (SKU, ชื่อ)..."
+                placeholder={t(uiLocale, "stock.inventory.search.placeholder")}
                 className="h-10 w-full rounded-md border pl-9 pr-9 text-sm outline-none ring-primary focus:ring-2"
               />
               {searchQuery && (
@@ -640,7 +650,7 @@ export function StockInventoryView({
                 onChange={(e) => setSelectedCategoryId(e.target.value)}
                 className="h-10 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2 sm:w-auto"
               >
-                <option value="">ทุกหมวดหมู่</option>
+                <option value="">{t(uiLocale, "stock.inventory.category.all")}</option>
                 {categories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
@@ -656,23 +666,26 @@ export function StockInventoryView({
                 onChange={(e) => setSortBy(e.target.value as SortOption)}
                 className="h-10 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2 sm:w-auto"
               >
-                <option value="name">ชื่อ ก-ฮ</option>
-                <option value="sku">SKU</option>
-                <option value="stock-low">สต็อกน้อย-มาก</option>
-                <option value="stock-high">สต็อกมาก-น้อย</option>
+                <option value="name">{t(uiLocale, "stock.inventory.sort.name")}</option>
+                <option value="sku">{t(uiLocale, "products.label.sku")}</option>
+                <option value="stock-low">{t(uiLocale, "stock.inventory.sort.stockLow")}</option>
+                <option value="stock-high">{t(uiLocale, "stock.inventory.sort.stockHigh")}</option>
               </select>
             </div>
           </div>
         </div>
 
         <p className="mt-2 text-xs text-slate-500">
-          แสดง {filteredAndSortedProducts.length.toLocaleString("th-TH")} จาก{" "}
-          {productItems.length.toLocaleString("th-TH")} รายการ
+          {t(uiLocale, "stock.inventory.summary.showing.prefix")}{" "}
+          {filteredAndSortedProducts.length.toLocaleString(numberLocale)}{" "}
+          {t(uiLocale, "stock.inventory.summary.showing.middle")}{" "}
+          {productItems.length.toLocaleString(numberLocale)}{" "}
+          {t(uiLocale, "stock.inventory.summary.showing.suffix")}
         </p>
       </article>
 
       {isRefreshingData && productItems.length === 0 ? (
-        <StockTabLoadingState message="กำลังอัปเดตรายการสต็อก..." />
+        <StockTabLoadingState message={t(uiLocale, "stock.inventory.loading.refreshing")} />
       ) : dataError && productItems.length === 0 ? (
         <StockTabErrorState
           message={dataError}
@@ -682,8 +695,8 @@ export function StockInventoryView({
         />
       ) : productItems.length === 0 ? (
         <StockTabEmptyState
-          title="ยังไม่มีรายการสต็อก"
-          description="ตรวจสอบสิทธิ์หรือกดรีเฟรชอีกครั้ง"
+          title={t(uiLocale, "stock.inventory.empty.title")}
+          description={t(uiLocale, "stock.inventory.empty.description")}
         />
       ) : (
         <>
@@ -691,7 +704,9 @@ export function StockInventoryView({
             {filteredAndSortedProducts.length === 0 ? (
               <article className="rounded-xl border bg-white p-8 text-center shadow-sm">
                 <Package className="mx-auto h-12 w-12 text-slate-300" />
-                <p className="mt-2 text-sm text-slate-600">ไม่พบสินค้าที่ตรงกับเงื่อนไข</p>
+                <p className="mt-2 text-sm text-slate-600">
+                  {t(uiLocale, "stock.inventory.empty.noResults")}
+                </p>
               </article>
             ) : (
               filteredAndSortedProducts.map((product) => {
@@ -716,7 +731,7 @@ export function StockInventoryView({
                             <p className="text-xs text-slate-500">{product.sku}</p>
                             <p className="text-sm font-medium">{product.name}</p>
                             <p className="text-xs text-slate-500">
-                              หน่วยหลัก: {product.baseUnitCode}
+                              {t(uiLocale, "products.form.baseUnit.label")}: {product.baseUnitCode}
                             </p>
                           </div>
                           <span
@@ -726,22 +741,28 @@ export function StockInventoryView({
                                 : "bg-slate-200 text-slate-600"
                             }`}
                           >
-                            {product.active ? "ใช้งาน" : "ปิด"}
+                            {product.active
+                              ? t(uiLocale, "products.status.active")
+                              : t(uiLocale, "products.status.inactive")}
                           </span>
                         </div>
 
                         <div className="mt-3 grid grid-cols-3 gap-2">
                           <div className="rounded-lg bg-slate-50 p-2">
-                            <p className="text-xs text-slate-600">คงเหลือ</p>
+                            <p className="text-xs text-slate-600">
+                              {t(uiLocale, "stock.recording.currentStock.onHand")}
+                            </p>
                             <p className="text-lg font-bold text-slate-900">
-                              {product.onHand.toLocaleString("th-TH")}
+                              {product.onHand.toLocaleString(numberLocale)}
                             </p>
                           </div>
 
                           <div className="rounded-lg bg-amber-50 p-2">
-                            <p className="text-xs text-amber-700">จอง</p>
+                            <p className="text-xs text-amber-700">
+                              {t(uiLocale, "stock.recording.currentStock.reserved")}
+                            </p>
                             <p className="text-lg font-bold text-amber-900">
-                              {product.reserved.toLocaleString("th-TH")}
+                              {product.reserved.toLocaleString(numberLocale)}
                             </p>
                           </div>
 
@@ -763,7 +784,7 @@ export function StockInventoryView({
                                     : "text-emerald-700"
                               }`}
                             >
-                              พร้อมขาย
+                              {t(uiLocale, "stock.recording.currentStock.available")}
                             </p>
                             <p
                               className={`text-lg font-bold ${
@@ -774,7 +795,7 @@ export function StockInventoryView({
                                     : "text-emerald-900"
                               }`}
                             >
-                              {product.available.toLocaleString("th-TH")}
+                              {product.available.toLocaleString(numberLocale)}
                             </p>
                           </div>
                         </div>
@@ -796,7 +817,9 @@ export function StockInventoryView({
                 }}
                 disabled={isLoadingMoreProducts}
               >
-                {isLoadingMoreProducts ? "กำลังโหลด..." : "โหลดเพิ่ม"}
+                {isLoadingMoreProducts
+                  ? t(uiLocale, "products.list.loadingMore")
+                  : t(uiLocale, "products.list.loadMore")}
               </Button>
             </div>
           ) : null}
@@ -806,16 +829,18 @@ export function StockInventoryView({
       <SlideUpSheet
         isOpen={showScannerPermission}
         onClose={() => setShowScannerPermission(false)}
-        title="ขออนุญาตใช้กล้อง"
-        description="ระบบต้องใช้กล้องเพื่อสแกนบาร์โค้ดสินค้า"
+        title={t(uiLocale, "products.scannerPermission.title")}
+        description={t(uiLocale, "products.scannerPermission.description")}
       >
         <div className="space-y-3">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-            <p className="font-medium text-slate-700">ทำไมต้องใช้กล้อง?</p>
+            <p className="font-medium text-slate-700">
+              {t(uiLocale, "products.scannerPermission.whyTitle")}
+            </p>
             <ul className="mt-2 list-disc space-y-1 pl-4">
-              <li>สแกนบาร์โค้ดได้เร็วขึ้น</li>
-              <li>ลดความผิดพลาดจากการพิมพ์</li>
-              <li>ใช้งานได้ทันทีในหน้านี้</li>
+              <li>{t(uiLocale, "products.scannerPermission.bullet.fast")}</li>
+              <li>{t(uiLocale, "products.scannerPermission.bullet.fewerTypos")}</li>
+              <li>{t(uiLocale, "products.scannerPermission.bullet.ready")}</li>
             </ul>
           </div>
 
@@ -826,7 +851,7 @@ export function StockInventoryView({
               className="h-10 flex-1"
               onClick={() => setShowScannerPermission(false)}
             >
-              ยกเลิก
+              {t(uiLocale, "common.action.cancel")}
             </Button>
             <Button
               type="button"
@@ -838,7 +863,7 @@ export function StockInventoryView({
                 setHasSeenScannerPermission(true);
               }}
             >
-              อนุญาตและสแกน
+              {t(uiLocale, "products.scannerPermission.allowAndScan")}
             </Button>
           </div>
         </div>
@@ -847,8 +872,8 @@ export function StockInventoryView({
       <SlideUpSheet
         isOpen={showScanner}
         onClose={() => setShowScanner(false)}
-        title="สแกนบาร์โค้ด"
-        description="ส่องกล้องไปที่บาร์โค้ดสินค้า"
+        title={t(uiLocale, "products.scanner.title")}
+        description={t(uiLocale, "products.scanner.description")}
       >
         <div className="p-4">
           {showScanner ? (

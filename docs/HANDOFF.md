@@ -2,7 +2,7 @@
 
 ## Snapshot Date
 
-- March 16, 2026
+- March 17, 2026
 
 ## Changed (ล่าสุด)
 
@@ -11,6 +11,28 @@
   - หน้า `/settings/language` เพิ่ม language picker และบันทึกผ่าน `PATCH /api/settings/account` action `update_locale`
   - session จะ sync locale จาก DB เพื่อให้ข้ามอุปกรณ์เห็นค่าเดียวกัน โดยไม่ต้อง logout
   - เมื่อเลือกภาษาเป็นลาว (`lo`) UI จะใช้ฟอนต์ `GoogleSans` (อ่านภาษาลาวชัดขึ้น) จากไฟล์ใน `public/fonts`
+  - ชื่อภาษาที่แสดงใน picker ใช้ key `localeName.*` (th/lo/en)
+
+- ขยาย i18n ในหน้า Settings/Superadmin เพิ่มเติม:
+  - แทนที่ข้อความ hardcode ด้วย `t(uiLocale, ...)` ในหน้า permissions/security/profile/store/users/stores และหน้า `Superadmin: Operations & Governance`
+  - เติมคำแปลภาษาอังกฤษสำหรับหน้า `Superadmin: Integrations` ให้ครบชุด key
+  - เพิ่มชุดข้อความ `users.*` (th/lo/en) และปรับ `UsersManagement` ให้รองรับหลายภาษาใน flow เพิ่มสมาชิก/แก้ไข/รีเซ็ตรหัสผ่าน
+  - แยกข้อความ capability ในหน้า `/settings/permissions` ไปเป็น key `settings.permissions.capability.*` (th/lo/en) และแปล UI ของ `System Admin: Session Policy/Logout` เพิ่มเติม (`systemAdmin.sessionPolicy.*`, `common.logout`)
+  - แปล `shell title` และ `preview mode note` บน header ของแอปตาม store type ผ่าน key `storefront.*` (th/lo/en)
+  - ปรับ bottom tabs ของ storefront ให้ใช้ key `tab.*` โดยตรง (แทนการพึ่ง label ภาษาไทย hardcode) และรองรับ compact label ผ่าน `compactLabelKey`
+
+- ขยาย i18n ในหน้า `/products` เพิ่มเติม:
+  - `ProductsManagement` แทนที่ toast/ข้อความที่ hardcode ด้วย key กลุ่ม `products.cost.*`, `products.clipboard.*`, `products.scanner.*` (th/lo/en)
+  - เก็บข้อความ hardcode ในฟอร์ม/หน้ารายละเอียดให้เป็น key เพิ่มเติม (th/lo/en): `products.matrix.*`, `products.variant.*`, `products.form.*`, `products.detail.*`, `products.barcode.print.*`, `products.stockThresholds.*`
+  - เพิ่ม action key ที่ใช้ซ้ำได้ เช่น `products.action.save`
+  - แก้ชื่อพารามิเตอร์ใน toast renderer ของ barcode scanner เพื่อไม่ชนกับฟังก์ชันแปล `t(...)` (แก้ build error)
+
+- ขยาย i18n ในหน้า `/stock` (หน้าหลักของโมดูลสต็อก) เพิ่มเติม:
+  - แทนที่หัวข้อ/คำอธิบาย/ข้อความ no-access และ labels ของแท็บหลักด้วย key กลุ่ม `stock.page.*` และ `stock.tabs.*` (th/lo/en)
+  - เพิ่ม `common.loading` เพื่อใช้กับ loading fallback ของ tab views
+
+- แก้ฟอนต์ภาษาลาวใน PO PDF:
+  - `lib/pdf/generate-po-pdf.ts` เปลี่ยนไปใช้ไฟล์ที่มีจริงใน `public/fonts` (`NotoSansLaoLooped-Regular.ttf`) เพื่อป้องกันกรณีโหลดฟอนต์ไม่เจอเวลา print/export PO ที่มีภาษาลาว
 
 - ปรับ UX action rail ของ online order ในหน้า `/orders/[orderId]`:
   - ปุ่มหลักเหลือเฉพาะ next step เดียวตามสถานะจริง (`ยืนยันชำระแล้ว/ตรวจสลิปและยืนยันชำระ` -> `แพ็กสินค้า` -> `จัดส่งแล้ว` -> `ยืนยันรับเงินปลายทาง (COD)`)

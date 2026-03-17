@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { StorePdfSettings } from "@/components/app/store-pdf-settings";
 import { getSession } from "@/lib/auth/session";
+import { t } from "@/lib/i18n/messages";
 import {
   getUserPermissionsForCurrentSession,
   isPermissionGranted,
@@ -23,12 +24,13 @@ export default async function SettingsPdfPage() {
   const permissionKeys = await getUserPermissionsForCurrentSession();
   const canView = isPermissionGranted(permissionKeys, "settings.view");
   const canUpdate = isPermissionGranted(permissionKeys, "settings.update");
+  const uiLocale = session.uiLocale;
 
   if (!canView) {
     return (
       <section className="space-y-2">
-        <h1 className="text-xl font-semibold">ตั้งค่าเอกสาร PDF</h1>
-        <p className="text-sm text-red-600">คุณไม่มีสิทธิ์ดูหน้านี้</p>
+        <h1 className="text-xl font-semibold">{t(uiLocale, "settings.link.pdfSettings.title")}</h1>
+        <p className="text-sm text-red-600">{t(uiLocale, "common.permissionDenied.viewPage")}</p>
       </section>
     );
   }
@@ -62,10 +64,8 @@ export default async function SettingsPdfPage() {
   return (
     <section className="space-y-4">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold">ตั้งค่าเอกสาร PDF</h1>
-        <p className="text-sm text-muted-foreground">
-          ปรับแต่ง Logo, ลายเซ็น, สีหัวตาราง และข้อมูลบริษัทที่แสดงบน PDF
-        </p>
+        <h1 className="text-xl font-semibold">{t(uiLocale, "settings.link.pdfSettings.title")}</h1>
+        <p className="text-sm text-muted-foreground">{t(uiLocale, "settings.link.pdfSettings.description")}</p>
       </header>
 
       <StorePdfSettings

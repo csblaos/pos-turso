@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch, setClientAuthToken } from "@/lib/auth/client-token";
-import { t } from "@/lib/i18n/messages";
+import { t, type MessageKey } from "@/lib/i18n/messages";
 import { type UiLocale, uiLocaleValues } from "@/lib/i18n/locales";
 
 type AccountLanguageSettingsProps = {
@@ -26,21 +26,7 @@ type UpdateLocaleResponse = {
 };
 
 function getLocaleOptionLabel(option: UiLocale, uiLocale: UiLocale) {
-  if (uiLocale === "en") {
-    if (option === "th") return "Thai";
-    if (option === "lo") return "Lao";
-    return "English";
-  }
-
-  if (uiLocale === "lo") {
-    if (option === "th") return "ໄທ";
-    if (option === "lo") return "ລາວ";
-    return "English";
-  }
-
-  if (option === "th") return "ไทย";
-  if (option === "lo") return "ລາວ";
-  return "English";
+  return t(uiLocale, `localeName.${option}` as MessageKey);
 }
 
 export function AccountLanguageSettings({ locale, initialUiLocale }: AccountLanguageSettingsProps) {
@@ -70,15 +56,14 @@ export function AccountLanguageSettings({ locale, initialUiLocale }: AccountLang
   const status = useMemo(() => {
     if (isDirty) {
       return {
-        text:
-          locale === "en" ? "Not saved" : locale === "lo" ? "ຍັງບໍ່ໄດ້ບັນທຶກ" : "ยังไม่บันทึก",
+        text: t(locale, "settings.language.status.notSaved"),
         className: "border-amber-200 bg-amber-50 text-amber-700",
         icon: CircleAlert,
       };
     }
 
     return {
-      text: locale === "en" ? "Saved" : locale === "lo" ? "ບັນທຶກແລ້ວ" : "บันทึกแล้ว",
+      text: t(locale, "settings.language.status.saved"),
       className: "border-emerald-200 bg-emerald-50 text-emerald-700",
       icon: CheckCircle2,
     };
@@ -91,13 +76,7 @@ export function AccountLanguageSettings({ locale, initialUiLocale }: AccountLang
     setErrorMessage(null);
 
     if (!isDirty) {
-      setSuccessMessage(
-        locale === "en"
-          ? "No changes"
-          : locale === "lo"
-            ? "ບໍ່ມີການປ່ຽນແປງ"
-            : "ยังไม่มีข้อมูลที่เปลี่ยนแปลง",
-      );
+      setSuccessMessage(t(locale, "settings.language.message.noChanges"));
       return;
     }
 
@@ -117,7 +96,7 @@ export function AccountLanguageSettings({ locale, initialUiLocale }: AccountLang
 
       const data = (await response.json().catch(() => null)) as UpdateLocaleResponse | null;
       if (!response.ok) {
-        setErrorMessage(data?.message ?? (locale === "en" ? "Update failed" : "บันทึกภาษาไม่สำเร็จ"));
+        setErrorMessage(data?.message ?? t(locale, "settings.language.error.updateFailed"));
         return;
       }
 
@@ -125,7 +104,7 @@ export function AccountLanguageSettings({ locale, initialUiLocale }: AccountLang
       setUiLocale(nextLocale);
       setSavedUiLocale(nextLocale);
       setWarningMessage(data?.warning ?? null);
-      setSuccessMessage(locale === "en" ? "Saved" : locale === "lo" ? "ບັນທຶກແລ້ວ" : "บันทึกแล้ว");
+      setSuccessMessage(t(locale, "settings.language.message.saved"));
 
       if (data?.token) {
         setClientAuthToken(data.token);
@@ -133,13 +112,7 @@ export function AccountLanguageSettings({ locale, initialUiLocale }: AccountLang
 
       router.refresh();
     } catch {
-      setErrorMessage(
-        locale === "en"
-          ? "Cannot reach server. Please try again."
-          : locale === "lo"
-            ? "ບໍ່ສາມາດເຊື່ອມຕໍ່ເຊີເວີໄດ້ ກະລຸນາລອງໃໝ່"
-            : "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาลองใหม่อีกครั้ง",
-      );
+      setErrorMessage(t(locale, "settings.language.error.serverUnreachable"));
     } finally {
       setIsSaving(false);
     }
@@ -218,7 +191,7 @@ export function AccountLanguageSettings({ locale, initialUiLocale }: AccountLang
               {isSaving ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  {locale === "en" ? "Saving..." : locale === "lo" ? "ກຳລັງບັນທຶກ..." : "กำลังบันทึก..."}
+                  {t(locale, "settings.language.save.saving")}
                 </>
               ) : (
                 t(locale, "settings.language.save")
@@ -230,4 +203,3 @@ export function AccountLanguageSettings({ locale, initialUiLocale }: AccountLang
     </>
   );
 }
-

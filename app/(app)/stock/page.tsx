@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 
 import { getSession } from "@/lib/auth/session";
+import { DEFAULT_UI_LOCALE } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
 import {
   getUserPermissionsForCurrentSession,
   isPermissionGranted,
@@ -17,63 +19,6 @@ import {
 } from "@/server/services/stock.service";
 import { getPurchaseOrderListPage } from "@/server/services/purchase.service";
 import { listCategories } from "@/lib/products/service";
-
-const StockRecordingForm = dynamic(
-  () =>
-    import("@/components/app/stock-recording-form").then((module) => module.StockRecordingForm),
-  {
-    loading: () => (
-      <div className="rounded-xl border bg-white p-4 text-sm text-muted-foreground">
-        กำลังโหลด...
-      </div>
-    ),
-  },
-);
-
-const StockInventoryView = dynamic(
-  () =>
-    import("@/components/app/stock-inventory-view").then((module) => module.StockInventoryView),
-  {
-    loading: () => (
-      <div className="rounded-xl border bg-white p-4 text-sm text-muted-foreground">
-        กำลังโหลด...
-      </div>
-    ),
-  },
-);
-
-const StockMovementHistory = dynamic(
-  () =>
-    import("@/components/app/stock-movement-history").then(
-      (module) => module.StockMovementHistory,
-    ),
-  {
-    loading: () => (
-      <div className="rounded-xl border bg-white p-4 text-sm text-muted-foreground">
-        กำลังโหลด...
-      </div>
-    ),
-  },
-);
-
-const PurchaseOrderList = dynamic(
-  () =>
-    import("@/components/app/purchase-order-list").then(
-      (module) => module.PurchaseOrderList,
-    ),
-  {
-    loading: () => (
-      <div className="rounded-xl border bg-white p-4 text-sm text-muted-foreground">
-        กำลังโหลด...
-      </div>
-    ),
-  },
-);
-
-const StockTabs = dynamic(
-  () =>
-    import("@/components/app/stock-tabs").then((module) => module.StockTabs),
-);
 
 export default async function StockPage({
   searchParams,
@@ -95,6 +40,58 @@ export default async function StockPage({
       redirect("/onboarding");
     }
     const activeStoreId = session.activeStoreId;
+    const uiLocale = session.uiLocale ?? DEFAULT_UI_LOCALE;
+
+    const StockTabs = dynamic(
+      () =>
+        import("@/components/app/stock-tabs").then((module) => module.StockTabs),
+    );
+
+    const loadingFallback = () => (
+      <div className="rounded-xl border bg-white p-4 text-sm text-muted-foreground">
+        {t(uiLocale, "common.loading")}
+      </div>
+    );
+
+    const StockRecordingForm = dynamic(
+      () =>
+        import("@/components/app/stock-recording-form").then(
+          (module) => module.StockRecordingForm,
+        ),
+      {
+        loading: loadingFallback,
+      },
+    );
+
+    const StockInventoryView = dynamic(
+      () =>
+        import("@/components/app/stock-inventory-view").then(
+          (module) => module.StockInventoryView,
+        ),
+      {
+        loading: loadingFallback,
+      },
+    );
+
+    const StockMovementHistory = dynamic(
+      () =>
+        import("@/components/app/stock-movement-history").then(
+          (module) => module.StockMovementHistory,
+        ),
+      {
+        loading: loadingFallback,
+      },
+    );
+
+    const PurchaseOrderList = dynamic(
+      () =>
+        import("@/components/app/purchase-order-list").then(
+          (module) => module.PurchaseOrderList,
+        ),
+      {
+        loading: loadingFallback,
+      },
+    );
 
     const canView = isPermissionGranted(permissionKeys, "inventory.view");
     const canCreate = isPermissionGranted(permissionKeys, "inventory.create");
@@ -105,8 +102,8 @@ export default async function StockPage({
     if (!canView) {
       return (
         <section className="space-y-2">
-          <h1 className="text-xl font-semibold">สต็อก</h1>
-          <p className="text-sm text-red-600">คุณไม่มีสิทธิ์เข้าถึงโมดูลสต็อก</p>
+          <h1 className="text-xl font-semibold">{t(uiLocale, "stock.page.noAccess.title")}</h1>
+          <p className="text-sm text-red-600">{t(uiLocale, "stock.page.noAccess.description")}</p>
         </section>
       );
     }
@@ -174,14 +171,16 @@ export default async function StockPage({
         ? "inventory"
         : params?.tab === "history"
           ? "history"
+          : params?.tab === "recording"
+            ? "recording"
           : "inventory";
 
     return (
       <section className="space-y-4">
         <header className="space-y-1">
-          <h1 className="text-xl font-semibold">สต็อก</h1>
+          <h1 className="text-xl font-semibold">{t(uiLocale, "stock.page.title")}</h1>
           <p className="text-sm text-muted-foreground">
-            จัดการรับเข้า ปรับสต็อก สั่งซื้อ และตรวจสอบยอดคงเหลือ
+            {t(uiLocale, "stock.page.subtitle")}
           </p>
         </header>
 

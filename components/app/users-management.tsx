@@ -2,12 +2,15 @@
 
 import { Check, ChevronRight, Copy, KeyRound, Loader2, Mail, Plus, Search, Smartphone, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
 import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch } from "@/lib/auth/client-token";
+import { uiLocaleToDateLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
+import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 
 type MemberItem = {
   userId: string;
@@ -54,12 +57,6 @@ type UsersManagementProps = {
   defaultSessionLimit: number;
 };
 
-const statusLabel: Record<MemberItem["status"], string> = {
-  ACTIVE: "ใช้งาน",
-  INVITED: "รอเปิดใช้งาน",
-  SUSPENDED: "ระงับ",
-};
-
 const statusToneClassName: Record<MemberItem["status"], string> = {
   ACTIVE: "text-emerald-700",
   INVITED: "text-amber-700",
@@ -70,35 +67,6 @@ const statusDotClassName: Record<MemberItem["status"], string> = {
   ACTIVE: "bg-emerald-500",
   INVITED: "bg-amber-500",
   SUSPENDED: "bg-rose-500",
-};
-
-const statusCompactLabel: Record<MemberItem["status"], string> = {
-  ACTIVE: "ใช้งาน",
-  INVITED: "รอ",
-  SUSPENDED: "ระงับ",
-};
-
-const statusOptions: Array<{ value: MemberItem["status"]; label: string }> = [
-  { value: "ACTIVE", label: "ใช้งาน" },
-  { value: "INVITED", label: "รอเปิดใช้งาน" },
-  { value: "SUSPENDED", label: "ระงับ" },
-];
-
-const normalizeSessionLimit = (value: string) => {
-  const raw = value.trim();
-  if (!raw) {
-    return { ok: true as const, value: null as number | null };
-  }
-
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 10) {
-    return {
-      ok: false as const,
-      message: "จำนวนอุปกรณ์ต้องเป็นตัวเลข 1-10 หรือเว้นว่างเพื่อใช้ค่าเริ่มต้นระบบ",
-    };
-  }
-
-  return { ok: true as const, value: parsed };
 };
 
 const getInitial = (name: string, email: string) => {
@@ -127,6 +95,50 @@ export function UsersManagement({
   defaultSessionLimit,
 }: UsersManagementProps) {
   const router = useRouter();
+  const uiLocale = useUiLocale();
+  const numberLocale = uiLocaleToDateLocale(uiLocale);
+  const fmtNumber = (value: number) => value.toLocaleString(numberLocale);
+  const statusLabel = useMemo(
+    () => ({
+      ACTIVE: t(uiLocale, "users.status.ACTIVE"),
+      INVITED: t(uiLocale, "users.status.INVITED"),
+      SUSPENDED: t(uiLocale, "users.status.SUSPENDED"),
+    }),
+    [uiLocale],
+  );
+  const statusCompactLabel = useMemo(
+    () => ({
+      ACTIVE: t(uiLocale, "users.statusShort.ACTIVE"),
+      INVITED: t(uiLocale, "users.statusShort.INVITED"),
+      SUSPENDED: t(uiLocale, "users.statusShort.SUSPENDED"),
+    }),
+    [uiLocale],
+  );
+  const statusOptions = useMemo(
+    () =>
+      [
+        { value: "ACTIVE" as const, label: statusLabel.ACTIVE },
+        { value: "INVITED" as const, label: statusLabel.INVITED },
+        { value: "SUSPENDED" as const, label: statusLabel.SUSPENDED },
+      ] satisfies Array<{ value: MemberItem["status"]; label: string }>,
+    [statusLabel],
+  );
+  const normalizeSessionLimit = (value: string) => {
+    const raw = value.trim();
+    if (!raw) {
+      return { ok: true as const, value: null as number | null };
+    }
+
+    const parsed = Number(raw);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 10) {
+      return {
+        ok: false as const,
+        message: t(uiLocale, "users.sessionLimit.validationError"),
+      };
+    }
+
+    return { ok: true as const, value: parsed };
+  };
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [createErrorMessage, setCreateErrorMessage] = useState<string | null>(null);
   const [editErrorMessage, setEditErrorMessage] = useState<string | null>(null);
@@ -218,7 +230,7 @@ export function UsersManagement({
       | null;
 
     if (!response.ok) {
-      setEditErrorMessage(data?.message ?? "โหลดสิทธิ์สาขาไม่สำเร็จ");
+      setEditErrorMessage(data?.message ?? t(uiLocale, "users.branchAccess.error.loadFailed"));
       setIsLoadingEditBranchAccess(false);
       return;
     }
@@ -263,7 +275,7 @@ export function UsersManagement({
     setTemporaryPassword(null);
   };
 
-  const loadExistingCandidates = async (query: string) => {
+  const loadExistingCandidates = useCallback(async (query: string) => {
     setIsLoadingExistingCandidates(true);
     setExistingCandidatesError(null);
 
@@ -292,7 +304,9 @@ export function UsersManagement({
 
       if (!response.ok) {
         setExistingCandidates([]);
-        setExistingCandidatesError(data?.message ?? "โหลดรายชื่อผู้ใช้ที่เพิ่มได้ไม่สำเร็จ");
+        setExistingCandidatesError(
+          data?.message ?? t(uiLocale, "users.existingCandidates.error.loadFailed"),
+        );
         return;
       }
 
@@ -303,11 +317,11 @@ export function UsersManagement({
       );
     } catch {
       setExistingCandidates([]);
-      setExistingCandidatesError("โหลดรายชื่อผู้ใช้ที่เพิ่มได้ไม่สำเร็จ");
+      setExistingCandidatesError(t(uiLocale, "users.existingCandidates.error.loadFailed"));
     } finally {
       setIsLoadingExistingCandidates(false);
     }
-  };
+  }, [uiLocale]);
 
   useEffect(() => {
     if (!isCreateModalOpen || createMode !== "existing" || !canLinkExisting) {
@@ -321,7 +335,7 @@ export function UsersManagement({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [isCreateModalOpen, createMode, canLinkExisting, existingQuery]);
+  }, [isCreateModalOpen, createMode, canLinkExisting, existingQuery, loadExistingCandidates]);
 
   const copyTextToClipboard = async (text: string, successMessage: string) => {
     if (!text || typeof window === "undefined" || !window.navigator?.clipboard) {
@@ -332,7 +346,7 @@ export function UsersManagement({
       await window.navigator.clipboard.writeText(text);
       toast.success(successMessage);
     } catch {
-      toast.error("คัดลอกรหัสชั่วคราวไม่สำเร็จ");
+      toast.error(t(uiLocale, "users.clipboard.copyFailed"));
     }
   };
 
@@ -340,14 +354,17 @@ export function UsersManagement({
     if (!temporaryPassword) {
       return;
     }
-    await copyTextToClipboard(temporaryPassword, "คัดลอกรหัสชั่วคราวแล้ว");
+    await copyTextToClipboard(temporaryPassword, t(uiLocale, "users.clipboard.copyTempPasswordSuccess"));
   };
 
   const copyCreatedTemporaryPassword = async () => {
     if (!createdTemporaryPassword) {
       return;
     }
-    await copyTextToClipboard(createdTemporaryPassword, "คัดลอกรหัสผ่านเริ่มต้นแล้ว");
+    await copyTextToClipboard(
+      createdTemporaryPassword,
+      t(uiLocale, "users.clipboard.copyInitialPasswordSuccess"),
+    );
   };
 
   const resetMemberPassword = async () => {
@@ -376,32 +393,32 @@ export function UsersManagement({
       | null;
 
     if (!response.ok) {
-      setEditErrorMessage(data?.message ?? "รีเซ็ตรหัสผ่านไม่สำเร็จ");
+      setEditErrorMessage(data?.message ?? t(uiLocale, "users.resetPassword.error.failed"));
       setLoadingKey(null);
       return;
     }
 
     if (!data?.temporaryPassword) {
-      setEditErrorMessage("ไม่พบรหัสผ่านชั่วคราวจากระบบ");
+      setEditErrorMessage(t(uiLocale, "users.resetPassword.error.missingTempPassword"));
       setLoadingKey(null);
       return;
     }
 
     setTemporaryPassword(data.temporaryPassword);
     setIsResetPasswordConfirmOpen(false);
-    toast.success("รีเซ็ตรหัสผ่านชั่วคราวเรียบร้อย");
+    toast.success(t(uiLocale, "users.resetPassword.toast.success"));
     setLoadingKey(null);
     router.refresh();
   };
 
   const createUser = async () => {
     if (!formRoleId) {
-      setCreateErrorMessage("กรุณาเลือกบทบาท");
+      setCreateErrorMessage(t(uiLocale, "users.create.validation.roleRequired"));
       return;
     }
 
     if (!formName.trim() || !formEmail.trim()) {
-      setCreateErrorMessage("กรุณากรอกชื่อและอีเมลให้ครบ");
+      setCreateErrorMessage(t(uiLocale, "users.create.validation.nameEmailRequired"));
       return;
     }
 
@@ -429,13 +446,13 @@ export function UsersManagement({
       | null;
 
     if (!response.ok) {
-      setCreateErrorMessage(data?.message ?? "เพิ่มผู้ใช้ไม่สำเร็จ");
+      setCreateErrorMessage(data?.message ?? t(uiLocale, "users.create.error.failed"));
       setLoadingKey(null);
       return;
     }
 
     if (!data?.temporaryPassword) {
-      setCreateErrorMessage("ไม่พบรหัสผ่านชั่วคราวจากระบบ");
+      setCreateErrorMessage(t(uiLocale, "users.resetPassword.error.missingTempPassword"));
       setLoadingKey(null);
       return;
     }
@@ -444,19 +461,19 @@ export function UsersManagement({
     setCreatedUserEmail(formEmail.trim().toLowerCase());
     setFormName("");
     setFormEmail("");
-    toast.success("เพิ่มผู้ใช้เรียบร้อยแล้ว");
+    toast.success(t(uiLocale, "users.create.toast.success"));
     setLoadingKey(null);
     router.refresh();
   };
 
   const addExistingUserToStore = async () => {
     if (!existingRoleId) {
-      setCreateErrorMessage("กรุณาเลือกบทบาท");
+      setCreateErrorMessage(t(uiLocale, "users.create.validation.roleRequired"));
       return;
     }
 
     if (!selectedExistingUserId) {
-      setCreateErrorMessage("กรุณาเลือกผู้ใช้ที่ต้องการเพิ่ม");
+      setCreateErrorMessage(t(uiLocale, "users.create.validation.existingUserRequired"));
       return;
     }
 
@@ -482,7 +499,7 @@ export function UsersManagement({
       | null;
 
     if (!response.ok) {
-      setCreateErrorMessage(data?.message ?? "เพิ่มผู้ใช้เดิมเข้าร้านไม่สำเร็จ");
+      setCreateErrorMessage(data?.message ?? t(uiLocale, "users.create.error.addExistingFailed"));
       setLoadingKey(null);
       return;
     }
@@ -492,7 +509,7 @@ export function UsersManagement({
     setSelectedExistingUserId("");
     setExistingCandidatesError(null);
     setIsCreateModalOpen(false);
-    toast.success("เพิ่มผู้ใช้เดิมเข้าร้านเรียบร้อยแล้ว");
+    toast.success(t(uiLocale, "users.create.toast.addExistingSuccess"));
     setLoadingKey(null);
     router.refresh();
   };
@@ -503,7 +520,7 @@ export function UsersManagement({
     }
 
     if (!editRoleId) {
-      setEditErrorMessage("กรุณาเลือกบทบาท");
+      setEditErrorMessage(t(uiLocale, "users.create.validation.roleRequired"));
       return;
     }
 
@@ -528,7 +545,7 @@ export function UsersManagement({
     const hasAnyChanges = roleDirty || statusDirty || sessionDirty || branchDirty;
 
     if (!hasAnyChanges) {
-      toast.success("ยังไม่มีข้อมูลที่เปลี่ยนแปลง");
+      toast.success(t(uiLocale, "users.edit.toast.noChanges"));
       return;
     }
 
@@ -536,7 +553,7 @@ export function UsersManagement({
     setEditErrorMessage(null);
 
     if (editBranchMode === "SELECTED" && nextBranchIds.length === 0) {
-      setEditErrorMessage("กรุณาเลือกอย่างน้อย 1 สาขา หรือเปลี่ยนเป็นเข้าถึงทุกสาขา");
+      setEditErrorMessage(t(uiLocale, "users.branchAccess.validation.selectAtLeastOne"));
       setLoadingKey(null);
       return;
     }
@@ -563,17 +580,23 @@ export function UsersManagement({
 
     try {
       if (roleDirty) {
-        await runPatch({ action: "assign_role", roleId: editRoleId }, "เปลี่ยนบทบาทไม่สำเร็จ");
+        await runPatch(
+          { action: "assign_role", roleId: editRoleId },
+          t(uiLocale, "users.edit.error.assignRoleFailed"),
+        );
       }
 
       if (statusDirty) {
-        await runPatch({ action: "set_status", status: editStatus }, "เปลี่ยนสถานะไม่สำเร็จ");
+        await runPatch(
+          { action: "set_status", status: editStatus },
+          t(uiLocale, "users.edit.error.setStatusFailed"),
+        );
       }
 
       if (sessionDirty) {
         await runPatch(
           { action: "set_session_limit", sessionLimit: normalizedLimit.value },
-          "บันทึกจำนวนอุปกรณ์ไม่สำเร็จ",
+          t(uiLocale, "users.edit.error.setSessionLimitFailed"),
         );
       }
 
@@ -584,15 +607,16 @@ export function UsersManagement({
             mode: editBranchMode,
             branchIds: editBranchMode === "SELECTED" ? nextBranchIds : [],
           },
-          "บันทึกสิทธิ์เข้าถึงสาขาไม่สำเร็จ",
+          t(uiLocale, "users.edit.error.setBranchAccessFailed"),
         );
       }
 
       setEditingMemberId(null);
-      toast.success("บันทึกข้อมูลสมาชิกเรียบร้อยแล้ว");
+      toast.success(t(uiLocale, "users.edit.toast.saved"));
       router.refresh();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "บันทึกข้อมูลสมาชิกไม่สำเร็จ";
+      const message =
+        error instanceof Error ? error.message : t(uiLocale, "users.edit.error.saveFailed");
       setEditErrorMessage(message);
     } finally {
       setLoadingKey(null);
@@ -612,13 +636,16 @@ export function UsersManagement({
       <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-slate-900">สมาชิกทั้งหมด {members.length.toLocaleString("th-TH")} คน</p>
-            <p className="text-xs text-slate-500">แตะรายการสมาชิกเพื่อจัดการบทบาท สถานะ และอุปกรณ์ที่เข้าใช้งานได้</p>
+            <p className="text-sm font-semibold text-slate-900">
+              {t(uiLocale, "users.summary.totalMembers.prefix")} {fmtNumber(members.length)}{" "}
+              {t(uiLocale, "users.summary.totalMembers.suffix")}
+            </p>
+            <p className="text-xs text-slate-500">{t(uiLocale, "users.summary.subtitle")}</p>
           </div>
           {canCreate ? (
             <Button className="h-10 w-full rounded-xl sm:w-auto" onClick={openCreateModal}>
               <Plus className="h-4 w-4" />
-              เพิ่มสมาชิก
+              {t(uiLocale, "users.action.addMember")}
             </Button>
           ) : null}
         </div>
@@ -626,10 +653,12 @@ export function UsersManagement({
 
       <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-900">รายชื่อสมาชิก</h2>
+          <h2 className="text-sm font-semibold text-slate-900">{t(uiLocale, "users.list.title")}</h2>
         </div>
         {members.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-slate-500">ยังไม่มีสมาชิกในร้านนี้</div>
+          <div className="px-4 py-8 text-center text-sm text-slate-500">
+            {t(uiLocale, "users.list.empty")}
+          </div>
         ) : (
           <ul className="divide-y divide-slate-100">
             {members.map((member) => (
@@ -651,8 +680,8 @@ export function UsersManagement({
                         className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700"
                         title={
                           member.sessionLimit === null
-                            ? "จำกัดอุปกรณ์ตามค่าเริ่มต้นระบบ"
-                            : `จำกัดอุปกรณ์ ${member.sessionLimit} เครื่อง`
+                            ? t(uiLocale, "users.sessionLimit.tooltip.default")
+                            : `${t(uiLocale, "users.sessionLimit.tooltip.custom.prefix")} ${fmtNumber(member.sessionLimit)} ${t(uiLocale, "users.sessionLimit.tooltip.custom.suffix")}`
                         }
                       >
                         <Smartphone className="h-3 w-3" />
@@ -671,7 +700,7 @@ export function UsersManagement({
                         <>
                           <span className="text-slate-300">•</span>
                           <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-                            รอเปลี่ยนรหัส
+                            {t(uiLocale, "users.password.mustChangeBadge")}
                           </span>
                         </>
                       ) : null}
@@ -688,8 +717,8 @@ export function UsersManagement({
       <SlideUpSheet
         isOpen={isCreateModalOpen}
         onClose={closeCreateModal}
-        title="เพิ่มสมาชิกในร้าน"
-        description="สร้างบัญชีใหม่หรือเพิ่มผู้ใช้เดิมเข้าร้าน"
+        title={t(uiLocale, "users.create.sheet.title")}
+        description={t(uiLocale, "users.create.sheet.description")}
         panelMaxWidthClass="min-[1200px]:max-w-md"
         disabled={loadingKey === "create-user" || loadingKey === "add-existing-user"}
         footer={
@@ -713,16 +742,16 @@ export function UsersManagement({
                   }}
                   disabled={loadingKey !== null}
                 >
-                  เพิ่มอีกคน
+                  {t(uiLocale, "users.create.action.addAnother")}
                 </Button>
                 <Button type="button" className="h-10 rounded-xl" onClick={closeCreateModal} disabled={loadingKey !== null}>
-                  เสร็จสิ้น
+                  {t(uiLocale, "users.create.action.done")}
                 </Button>
               </div>
             ) : (
               <div className={`${createErrorMessage ? "mt-3 " : ""}grid grid-cols-2 gap-2`}>
                 <Button type="button" variant="outline" className="h-10 rounded-xl" onClick={closeCreateModal} disabled={loadingKey !== null}>
-                  ยกเลิก
+                  {t(uiLocale, "users.common.cancel")}
                 </Button>
                 <Button
                   type="button"
@@ -733,12 +762,12 @@ export function UsersManagement({
                   {loadingKey === "create-user" || loadingKey === "add-existing-user" ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      กำลังบันทึก...
+                      {t(uiLocale, "users.common.saving")}
                     </>
                   ) : createMode === "new" ? (
-                    "เพิ่มผู้ใช้"
+                    t(uiLocale, "users.create.action.addNewUser")
                   ) : (
-                    "เพิ่มผู้ใช้เดิม"
+                    t(uiLocale, "users.create.action.addExistingUser")
                   )}
                 </Button>
               </div>
@@ -760,7 +789,7 @@ export function UsersManagement({
                 }}
                 disabled={loadingKey !== null}
               >
-                สร้างผู้ใช้ใหม่
+                {t(uiLocale, "users.create.mode.new")}
               </button>
               <button
                 type="button"
@@ -775,18 +804,22 @@ export function UsersManagement({
                 }}
                 disabled={loadingKey !== null}
               >
-                เพิ่มผู้ใช้เดิม
+                {t(uiLocale, "users.create.mode.existing")}
               </button>
             </div>
           ) : null}
 
           {createMode === "new" ? (
             createdTemporaryPassword ? (
-              <div className="space-y-3">
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-                  <p className="text-xs font-medium text-emerald-700">สร้างสมาชิกสำเร็จ</p>
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                  <p className="text-xs font-medium text-emerald-700">
+                    {t(uiLocale, "users.create.success.title")}
+                  </p>
                   <p className="mt-1 text-xs text-emerald-700">
-                    ส่งรหัสชั่วคราวนี้ให้ผู้ใช้ {createdUserEmail ? `(${createdUserEmail})` : ""} และระบบจะบังคับเปลี่ยนรหัสเมื่อเข้าใช้งานครั้งแรก
+                    {t(uiLocale, "users.create.success.hintPrefix")}{" "}
+                    {createdUserEmail ? `(${createdUserEmail})` : ""}{" "}
+                    {t(uiLocale, "users.create.success.hintSuffix")}
                   </p>
                   <div className="mt-2 flex items-center gap-2">
                     <code className="flex-1 rounded-lg border border-emerald-200 bg-white px-2 py-1 text-sm font-semibold text-emerald-700">
@@ -799,7 +832,7 @@ export function UsersManagement({
                       onClick={copyCreatedTemporaryPassword}
                     >
                       <Copy className="h-3.5 w-3.5" />
-                      คัดลอก
+                      {t(uiLocale, "users.common.copy")}
                     </Button>
                   </div>
                 </div>
@@ -808,7 +841,7 @@ export function UsersManagement({
               <div className="space-y-3">
                 <div className="space-y-1.5">
                   <label className="text-xs text-slate-500" htmlFor="new-user-name">
-                    ชื่อผู้ใช้
+                    {t(uiLocale, "users.form.nameLabel")}
                   </label>
                   <input
                     id="new-user-name"
@@ -820,7 +853,7 @@ export function UsersManagement({
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs text-slate-500" htmlFor="new-user-email">
-                    อีเมล
+                    {t(uiLocale, "users.form.emailLabel")}
                   </label>
                   <input
                     id="new-user-email"
@@ -833,7 +866,7 @@ export function UsersManagement({
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs text-slate-500" htmlFor="new-user-role">
-                    บทบาท
+                    {t(uiLocale, "users.form.roleLabel")}
                   </label>
                   <select
                     id="new-user-role"
@@ -850,18 +883,18 @@ export function UsersManagement({
                   </select>
                 </div>
                 <p className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                  ระบบจะสร้างรหัสผ่านชั่วคราวอัตโนมัติ และบังคับผู้ใช้เปลี่ยนรหัสเมื่อเข้าสู่ระบบครั้งแรก
+                  {t(uiLocale, "users.create.newUser.tempPasswordHint")}
                 </p>
               </div>
             )
           ) : (
             <div className="space-y-3">
               <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                เพิ่มได้เฉพาะผู้ใช้ที่อยู่ในร้านภายใต้ SUPERADMIN เดียวกัน
+                {t(uiLocale, "users.create.existingUser.warning.sameSuperadmin")}
               </p>
               <div className="space-y-1.5">
                 <label className="text-xs text-slate-500" htmlFor="existing-user-search">
-                  ค้นหาผู้ใช้เดิม (ชื่อหรืออีเมล)
+                  {t(uiLocale, "users.create.existingUser.searchLabel")}
                 </label>
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -872,7 +905,7 @@ export function UsersManagement({
                     onChange={(event) => setExistingQuery(event.target.value)}
                     className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-9 pr-20 text-sm outline-none ring-primary transition focus:border-slate-300 focus:bg-white focus:ring-2"
                     disabled={!canCreate || loadingKey !== null}
-                    placeholder="พิมพ์ชื่อหรืออีเมล เช่น somchai@email.com"
+                    placeholder={t(uiLocale, "users.create.existingUser.searchPlaceholder")}
                   />
                   <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
                     {isLoadingExistingCandidates ? (
@@ -884,9 +917,9 @@ export function UsersManagement({
                         className="inline-flex h-6 items-center rounded-full border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-500 transition hover:bg-slate-100"
                         onClick={() => setExistingQuery("")}
                         disabled={!canCreate || loadingKey !== null}
-                        aria-label="ล้างคำค้นหา"
+                        aria-label={t(uiLocale, "users.create.existingUser.clearSearchAriaLabel")}
                       >
-                        ล้าง
+                        {t(uiLocale, "users.create.existingUser.clearSearch")}
                       </button>
                     ) : null}
                   </div>
@@ -894,7 +927,7 @@ export function UsersManagement({
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs text-slate-500" htmlFor="existing-user-role">
-                  บทบาทในร้านนี้
+                  {t(uiLocale, "users.create.existingUser.roleLabel")}
                 </label>
                 <select
                   id="existing-user-role"
@@ -918,13 +951,17 @@ export function UsersManagement({
               ) : null}
 
               <div className="space-y-2">
-                <p className="text-xs text-slate-500">รายชื่อผู้ใช้ที่เพิ่มได้</p>
+                <p className="text-xs text-slate-500">
+                  {t(uiLocale, "users.create.existingUser.candidatesTitle")}
+                </p>
                 <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white">
                   {isLoadingExistingCandidates ? (
-                    <div className="px-3 py-3 text-sm text-slate-500">กำลังโหลดรายชื่อผู้ใช้...</div>
+                    <div className="px-3 py-3 text-sm text-slate-500">
+                      {t(uiLocale, "users.create.existingUser.candidatesLoading")}
+                    </div>
                   ) : existingCandidates.length === 0 ? (
                     <div className="px-3 py-3 text-sm text-slate-500">
-                      ไม่พบผู้ใช้ที่เพิ่มได้ในร้านอื่นของ SUPERADMIN นี้
+                      {t(uiLocale, "users.create.existingUser.candidatesEmpty")}
                     </div>
                   ) : (
                     <ul className="divide-y divide-slate-100">
@@ -945,7 +982,8 @@ export function UsersManagement({
                                 <p className="truncate text-sm font-medium text-slate-900">{candidate.name}</p>
                                 <p className="truncate text-xs text-slate-500">{candidate.email}</p>
                                 <p className="mt-0.5 truncate text-[11px] text-slate-500">
-                                  อยู่ในร้าน: {candidate.sourceStores.join(", ")}
+                                  {t(uiLocale, "users.create.existingUser.sourceStoresPrefix")}{" "}
+                                  {candidate.sourceStores.join(", ")}
                                 </p>
                               </span>
                               {selected ? <Check className="h-4 w-4 shrink-0 self-center text-emerald-600" /> : null}
@@ -965,8 +1003,8 @@ export function UsersManagement({
       <SlideUpSheet
         isOpen={isEditModalOpen}
         onClose={closeEditModal}
-        title={editingMember?.name ?? "แก้ไขสมาชิก"}
-        description={editingMember?.email ?? "จัดการบทบาท สถานะ และสิทธิ์เข้าถึงสาขา"}
+        title={editingMember?.name ?? t(uiLocale, "users.edit.sheet.title")}
+        description={editingMember?.email ?? t(uiLocale, "users.edit.sheet.description")}
         panelMaxWidthClass="min-[1200px]:max-w-[45rem]"
         disabled={loadingKey === "save-member" || loadingKey === "reset-password"}
         footer={
@@ -979,16 +1017,16 @@ export function UsersManagement({
               ) : null}
               <div className={`${editErrorMessage ? "mt-3 " : ""}grid grid-cols-2 gap-2`}>
                 <Button type="button" variant="outline" className="h-10 rounded-xl" onClick={closeEditModal} disabled={loadingKey !== null}>
-                  ยกเลิก
+                  {t(uiLocale, "users.common.cancel")}
                 </Button>
                 <Button type="button" className="h-10 rounded-xl" onClick={saveMemberChanges} disabled={!canUpdate || loadingKey !== null}>
                   {loadingKey === "save-member" ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      กำลังบันทึก...
+                      {t(uiLocale, "users.common.saving")}
                     </>
                   ) : (
-                    "บันทึกการเปลี่ยนแปลง"
+                    t(uiLocale, "users.edit.action.save")
                   )}
                 </Button>
               </div>
@@ -1000,7 +1038,7 @@ export function UsersManagement({
           <div className="space-y-3">
             <div className="grid gap-4 sm:grid-cols-2">
               <article className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs text-slate-500">บทบาท</p>
+                <p className="text-xs text-slate-500">{t(uiLocale, "users.form.roleLabel")}</p>
                 <select
                   value={editRoleId}
                   onChange={(event) => setEditRoleId(event.target.value)}
@@ -1016,7 +1054,7 @@ export function UsersManagement({
               </article>
 
               <article className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs text-slate-500">สถานะ</p>
+                <p className="text-xs text-slate-500">{t(uiLocale, "users.edit.section.statusLabel")}</p>
                 <div className="grid grid-cols-3 gap-1">
                   {statusOptions.map((status) => (
                     <button
@@ -1037,7 +1075,7 @@ export function UsersManagement({
               </article>
 
               <article className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:col-span-2">
-                <p className="text-xs text-slate-500">จำกัดอุปกรณ์เข้าสู่ระบบ</p>
+                <p className="text-xs text-slate-500">{t(uiLocale, "users.edit.section.sessionLimitLabel")}</p>
                 <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                   <input
                     type="number"
@@ -1045,18 +1083,19 @@ export function UsersManagement({
                     max={10}
                     value={editSessionLimit}
                     onChange={(event) => setEditSessionLimit(event.target.value)}
-                    placeholder="ว่าง = ค่าเริ่มต้นระบบ"
+                    placeholder={t(uiLocale, "users.edit.sessionLimit.placeholder")}
                     className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
                     disabled={!canUpdate || loadingKey !== null}
                   />
                   <span className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-500">
-                    ปัจจุบัน: {editingMember.sessionLimit ?? defaultSessionLimit}
+                    {t(uiLocale, "users.edit.sessionLimit.currentPrefix")}{" "}
+                    {editingMember.sessionLimit ?? defaultSessionLimit}
                   </span>
                 </div>
               </article>
 
               <article className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:col-span-2">
-                <p className="text-xs text-slate-500">สิทธิ์เข้าถึงสาขา</p>
+                <p className="text-xs text-slate-500">{t(uiLocale, "users.edit.section.branchAccessLabel")}</p>
                 <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-white p-1">
                   <button
                     type="button"
@@ -1068,7 +1107,7 @@ export function UsersManagement({
                     onClick={() => setEditBranchMode("ALL")}
                     disabled={!canUpdate || loadingKey !== null || isLoadingEditBranchAccess}
                   >
-                    ทุกสาขา
+                    {t(uiLocale, "users.edit.branchMode.all")}
                   </button>
                   <button
                     type="button"
@@ -1080,16 +1119,18 @@ export function UsersManagement({
                     onClick={() => setEditBranchMode("SELECTED")}
                     disabled={!canUpdate || loadingKey !== null || isLoadingEditBranchAccess}
                   >
-                    เลือกสาขา
+                    {t(uiLocale, "users.edit.branchMode.selected")}
                   </button>
                 </div>
 
                 {isLoadingEditBranchAccess ? (
-                  <p className="text-xs text-slate-500">กำลังโหลดสิทธิ์สาขา...</p>
+                  <p className="text-xs text-slate-500">
+                    {t(uiLocale, "users.edit.branchAccess.loading")}
+                  </p>
                 ) : editBranchMode === "SELECTED" ? (
                   <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
                     {branches.length === 0 ? (
-                      <p className="text-xs text-slate-500">ยังไม่มีข้อมูลสาขาในร้านนี้</p>
+                      <p className="text-xs text-slate-500">{t(uiLocale, "users.edit.branchAccess.empty")}</p>
                     ) : (
                       <ul className="space-y-1">
                         {branches.map((branch) => {
@@ -1124,7 +1165,7 @@ export function UsersManagement({
                   </div>
                 ) : (
                   <p className="text-xs text-slate-500">
-                    ผู้ใช้คนนี้สามารถสลับและใช้งานได้ทุกสาขาในร้านนี้
+                    {t(uiLocale, "users.edit.branchAccess.allHint")}
                   </p>
                 )}
               </article>
@@ -1133,32 +1174,47 @@ export function UsersManagement({
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
               <p className="inline-flex items-center gap-1.5">
                 <Mail className="h-3.5 w-3.5" />
-                สิทธิ์ระบบ: {editingMember.systemRole}
+                {t(uiLocale, "users.edit.info.systemRolePrefix")} {editingMember.systemRole}
               </p>
               <p className="mt-1 inline-flex items-center gap-1.5">
                 <UserRound className="h-3.5 w-3.5" />
-                สถานะปัจจุบัน: {statusLabel[editingMember.status]}
+                {t(uiLocale, "users.edit.info.currentStatusPrefix")} {statusLabel[editingMember.status]}
               </p>
               <p className="mt-1">
-                สร้างบัญชีโดย: {editingMember.createdByName ?? (editingMember.createdByUserId ? "ไม่ทราบชื่อ" : "ระบบ")}
+                {t(uiLocale, "users.edit.info.createdByPrefix")}{" "}
+                {editingMember.createdByName ??
+                  (editingMember.createdByUserId
+                    ? t(uiLocale, "users.common.unknownName")
+                    : t(uiLocale, "common.actor.system"))}
               </p>
               <p className="mt-1">
-                เพิ่มเข้าร้านโดย: {editingMember.addedByName ?? (editingMember.addedByUserId ? "ไม่ทราบชื่อ" : "ระบบ")}
+                {t(uiLocale, "users.edit.info.addedByPrefix")}{" "}
+                {editingMember.addedByName ??
+                  (editingMember.addedByUserId
+                    ? t(uiLocale, "users.common.unknownName")
+                    : t(uiLocale, "common.actor.system"))}
               </p>
               <p className="mt-1">
-                สถานะรหัสผ่าน: {editingMember.mustChangePassword ? "ต้องเปลี่ยนรหัสก่อนเข้าใช้งาน" : "ปกติ"}
+                {t(uiLocale, "users.edit.info.passwordStatusPrefix")}{" "}
+                {editingMember.mustChangePassword
+                  ? t(uiLocale, "users.password.status.mustChange")
+                  : t(uiLocale, "users.password.status.normal")}
               </p>
             </div>
 
             <article className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
-              <p className="text-xs font-medium text-slate-700">รีเซ็ตรหัสผ่านชั่วคราว</p>
+              <p className="text-xs font-medium text-slate-700">
+                {t(uiLocale, "users.resetPassword.section.title")}
+              </p>
               <p className="text-xs text-slate-500">
-                ระบบจะสร้างรหัสแบบใช้ครั้งเดียว และบังคับให้ผู้ใช้เปลี่ยนรหัสใหม่เมื่อเข้าสู่ระบบครั้งถัดไป
+                {t(uiLocale, "users.resetPassword.section.description")}
               </p>
 
               {temporaryPassword ? (
                 <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-2">
-                  <p className="text-xs text-emerald-700">รหัสชั่วคราวใหม่</p>
+                  <p className="text-xs text-emerald-700">
+                    {t(uiLocale, "users.resetPassword.tempPasswordLabel")}
+                  </p>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 rounded-lg border border-emerald-200 bg-white px-2 py-1 text-sm font-semibold text-emerald-700">
                       {temporaryPassword}
@@ -1170,7 +1226,7 @@ export function UsersManagement({
                       onClick={copyTemporaryPassword}
                     >
                       <Copy className="h-3.5 w-3.5" />
-                      คัดลอก
+                      {t(uiLocale, "users.common.copy")}
                     </Button>
                   </div>
                 </div>
@@ -1178,7 +1234,9 @@ export function UsersManagement({
 
               {!temporaryPassword && isResetPasswordConfirmOpen ? (
                 <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-2">
-                  <p className="text-xs text-amber-700">ยืนยันรีเซ็ตรหัสผ่านของสมาชิกคนนี้ใช่หรือไม่?</p>
+                  <p className="text-xs text-amber-700">
+                    {t(uiLocale, "users.resetPassword.confirm.question")}
+                  </p>
                   <div className="grid grid-cols-2 gap-2">
                     <Button
                       type="button"
@@ -1187,7 +1245,7 @@ export function UsersManagement({
                       onClick={() => setIsResetPasswordConfirmOpen(false)}
                       disabled={loadingKey === "reset-password"}
                     >
-                      ยกเลิก
+                      {t(uiLocale, "users.common.cancel")}
                     </Button>
                     <Button
                       type="button"
@@ -1198,10 +1256,10 @@ export function UsersManagement({
                       {loadingKey === "reset-password" ? (
                         <>
                           <Loader2 className="h-4 w-4 animate-spin" />
-                          กำลังรีเซ็ต...
+                          {t(uiLocale, "users.resetPassword.action.resetting")}
                         </>
                       ) : (
-                        "ยืนยันรีเซ็ต"
+                        t(uiLocale, "users.resetPassword.action.confirm")
                       )}
                     </Button>
                   </div>
@@ -1217,7 +1275,7 @@ export function UsersManagement({
                   disabled={!canUpdate || loadingKey !== null}
                 >
                   <KeyRound className="h-3.5 w-3.5" />
-                  รีเซ็ตรหัสผ่านชั่วคราว
+                  {t(uiLocale, "users.resetPassword.action.reset")}
                 </Button>
               ) : null}
             </article>

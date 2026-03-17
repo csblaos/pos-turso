@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 
 import { StoreInventorySettings } from "@/components/app/store-inventory-settings";
 import { getSession } from "@/lib/auth/session";
+import { t } from "@/lib/i18n/messages";
 import { getUserPermissionsForCurrentSession, isPermissionGranted } from "@/lib/rbac/access";
 import { db } from "@/lib/db/client";
 import { stores } from "@/lib/db/schema";
@@ -20,12 +21,13 @@ export default async function SettingsStockPage() {
   const permissionKeys = await getUserPermissionsForCurrentSession();
   const canView = isPermissionGranted(permissionKeys, "settings.view");
   const canUpdate = isPermissionGranted(permissionKeys, "settings.update");
+  const uiLocale = session.uiLocale;
 
   if (!canView) {
     return (
       <section className="space-y-2">
-        <h1 className="text-xl font-semibold">ตั้งค่าแจ้งเตือนสต็อก</h1>
-        <p className="text-sm text-red-600">คุณไม่มีสิทธิ์ดูหน้านี้</p>
+        <h1 className="text-xl font-semibold">{t(uiLocale, "settings.link.stockThresholds.title")}</h1>
+        <p className="text-sm text-red-600">{t(uiLocale, "common.permissionDenied.viewPage")}</p>
       </section>
     );
   }
@@ -42,10 +44,8 @@ export default async function SettingsStockPage() {
   return (
     <section className="space-y-4">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold">ตั้งค่าแจ้งเตือนสต็อก</h1>
-        <p className="text-sm text-muted-foreground">
-          ตั้งค่าเกณฑ์สต็อกหมดและสต็อกต่ำสำหรับร้านนี้
-        </p>
+        <h1 className="text-xl font-semibold">{t(uiLocale, "settings.link.stockThresholds.title")}</h1>
+        <p className="text-sm text-muted-foreground">{t(uiLocale, "settings.link.stockThresholds.description")}</p>
       </header>
 
       <StoreInventorySettings

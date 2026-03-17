@@ -11,6 +11,7 @@ import { db } from "@/lib/db/client";
 import { roles, storeBranches, storeMembers, users } from "@/lib/db/schema";
 import { getSession } from "@/lib/auth/session";
 import { getUserSystemRole } from "@/lib/auth/system-admin";
+import { t } from "@/lib/i18n/messages";
 import { getUserPermissionsForCurrentSession, isPermissionGranted } from "@/lib/rbac/access";
 import { getGlobalSessionPolicy } from "@/lib/system-config/policy";
 
@@ -124,14 +125,15 @@ export default async function SettingsUsersPage() {
   const canUpdate = isPermissionGranted(permissionKeys, "members.update");
   const systemRole = await getUserSystemRole(session.userId);
   const canLinkExisting = systemRole === "SUPERADMIN";
+  const uiLocale = session.uiLocale;
 
   if (!canView) {
     return (
       <section className="space-y-3">
-        <h1 className="text-xl font-semibold">ผู้ใช้และสมาชิกทีม</h1>
-        <p className="text-sm text-red-600">คุณไม่มีสิทธิ์ดูหน้านี้</p>
+        <h1 className="text-xl font-semibold">{t(uiLocale, "settings.link.users.title")}</h1>
+        <p className="text-sm text-red-600">{t(uiLocale, "common.permissionDenied.viewPage")}</p>
         <Link href="/settings" className="text-sm font-medium text-blue-700 hover:underline">
-          กลับไปหน้าตั้งค่า
+          {t(uiLocale, "common.backToSettings")}
         </Link>
       </section>
     );
@@ -141,29 +143,31 @@ export default async function SettingsUsersPage() {
     <section className="space-y-5">
       <header className="space-y-1 px-1">
         <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
-          ผู้ใช้และสมาชิกทีม
+          {t(uiLocale, "settings.link.users.title")}
         </h1>
-        <p className="text-sm text-slate-500">จัดการสมาชิก, บทบาท และสถานะผู้ใช้งานในร้าน</p>
+        <p className="text-sm text-slate-500">{t(uiLocale, "settings.link.users.description")}</p>
       </header>
 
       {systemRole === "SUPERADMIN" ? (
         <div className="overflow-hidden rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3">
-          <p className="text-sm font-medium text-blue-800">ต้องการจัดการผู้ใช้หลายร้าน?</p>
+          <p className="text-sm font-medium text-blue-800">
+            {t(uiLocale, "settings.users.superadminCallout.title")}
+          </p>
           <p className="mt-0.5 text-xs text-blue-700">
-            ใช้หน้า Superadmin เพื่อสลับร้านและจัดการผู้ใช้ข้ามร้านได้เร็วขึ้น
+            {t(uiLocale, "settings.users.superadminCallout.description")}
           </p>
           <Link
             href="/settings/superadmin/users"
             className="mt-2 inline-flex items-center text-xs font-semibold text-blue-800 hover:underline"
           >
-            ไปหน้า Superadmin: จัดการผู้ใช้
+            {t(uiLocale, "settings.users.superadminCallout.linkLabel")}
           </Link>
         </div>
       ) : null}
 
       <div className="space-y-2">
         <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          จัดการสมาชิก
+          {t(uiLocale, "settings.users.section.manage")}
         </p>
       </div>
       <Suspense fallback={<UsersManagementFallback />}>
@@ -177,7 +181,7 @@ export default async function SettingsUsersPage() {
 
       <div className="space-y-2">
         <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          นำทาง
+          {t(uiLocale, "settings.section.navigate")}
         </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <Link
@@ -188,9 +192,11 @@ export default async function SettingsUsersPage() {
               <Users className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">กลับหน้าตั้งค่า</span>
+              <span className="block truncate text-sm font-medium text-slate-900">
+                {t(uiLocale, "common.backToSettings")}
+              </span>
               <span className="mt-0.5 block truncate text-xs text-slate-500">
-                กลับไปรายการตั้งค่าทั้งหมด
+                {t(uiLocale, "common.backToSettings.description")}
               </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />

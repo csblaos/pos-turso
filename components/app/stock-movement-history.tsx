@@ -12,6 +12,9 @@ import {
   StockTabToolbar,
 } from "@/components/app/stock-tab-feedback";
 import { authFetch } from "@/lib/auth/client-token";
+import { uiLocaleToDateLocale } from "@/lib/i18n/locales";
+import { t, type MessageKey } from "@/lib/i18n/messages";
+import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 import type { InventoryMovementView } from "@/lib/inventory/queries";
 
 type StockMovementHistoryProps = {
@@ -36,13 +39,13 @@ const movementBadgeClass: Record<InventoryMovementView["type"], string> = {
   RETURN: "bg-purple-100 text-purple-700",
 };
 
-const movementTypeLabelMap: Record<InventoryMovementView["type"], string> = {
-  IN: "รับเข้า",
-  OUT: "ตัดออก",
-  RESERVE: "จอง",
-  RELEASE: "ยกเลิกจอง",
-  ADJUST: "ปรับสต็อก",
-  RETURN: "รับคืน",
+const movementTypeLabelKeyMap: Record<InventoryMovementView["type"], MessageKey> = {
+  IN: "stock.movementType.IN",
+  OUT: "stock.movementType.OUT",
+  RESERVE: "stock.movementType.RESERVE",
+  RELEASE: "stock.movementType.RELEASE",
+  ADJUST: "stock.movementType.ADJUST",
+  RETURN: "stock.movementType.RETURN",
 };
 
 const ITEMS_PER_PAGE = 50;
@@ -120,20 +123,26 @@ function formatIsoDateDisplay(value: string): string {
   return `${day}/${month}/${year}`;
 }
 
-const calendarWeekdayLabels = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"] as const;
-
 type HistoryDatePickerFieldProps = {
   value: string;
   onChange: (nextValue: string) => void;
-  placeholder?: string;
+  placeholder: string;
   ariaLabel: string;
+  dateLocale: string;
+  weekdayLabels: readonly string[];
+  clearLabel: string;
+  closeLabel: string;
 };
 
 function HistoryDatePickerField({
   value,
   onChange,
-  placeholder = "dd/mm/yyyy",
+  placeholder,
   ariaLabel,
+  dateLocale,
+  weekdayLabels,
+  clearLabel,
+  closeLabel,
 }: HistoryDatePickerFieldProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -190,7 +199,7 @@ function HistoryDatePickerField({
 
   const selectedIso = parseIsoDateValue(value) ? value : "";
   const todayIso = toDateInputValue(new Date());
-  const monthLabel = viewCursor.toLocaleDateString("th-TH", {
+  const monthLabel = viewCursor.toLocaleDateString(dateLocale, {
     month: "long",
     year: "numeric",
   });
@@ -240,7 +249,7 @@ function HistoryDatePickerField({
           </div>
 
           <div className="grid grid-cols-7 gap-1">
-            {calendarWeekdayLabels.map((label) => (
+            {weekdayLabels.map((label) => (
               <span
                 key={label}
                 className="inline-flex h-7 items-center justify-center text-[10px] font-medium text-slate-500"
@@ -288,14 +297,14 @@ function HistoryDatePickerField({
                 setIsOpen(false);
               }}
             >
-              ล้างค่า
+              {clearLabel}
             </button>
             <button
               type="button"
               className="rounded-md px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-100"
               onClick={() => setIsOpen(false)}
             >
-              ปิด
+              {closeLabel}
             </button>
           </div>
         </div>
@@ -304,18 +313,15 @@ function HistoryDatePickerField({
   );
 }
 
-const movementTypeFilterOptions: Array<{ value: MovementTypeFilter; label: string }> = [
-  { value: "all", label: "ทั้งหมด" },
-  { value: "IN", label: "รับเข้า" },
-  { value: "OUT", label: "เบิกออก" },
-  { value: "RESERVE", label: "จอง" },
-  { value: "RELEASE", label: "ยกเลิกจอง" },
-  { value: "ADJUST", label: "ปรับสต็อก" },
-  { value: "RETURN", label: "รับคืน" },
+const movementTypeFilterOptions: Array<{ value: MovementTypeFilter; labelKey: MessageKey }> = [
+  { value: "all", labelKey: "common.filter.all" },
+  { value: "IN", labelKey: "stock.movementType.IN" },
+  { value: "OUT", labelKey: "stock.history.filter.type.OUT" },
+  { value: "RESERVE", labelKey: "stock.movementType.RESERVE" },
+  { value: "RELEASE", labelKey: "stock.movementType.RELEASE" },
+  { value: "ADJUST", labelKey: "stock.movementType.ADJUST" },
+  { value: "RETURN", labelKey: "stock.movementType.RETURN" },
 ];
-
-const getTypeFilterLabel = (value: MovementTypeFilter) =>
-  movementTypeFilterOptions.find((option) => option.value === value)?.label ?? "ทั้งหมด";
 
 function buildHistoryCacheKey(params: {
   page: number;
@@ -337,6 +343,17 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const uiLocale = useUiLocale();
+  const numberLocale = uiLocaleToDateLocale(uiLocale);
+  const weekdayLabels = [
+    t(uiLocale, "purchase.calendar.weekday.SUN"),
+    t(uiLocale, "purchase.calendar.weekday.MON"),
+    t(uiLocale, "purchase.calendar.weekday.TUE"),
+    t(uiLocale, "purchase.calendar.weekday.WED"),
+    t(uiLocale, "purchase.calendar.weekday.THU"),
+    t(uiLocale, "purchase.calendar.weekday.FRI"),
+    t(uiLocale, "purchase.calendar.weekday.SAT"),
+  ] as const;
   const isHistoryTabActive = searchParams.get("tab") === "history";
   const typeFilterFromQuery =
     parseHistoryTypeFilter(searchParams.get(HISTORY_TYPE_QUERY_KEY)) ?? "all";
@@ -496,12 +513,12 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
         }
 
         if (!res.ok) {
-          setErrorMessage(data?.message ?? "โหลดประวัติสต็อกไม่สำเร็จ");
+          setErrorMessage(data?.message ?? t(uiLocale, "stock.history.error.loadFailed"));
           return;
         }
 
         if (!data?.ok || !Array.isArray(data.movements)) {
-          setErrorMessage("รูปแบบข้อมูลประวัติสต็อกไม่ถูกต้อง");
+          setErrorMessage(t(uiLocale, "stock.history.error.invalidData"));
           return;
         }
 
@@ -526,7 +543,7 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
         if (options?.signal?.aborted) {
           return;
         }
-        setErrorMessage("เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่");
+        setErrorMessage(t(uiLocale, "stock.error.serverUnreachableRetry"));
       } finally {
         if (options?.signal?.aborted) {
           return;
@@ -545,6 +562,7 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
       appliedTypeFilter,
       currentCacheKey,
       page,
+      uiLocale,
     ],
   );
 
@@ -658,7 +676,7 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
 
   const applyFilters = () => {
     if (dateFromInput && dateToInput && dateFromInput > dateToInput) {
-      setErrorMessage("วันที่เริ่มต้นต้องไม่มากกว่าวันที่สิ้นสุด");
+      setErrorMessage(t(uiLocale, "stock.history.filter.error.invalidDateRange"));
       return;
     }
 
@@ -712,6 +730,11 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
     ? (movementItems.length - endIndex) * VIRTUAL_ROW_ESTIMATE
     : 0;
 
+  const getTypeFilterLabel = (value: MovementTypeFilter) => {
+    const option = movementTypeFilterOptions.find((item) => item.value === value);
+    return t(uiLocale, option?.labelKey ?? "common.filter.all");
+  };
+
   return (
     <section className="space-y-4">
       <StockTabToolbar
@@ -730,11 +753,11 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
               setTypeFilterInput((event.target.value as MovementTypeFilter) ?? "all")
             }
             className="h-10 rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
-            aria-label="ประเภทการเคลื่อนไหว"
+            aria-label={t(uiLocale, "stock.history.filter.type.ariaLabel")}
           >
             {movementTypeFilterOptions.map((option) => (
               <option key={option.value} value={option.value}>
-                ประเภท: {option.label}
+                {t(uiLocale, "stock.history.filter.type.optionPrefix")} {t(uiLocale, option.labelKey)}
               </option>
             ))}
           </select>
@@ -742,20 +765,28 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
             type="text"
             value={productQueryInput}
             onChange={(event) => setProductQueryInput(event.target.value)}
-            placeholder="กรองตามสินค้า (SKU/ชื่อ)"
+            placeholder={t(uiLocale, "stock.history.filter.product.placeholder")}
             className="h-10 rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
           />
           <HistoryDatePickerField
             value={dateFromInput}
             onChange={setDateFromInput}
-            ariaLabel="เลือกวันที่เริ่มต้นในประวัติสต็อก"
-            placeholder="วันที่เริ่มต้น"
+            ariaLabel={t(uiLocale, "stock.history.filter.dateFrom.ariaLabel")}
+            placeholder={t(uiLocale, "stock.history.filter.dateFrom.placeholder")}
+            dateLocale={numberLocale}
+            weekdayLabels={weekdayLabels}
+            clearLabel={t(uiLocale, "stock.history.datePicker.clear")}
+            closeLabel={t(uiLocale, "stock.history.datePicker.close")}
           />
           <HistoryDatePickerField
             value={dateToInput}
             onChange={setDateToInput}
-            ariaLabel="เลือกวันที่สิ้นสุดในประวัติสต็อก"
-            placeholder="วันที่สิ้นสุด"
+            ariaLabel={t(uiLocale, "stock.history.filter.dateTo.ariaLabel")}
+            placeholder={t(uiLocale, "stock.history.filter.dateTo.placeholder")}
+            dateLocale={numberLocale}
+            weekdayLabels={weekdayLabels}
+            clearLabel={t(uiLocale, "stock.history.datePicker.clear")}
+            closeLabel={t(uiLocale, "stock.history.datePicker.close")}
           />
         </div>
 
@@ -766,31 +797,31 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
             className="h-8 px-3 text-xs"
             onClick={clearFilters}
           >
-            ล้างตัวกรอง
+            {t(uiLocale, "stock.history.filter.clear")}
           </Button>
           <Button type="button" className="h-8 px-3 text-xs" onClick={applyFilters}>
-            ใช้ตัวกรอง
+            {t(uiLocale, "stock.history.filter.apply")}
           </Button>
         </div>
 
         {hasActiveFilters ? (
           <div className="flex flex-wrap gap-2 text-xs text-slate-600">
             <span className="rounded-full bg-slate-100 px-2 py-1">
-              ประเภท: {getTypeFilterLabel(appliedTypeFilter)}
+              {t(uiLocale, "stock.history.filter.chip.type")} {getTypeFilterLabel(appliedTypeFilter)}
             </span>
             {appliedProductQuery ? (
               <span className="rounded-full bg-slate-100 px-2 py-1">
-                ค้นหา: {appliedProductQuery}
+                {t(uiLocale, "stock.history.filter.chip.search")} {appliedProductQuery}
               </span>
             ) : null}
             {appliedDateFrom ? (
               <span className="rounded-full bg-slate-100 px-2 py-1">
-                จาก: {appliedDateFrom}
+                {t(uiLocale, "stock.history.filter.chip.from")} {appliedDateFrom}
               </span>
             ) : null}
             {appliedDateTo ? (
               <span className="rounded-full bg-slate-100 px-2 py-1">
-                ถึง: {appliedDateTo}
+                {t(uiLocale, "stock.history.filter.chip.to")} {appliedDateTo}
               </span>
             ) : null}
           </div>
@@ -798,7 +829,7 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
       </article>
 
       {isLoading && movementItems.length === 0 ? (
-        <StockTabLoadingState message="กำลังโหลดประวัติสต็อก..." />
+        <StockTabLoadingState message={t(uiLocale, "stock.history.loading")} />
       ) : errorMessage && movementItems.length === 0 ? (
         <StockTabErrorState
           message={errorMessage}
@@ -808,14 +839,17 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
         />
       ) : movementItems.length === 0 ? (
         <StockTabEmptyState
-          title="ไม่พบประวัติการเคลื่อนไหว"
-          description="ลองเปลี่ยนตัวกรองหรือช่วงวันที่"
+          title={t(uiLocale, "stock.history.empty.title")}
+          description={t(uiLocale, "stock.history.empty.description")}
         />
       ) : (
         <div className="space-y-2">
           <p className="text-xs text-slate-500">
-            แสดง {movementItems.length.toLocaleString("th-TH")} รายการ จากทั้งหมด{" "}
-            {totalItems.toLocaleString("th-TH")} รายการ
+            {t(uiLocale, "stock.history.summary.showing.prefix")}{" "}
+            {movementItems.length.toLocaleString(numberLocale)}{" "}
+            {t(uiLocale, "stock.history.summary.showing.infix")}{" "}
+            {totalItems.toLocaleString(numberLocale)}{" "}
+            {t(uiLocale, "stock.history.summary.showing.suffix")}
           </p>
 
           <div
@@ -847,20 +881,20 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
                         <span
                           className={`flex-shrink-0 rounded-full px-2 py-1 text-xs ${movementBadgeClass[movement.type]}`}
                         >
-                          {movementTypeLabelMap[movement.type]}
+                          {t(uiLocale, movementTypeLabelKeyMap[movement.type])}
                         </span>
                       </div>
 
                       <div className="mt-2 flex items-center gap-4">
                         <div>
-                          <p className="text-xs text-slate-500">จำนวนฐาน</p>
+                          <p className="text-xs text-slate-500">{t(uiLocale, "stock.movement.baseQty.label")}</p>
                           <p
                             className={`text-lg font-bold ${
                               movement.qtyBase >= 0 ? "text-emerald-600" : "text-red-600"
                             }`}
                           >
                             {movement.qtyBase >= 0 ? "+" : ""}
-                            {movement.qtyBase.toLocaleString("th-TH")}
+                            {movement.qtyBase.toLocaleString(numberLocale)}
                           </p>
                         </div>
                       </div>
@@ -868,7 +902,7 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
                       {movement.note && (
                         <div className="mt-2 rounded-lg bg-slate-50 p-2">
                           <p className="text-xs text-slate-600">
-                            <strong>หมายเหตุ:</strong> {movement.note}
+                            <strong>{t(uiLocale, "stock.movement.note.prefix")}</strong> {movement.note}
                           </p>
                         </div>
                       )}
@@ -876,7 +910,7 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
                       <div className="mt-2 flex items-center gap-1 text-xs text-slate-500">
                         <Calendar className="h-3 w-3" />
                         <span>
-                          {new Date(movement.createdAt).toLocaleString("th-TH", {
+                          {new Date(movement.createdAt).toLocaleString(numberLocale, {
                             year: "numeric",
                             month: "short",
                             day: "numeric",
@@ -885,7 +919,10 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
                           })}
                         </span>
                         <span>•</span>
-                        <span>โดย {movement.createdByName ?? "ระบบ"}</span>
+                        <span>
+                          {t(uiLocale, "stock.movement.by.prefix")}{" "}
+                          {movement.createdByName ?? t(uiLocale, "common.actor.system")}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -907,7 +944,7 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
               void fetchHistory({ manual: true });
             }}
           >
-            ลองใหม่
+            {t(uiLocale, "stock.feedback.retry")}
           </Button>
         </div>
       ) : null}
@@ -916,8 +953,11 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
         <article className="rounded-xl border bg-white p-3 shadow-sm">
           <div className="flex items-center justify-between text-xs">
             <p className="text-slate-600">
-              หน้า {currentPage.toLocaleString("th-TH")} /{" "}
-              {totalPages.toLocaleString("th-TH")} ({totalItems.toLocaleString("th-TH")} รายการ)
+              {t(uiLocale, "stock.history.pagination.pagePrefix")}{" "}
+              {currentPage.toLocaleString(numberLocale)} /{" "}
+              {totalPages.toLocaleString(numberLocale)} (
+              {totalItems.toLocaleString(numberLocale)}{" "}
+              {t(uiLocale, "stock.history.pagination.itemsSuffix")})
             </p>
 
             <div className="flex items-center gap-2">
@@ -928,7 +968,7 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
                 disabled={currentPage <= 1 || isLoading || isRefreshing}
                 onClick={() => setPage((prev) => Math.max(1, prev - 1))}
               >
-                ก่อนหน้า
+                {t(uiLocale, "stock.history.pagination.prev")}
               </Button>
 
               <Button
@@ -938,7 +978,7 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
                 disabled={currentPage >= totalPages || isLoading || isRefreshing}
                 onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
               >
-                ถัดไป
+                {t(uiLocale, "stock.history.pagination.next")}
               </Button>
             </div>
           </div>

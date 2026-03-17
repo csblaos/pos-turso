@@ -10,6 +10,7 @@ import { stores } from "@/lib/db/schema";
 import { getUserPermissionsForCurrentSession } from "@/lib/rbac/access";
 import { getStorefrontLayoutPreset } from "@/lib/storefront/layout/registry";
 import { normalizeStoreType } from "@/lib/storefront/types";
+import { t } from "@/lib/i18n/messages";
 
 export default async function AppLayout({
   children,
@@ -46,6 +47,7 @@ export default async function AppLayout({
   const activeStoreType = normalizeStoreType(session.activeStoreType);
   const layoutPreset = getStorefrontLayoutPreset(activeStoreType);
   const activeStoreName = activeStoreProfile?.name ?? session.activeStoreName ?? "-";
+  const uiLocale = session.uiLocale;
 
   return (
     <div
@@ -58,15 +60,15 @@ export default async function AppLayout({
           activeStoreName={activeStoreName}
           activeStoreLogoUrl={activeStoreProfile?.logoUrl ?? null}
           activeBranchName={session.activeBranchName}
-          shellTitle={layoutPreset.shellTitle}
-          uiLocale={session.uiLocale}
+          shellTitle={t(uiLocale, layoutPreset.shellTitleKey)}
+          uiLocale={uiLocale}
           canViewNotifications={
             permissionKeys.includes("*") || permissionKeys.includes("settings.view")
           }
         />
-        {layoutPreset.modeNoteText ? (
+        {layoutPreset.modeNoteTextKey ? (
           <p className={`mt-2 text-xs ${layoutPreset.modeNoteClassName}`}>
-            {layoutPreset.modeNoteText}
+            {t(uiLocale, layoutPreset.modeNoteTextKey)}
           </p>
         ) : null}
       </header>

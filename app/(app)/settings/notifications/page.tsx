@@ -8,6 +8,7 @@ import {
   isPermissionGranted,
 } from "@/lib/rbac/access";
 import { getSession } from "@/lib/auth/session";
+import { t } from "@/lib/i18n/messages";
 
 export default async function SettingsNotificationsPage() {
   const session = await getSession();
@@ -22,17 +23,18 @@ export default async function SettingsNotificationsPage() {
   const permissionKeys = await getUserPermissionsForCurrentSession();
   const canViewSettings = isPermissionGranted(permissionKeys, "settings.view");
   const canManageRules = isPermissionGranted(permissionKeys, "settings.update");
+  const uiLocale = session.uiLocale;
 
   if (!canViewSettings) {
     return (
       <section className="space-y-3">
-        <h1 className="text-xl font-semibold">การแจ้งเตือน</h1>
-        <p className="text-sm text-red-600">คุณไม่มีสิทธิ์ดูหน้านี้</p>
+        <h1 className="text-xl font-semibold">{t(uiLocale, "settings.link.accountNotifications.title")}</h1>
+        <p className="text-sm text-red-600">{t(uiLocale, "common.permissionDenied.viewPage")}</p>
         <Link
           href="/settings"
           className="text-sm font-medium text-blue-700 hover:underline"
         >
-          กลับไปหน้าตั้งค่า
+          {t(uiLocale, "common.backToSettings")}
         </Link>
       </section>
     );
@@ -42,17 +44,14 @@ export default async function SettingsNotificationsPage() {
     <section className="space-y-5">
       <header className="space-y-1 px-1">
         <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
-          การแจ้งเตือน
+          {t(uiLocale, "settings.link.accountNotifications.title")}
         </h1>
-        <p className="text-sm text-slate-500">
-          inbox ภายในระบบสำหรับงาน AP due/overdue (มี mute/snooze ราย PO)
-        </p>
+        <p className="text-sm text-slate-500">{t(uiLocale, "settings.link.accountNotifications.description")}</p>
       </header>
 
       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
         <p className="text-xs text-slate-600">
-          งาน cron จะสร้าง/อัปเดตแจ้งเตือนจากกติกา due status เดียวกับ dashboard AP
-          และจะเคารพกฎ mute/snooze อัตโนมัติ
+          {t(uiLocale, "settings.notifications.cronHint")}
         </p>
       </div>
 
@@ -60,7 +59,7 @@ export default async function SettingsNotificationsPage() {
 
       <div className="space-y-2">
         <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          นำทาง
+          {t(uiLocale, "settings.section.navigate")}
         </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <Link
@@ -72,10 +71,10 @@ export default async function SettingsNotificationsPage() {
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium text-slate-900">
-                ไปหน้าความปลอดภัยบัญชี
+                {t(uiLocale, "settings.link.accountSecurity.title")}
               </span>
               <span className="mt-0.5 block truncate text-xs text-slate-500">
-                ตรวจสถานะรหัสผ่านและ session limit
+                {t(uiLocale, "settings.link.accountSecurity.description")}
               </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
@@ -90,10 +89,10 @@ export default async function SettingsNotificationsPage() {
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium text-slate-900">
-                กลับหน้าตั้งค่า
+                {t(uiLocale, "common.backToSettings")}
               </span>
               <span className="mt-0.5 block truncate text-xs text-slate-500">
-                กลับไปรายการตั้งค่าทั้งหมด
+                {t(uiLocale, "common.backToSettings.description")}
               </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />

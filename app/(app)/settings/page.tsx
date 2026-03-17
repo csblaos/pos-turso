@@ -116,14 +116,14 @@ export default async function SettingsPage() {
   const canViewReports = isPermissionGranted(permissionKeys, "reports.view");
   const canViewConnections = isPermissionGranted(permissionKeys, "connections.view");
   const canUpdateSettings = isPermissionGranted(permissionKeys, "settings.update");
-  const userCapabilities = buildUserCapabilities(permissionKeys);
+  const userCapabilities = buildUserCapabilities(permissionKeys, uiLocale);
   const grantedCapabilitiesCount = userCapabilities.filter((capability) => capability.granted).length;
 
   if (!canViewSettings) {
     return (
       <section className="space-y-3">
         <h1 className="text-xl font-semibold">{t(uiLocale, "settings.page.title")}</h1>
-        <p className="text-sm text-red-600">คุณไม่มีสิทธิ์เข้าถึงหน้าตั้งค่า</p>
+        <p className="text-sm text-red-600">{t(uiLocale, "settings.page.noAccess")}</p>
       </section>
     );
   }
@@ -334,7 +334,7 @@ export default async function SettingsPage() {
       id: "superadmin-stores",
       href: "/settings/superadmin",
       title: "Superadmin Center",
-      description: "จัดการร้าน สาขา และผู้ใช้ข้ามร้านในพื้นที่แยก",
+      description: t(uiLocale, "settings.superadminCenter.description"),
       icon: Shield,
       visible: isSuperadmin,
       badgeText: "SUPERADMIN",
@@ -343,7 +343,7 @@ export default async function SettingsPage() {
 
   const storeTypeLabel = storeSummary
     ? storeTypeLabels[storeSummary.storeType] ?? storeSummary.storeType
-    : "ยังไม่ระบุ";
+    : t(uiLocale, "settings.value.notSpecified");
 
   return (
     <section className="space-y-5">
@@ -518,7 +518,9 @@ export default async function SettingsPage() {
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-slate-900">Facebook Page</p>
                     <p className="truncate text-xs text-slate-500">
-                      {fbConnection?.pageName?.trim() ? fbConnection.pageName : "ยังไม่ผูกเพจ"}
+                      {fbConnection?.pageName?.trim()
+                        ? fbConnection.pageName
+                        : t(uiLocale, "settings.connections.fb.notLinked")}
                     </p>
                   </div>
                   <ChannelStatusPill status={fbStatus} uiLocale={uiLocale} />
@@ -529,7 +531,7 @@ export default async function SettingsPage() {
                     <p className="truncate text-xs text-slate-500">
                       {waConnection?.phoneNumber?.trim()
                         ? waConnection.phoneNumber
-                        : "ยังไม่ผูกหมายเลข"}
+                        : t(uiLocale, "settings.connections.wa.notLinked")}
                     </p>
                   </div>
                   <ChannelStatusPill status={waStatus} uiLocale={uiLocale} />

@@ -29,9 +29,9 @@ export default async function SettingsProfilePage() {
     return (
       <section className="space-y-3">
         <h1 className="text-xl font-semibold">{t(uiLocale, "settings.profile.title")}</h1>
-        <p className="text-sm text-red-600">คุณไม่มีสิทธิ์ดูหน้านี้</p>
+        <p className="text-sm text-red-600">{t(uiLocale, "common.permissionDenied.viewPage")}</p>
         <Link href="/settings" className="text-sm font-medium text-blue-700 hover:underline">
-          กลับไปหน้าตั้งค่า
+          {t(uiLocale, "common.backToSettings")}
         </Link>
       </section>
     );
@@ -51,9 +51,9 @@ export default async function SettingsProfilePage() {
     return (
       <section className="space-y-3">
         <h1 className="text-xl font-semibold">{t(uiLocale, "settings.profile.title")}</h1>
-        <p className="text-sm text-red-600">ไม่พบบัญชีผู้ใช้ที่กำลังใช้งาน</p>
+        <p className="text-sm text-red-600">{t(uiLocale, "settings.account.error.notFound")}</p>
         <Link href="/settings" className="text-sm font-medium text-blue-700 hover:underline">
-          กลับไปหน้าตั้งค่า
+          {t(uiLocale, "common.backToSettings")}
         </Link>
       </section>
     );
@@ -69,17 +69,23 @@ export default async function SettingsProfilePage() {
       </header>
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">โปรไฟล์</p>
+        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          {t(uiLocale, "settings.profile.section.profile")}
+        </p>
         <AccountProfileSettings initialName={account.name} email={account.email} />
       </div>
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">ความปลอดภัย</p>
+        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          {t(uiLocale, "settings.profile.section.security")}
+        </p>
         <AccountPasswordSettings mustChangePassword={account.mustChangePassword} />
       </div>
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">นำทาง</p>
+        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          {t(uiLocale, "settings.section.navigate")}
+        </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <Link
             href="/settings/security"
@@ -89,8 +95,12 @@ export default async function SettingsProfilePage() {
               <Lock className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">ไปหน้าความปลอดภัยบัญชี</span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">ตรวจสอบสถานะรหัสผ่านและขีดจำกัดอุปกรณ์</span>
+              <span className="block truncate text-sm font-medium text-slate-900">
+                {t(uiLocale, "settings.link.accountSecurity.title")}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-slate-500">
+                {t(uiLocale, "settings.link.accountSecurity.description")}
+              </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
           </Link>
@@ -103,8 +113,12 @@ export default async function SettingsProfilePage() {
               <UserRound className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">กลับหน้าตั้งค่า</span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">กลับไปรายการตั้งค่าทั้งหมด</span>
+              <span className="block truncate text-sm font-medium text-slate-900">
+                {t(uiLocale, "common.backToSettings")}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-slate-500">
+                {t(uiLocale, "common.backToSettings.description")}
+              </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
           </Link>

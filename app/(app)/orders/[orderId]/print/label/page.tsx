@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { ReceiptPrintActions } from "@/components/app/receipt-print-actions";
 import { getSession } from "@/lib/auth/session";
 import { currencySymbol, parseStoreCurrency } from "@/lib/finance/store-financial";
+import { DEFAULT_UI_LOCALE, uiLocaleToDateLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
 import { getUserPermissionsForCurrentSession, isPermissionGranted } from "@/lib/rbac/access";
 import { getOrderDetail } from "@/lib/orders/queries";
 
@@ -43,12 +45,15 @@ export default async function PrintLabelPage({
     notFound();
   }
 
+  const uiLocale = session.uiLocale ?? DEFAULT_UI_LOCALE;
+  const numberLocale = uiLocaleToDateLocale(uiLocale);
+
   return (
     <>
       <style>{`
         @media print {
           header,
-          nav[aria-label="เมนูหลัก"] {
+          nav {
             display: none !important;
           }
           main {
@@ -59,25 +64,38 @@ export default async function PrintLabelPage({
       <main className="mx-auto w-[105mm] bg-white p-4 text-black">
         <section className="mx-auto flex min-h-[148mm] flex-col justify-between border bg-white p-4">
           <section>
-            <h1 className="text-lg font-semibold">ป้ายจัดส่ง A6</h1>
-            <p className="text-sm text-slate-700">ออเดอร์ {order.orderNo}</p>
-            <p className="text-sm">สถานะ: {order.status}</p>
+            <h1 className="text-lg font-semibold">{t(uiLocale, "orders.print.label.title")}</h1>
+            <p className="text-sm text-slate-700">
+              {t(uiLocale, "orders.print.label.orderPrefix")} {order.orderNo}
+            </p>
+            <p className="text-sm">
+              {t(uiLocale, "orders.print.label.statusPrefix")} {order.status}
+            </p>
           </section>
 
           <section className="space-y-2">
-            <p className="text-xs text-slate-600">ผู้รับ</p>
+            <p className="text-xs text-slate-600">{t(uiLocale, "orders.print.label.receiverTitle")}</p>
             <p className="text-base font-medium">
-              {order.customerName || order.contactDisplayName || "ลูกค้าทั่วไป"}
+              {order.customerName ||
+                order.contactDisplayName ||
+                t(uiLocale, "orders.codReconcile.customer.walkIn")}
             </p>
-            <p className="text-sm">โทร: {order.customerPhone || order.contactPhone || "-"}</p>
+            <p className="text-sm">
+              {t(uiLocale, "orders.print.label.phonePrefix")}{" "}
+              {order.customerPhone || order.contactPhone || "-"}
+            </p>
             <p className="whitespace-pre-wrap text-sm">{order.customerAddress || "-"}</p>
           </section>
 
           <section className="space-y-1 border-t pt-3 text-sm">
-            <p>ขนส่ง: {order.shippingProvider || order.shippingCarrier || "-"}</p>
+            <p>
+              {t(uiLocale, "orders.print.label.shippingPrefix")}{" "}
+              {order.shippingProvider || order.shippingCarrier || "-"}
+            </p>
             <p>Tracking: {order.trackingNo || "-"}</p>
             <p>
-              ต้นทุนค่าส่ง: {order.shippingCost.toLocaleString("th-TH")} {storeCurrencyDisplay}
+              {t(uiLocale, "orders.print.label.shippingCostPrefix")}{" "}
+              {order.shippingCost.toLocaleString(numberLocale)} {storeCurrencyDisplay}
             </p>
           </section>
         </section>

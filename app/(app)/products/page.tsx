@@ -1,8 +1,9 @@
-import dynamic from "next/dynamic";
 import { redirect } from "next/navigation";
 
 import { getSession } from "@/lib/auth/session";
 import { getUserPermissionsForCurrentSession, isPermissionGranted } from "@/lib/rbac/access";
+import { DEFAULT_UI_LOCALE } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
 import {
   getStoreProductSummaryCounts,
   listCategories,
@@ -14,6 +15,7 @@ import { db } from "@/lib/db/client";
 import { stores } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { ProductsHeaderRefreshButton } from "@/components/app/products-header-refresh-button";
+import dynamic from "next/dynamic";
 
 const PRODUCT_PAGE_SIZE = 30;
 type ProductStatusFilter = "all" | "active" | "inactive";
@@ -24,20 +26,6 @@ function parseStatusFilter(value: string | undefined): ProductStatusFilter {
   }
   return "all";
 }
-
-const ProductsManagement = dynamic(
-  () =>
-    import("@/components/app/products-management").then(
-      (module) => module.ProductsManagement,
-    ),
-  {
-    loading: () => (
-      <div className="rounded-xl border bg-white p-4 text-sm text-muted-foreground">
-        กำลังโหลดหน้าจัดการสินค้า...
-      </div>
-    ),
-  },
-);
 
 export default async function ProductsPage({
   searchParams,
@@ -59,6 +47,22 @@ export default async function ProductsPage({
     redirect("/onboarding");
   }
 
+  const uiLocale = session.uiLocale ?? DEFAULT_UI_LOCALE;
+
+  const ProductsManagement = dynamic(
+    () =>
+      import("@/components/app/products-management").then(
+        (module) => module.ProductsManagement,
+      ),
+    {
+      loading: () => (
+        <div className="rounded-xl border bg-white p-4 text-sm text-muted-foreground">
+          {t(uiLocale, "products.page.loadingManagement")}
+        </div>
+      ),
+    },
+  );
+
   const canView = isPermissionGranted(permissionKeys, "products.view");
   const canCreate = isPermissionGranted(permissionKeys, "products.create");
   const canUpdate = isPermissionGranted(permissionKeys, "products.update");
@@ -71,8 +75,10 @@ export default async function ProductsPage({
   if (!canView) {
     return (
       <section className="space-y-2">
-        <h1 className="text-xl font-semibold">สินค้า</h1>
-        <p className="text-sm text-red-600">คุณไม่มีสิทธิ์เข้าถึงโมดูลสินค้า</p>
+        <h1 className="text-xl font-semibold">{t(uiLocale, "tab.products")}</h1>
+        <p className="text-sm text-red-600">
+          {t(uiLocale, "products.permissionDenied.description")}
+        </p>
       </section>
     );
   }
@@ -104,10 +110,12 @@ export default async function ProductsPage({
     <section className="space-y-4">
       <header className="space-y-1">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold">สินค้า</h1>
+          <h1 className="text-xl font-semibold">{t(uiLocale, "tab.products")}</h1>
           <ProductsHeaderRefreshButton />
         </div>
-        <p className="text-sm text-muted-foreground">ค้นหา สร้าง แก้ไข และปิดใช้งานสินค้า</p>
+        <p className="text-sm text-muted-foreground">
+          {t(uiLocale, "products.page.subtitle")}
+        </p>
       </header>
 
       <ProductsManagement

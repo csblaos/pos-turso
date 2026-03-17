@@ -25,58 +25,6 @@ const getActiveTabHref = (pathname: string, hrefs: string[]) => {
   return sortedHrefs.find((href) => isPathInTab(pathname, href)) ?? null;
 };
 
-const getTabLabel = (uiLocale: UiLocale, label: string, href: string) => {
-  if (uiLocale === "th") {
-    return label;
-  }
-
-  if (href === "/settings/stores") {
-    return t(uiLocale, "tab.stores");
-  }
-
-  if (href === "/settings") {
-    return t(uiLocale, "tab.settings");
-  }
-
-  if (href === "/products") {
-    return t(uiLocale, "tab.products");
-  }
-
-  if (href === "/stock") {
-    return t(uiLocale, "tab.stock");
-  }
-
-  if (href === "/dashboard") {
-    return label === "ภาพรวม" ? t(uiLocale, "tab.overview") : t(uiLocale, "tab.dashboard");
-  }
-
-  if (href === "/orders") {
-    if (label === "คิวอาหาร") {
-      return t(uiLocale, "tab.restaurantQueue");
-    }
-
-    if (label === "ออเดอร์คาเฟ่") {
-      return t(uiLocale, "tab.cafeOrders");
-    }
-
-    return t(uiLocale, "tab.orders");
-  }
-
-  return label;
-};
-
-const getCompactLabel = (uiLocale: UiLocale, label: string, href: string) => {
-  if (href === "/orders") {
-    return t(uiLocale, "tab.orders");
-  }
-
-  if (href === "/dashboard") {
-    return t(uiLocale, "tab.dashboard");
-  }
-
-  return getTabLabel(uiLocale, label, href);
-};
-
 const getGridColumnsClass = (tabCount: number) => {
   if (tabCount >= 5) {
     return "grid-cols-5";
@@ -212,8 +160,10 @@ export function BottomTabNav({ permissionKeys, storeType, uiLocale }: BottomTabN
                       isActive ? "font-semibold text-slate-900" : "font-medium text-slate-500"
                     }`}
                   >
-                    <span className="sm:hidden">{getCompactLabel(uiLocale, tab.label, tab.href)}</span>
-                    <span className="hidden sm:inline">{getTabLabel(uiLocale, tab.label, tab.href)}</span>
+                    <span className="sm:hidden">
+                      {t(uiLocale, tab.compactLabelKey ?? tab.labelKey)}
+                    </span>
+                    <span className="hidden sm:inline">{t(uiLocale, tab.labelKey)}</span>
                   </span>
                 </button>
               </li>

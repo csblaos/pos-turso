@@ -1,11 +1,11 @@
 import type { StoreType } from "@/lib/storefront/types";
+import type { MessageKey } from "@/lib/i18n/messages";
 
 export type StorefrontLayoutPreset = {
   storeType: StoreType;
-  shellTitle: string;
+  shellTitleKey: MessageKey;
   appBgClassName: string;
   headerBgClassName: string;
-  modeNoteText: string | null;
+  modeNoteTextKey: MessageKey | null;
   modeNoteClassName: string;
 };
-

@@ -7,6 +7,7 @@ import { StorePaymentAccountsSettings } from "@/components/app/store-payment-acc
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { storePaymentAccounts, stores } from "@/lib/db/schema";
+import { t } from "@/lib/i18n/messages";
 import { getUserPermissionsForCurrentSession, isPermissionGranted } from "@/lib/rbac/access";
 import { isPaymentQrR2Configured, resolvePaymentQrImageUrl } from "@/lib/storage/r2";
 import { getGlobalPaymentPolicy } from "@/lib/system-config/policy";
@@ -25,14 +26,15 @@ export default async function SettingsStorePaymentsPage() {
   const permissionKeys = await getUserPermissionsForCurrentSession();
   const canView = isPermissionGranted(permissionKeys, "settings.view");
   const canUpdate = isPermissionGranted(permissionKeys, "stores.update");
+  const uiLocale = session.uiLocale;
 
   if (!canView) {
     return (
       <section className="space-y-3">
-        <h1 className="text-xl font-semibold">บัญชีรับเงิน</h1>
-        <p className="text-sm text-red-600">คุณไม่มีสิทธิ์ดูหน้านี้</p>
+        <h1 className="text-xl font-semibold">{t(uiLocale, "settings.link.paymentAccounts.title")}</h1>
+        <p className="text-sm text-red-600">{t(uiLocale, "common.permissionDenied.viewPage")}</p>
         <Link href="/settings" className="text-sm font-medium text-blue-700 hover:underline">
-          กลับไปหน้าตั้งค่า
+          {t(uiLocale, "common.backToSettings")}
         </Link>
       </section>
     );
@@ -82,10 +84,10 @@ export default async function SettingsStorePaymentsPage() {
   if (!store) {
     return (
       <section className="space-y-3">
-        <h1 className="text-xl font-semibold">บัญชีรับเงิน</h1>
-        <p className="text-sm text-red-600">ไม่พบข้อมูลร้านที่กำลังใช้งาน</p>
+        <h1 className="text-xl font-semibold">{t(uiLocale, "settings.link.paymentAccounts.title")}</h1>
+        <p className="text-sm text-red-600">{t(uiLocale, "common.error.activeStoreNotFound")}</p>
         <Link href="/settings" className="text-sm font-medium text-blue-700 hover:underline">
-          กลับไปหน้าตั้งค่า
+          {t(uiLocale, "common.backToSettings")}
         </Link>
       </section>
     );
@@ -105,9 +107,12 @@ export default async function SettingsStorePaymentsPage() {
   return (
     <section className="space-y-5">
       <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">บัญชีรับเงิน</h1>
+        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
+          {t(uiLocale, "settings.link.paymentAccounts.title")}
+        </h1>
         <p className="text-sm text-slate-500">
-          ตั้งค่าช่องทางรับชำระเงินของร้าน {store.name} และเลือกบัญชีหลักสำหรับการชำระเงิน
+          {t(uiLocale, "settings.paymentAccounts.page.descriptionPrefix")} {store.name}{" "}
+          {t(uiLocale, "settings.paymentAccounts.page.descriptionSuffix")}
         </p>
       </header>
 
@@ -120,7 +125,7 @@ export default async function SettingsStorePaymentsPage() {
 
       <div className="space-y-2">
         <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          นำทาง
+          {t(uiLocale, "settings.section.navigate")}
         </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <Link
@@ -131,9 +136,11 @@ export default async function SettingsStorePaymentsPage() {
               <Store className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">กลับข้อมูลร้าน</span>
+              <span className="block truncate text-sm font-medium text-slate-900">
+                {t(uiLocale, "settings.nav.backToStore.title")}
+              </span>
               <span className="mt-0.5 block truncate text-xs text-slate-500">
-                จัดการโปรไฟล์ร้านและการเงินร้าน
+                {t(uiLocale, "settings.nav.backToStore.description")}
               </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
@@ -147,8 +154,12 @@ export default async function SettingsStorePaymentsPage() {
               <Settings2 className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">กลับหน้าตั้งค่า</span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">กลับไปรายการตั้งค่าทั้งหมด</span>
+              <span className="block truncate text-sm font-medium text-slate-900">
+                {t(uiLocale, "common.backToSettings")}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-slate-500">
+                {t(uiLocale, "common.backToSettings.description")}
+              </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
           </Link>

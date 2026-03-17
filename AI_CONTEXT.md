@@ -47,6 +47,8 @@ npm run db:migrate
 - `components/` React UI components
 - `lib/` shared logic และ query helper
 - `lib/i18n/` โครง i18n/ข้อความ UI (ไทย/ລາວ/English) และ helper locale
+  - key กลุ่ม `tab.*` ใช้กับ bottom tabs ของ storefront
+  - key กลุ่ม `localeName.*` ใช้แสดงชื่อภาษาในหน้า `/settings/language`
 - `lib/db/schema/tables.ts` DB schema หลัก (Drizzle)
 - `server/services/` business service layer
 - `server/repositories/` data access layer

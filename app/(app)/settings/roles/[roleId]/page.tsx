@@ -11,6 +11,9 @@ import { permissions, rolePermissions, roles } from "@/lib/db/schema";
 import { timeDbQuery, startServerRenderTimer } from "@/lib/perf/server";
 import { getUserPermissionsForCurrentSession, isPermissionGranted } from "@/lib/rbac/access";
 import { getPermissionCatalog } from "@/lib/rbac/queries";
+import { t } from "@/lib/i18n/messages";
+import type { UiLocale } from "@/lib/i18n/locales";
+import { RolePermissionsEditorLoading } from "@/components/app/role-permissions-editor-loading";
 
 const RolePermissionsEditor = dynamic(
   () =>
@@ -18,11 +21,7 @@ const RolePermissionsEditor = dynamic(
       (module) => module.RolePermissionsEditor,
     ),
   {
-    loading: () => (
-      <article className="rounded-xl border bg-white p-4 text-sm text-muted-foreground shadow-sm">
-        กำลังโหลดตัวแก้ไขสิทธิ์...
-      </article>
-    ),
+    loading: () => <RolePermissionsEditorLoading />,
   },
 );
 
@@ -50,10 +49,12 @@ async function RoleDetailContent({
   roleId,
   storeId,
   canManage,
+  uiLocale,
 }: {
   roleId: string;
   storeId: string;
   canManage: boolean;
+  uiLocale: UiLocale;
 }) {
   const [role] = await timeDbQuery("roles.detail.role", async () =>
     db
@@ -98,7 +99,9 @@ async function RoleDetailContent({
       />
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">นำทาง</p>
+        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          {t(uiLocale, "settings.section.navigate")}
+        </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <Link
             href="/settings/roles"
@@ -108,9 +111,11 @@ async function RoleDetailContent({
               <Shield className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">กลับหน้าบทบาท</span>
+              <span className="block truncate text-sm font-medium text-slate-900">
+                {t(uiLocale, "settings.roles.nav.backToRoles.title")}
+              </span>
               <span className="mt-0.5 block truncate text-xs text-slate-500">
-                กลับไปรายการบทบาททั้งหมด
+                {t(uiLocale, "settings.roles.nav.backToRoles.description")}
               </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
@@ -142,17 +147,18 @@ export default async function SettingsRoleDetailPage({
     const permissionKeys = await getUserPermissionsForCurrentSession();
     const canView = isPermissionGranted(permissionKeys, "rbac.roles.view");
     const canManage = isPermissionGranted(permissionKeys, "rbac.roles.update");
+    const uiLocale = session.uiLocale;
 
     if (!canView) {
       return (
         <section className="space-y-3">
-          <h1 className="text-xl font-semibold">แก้ไขบทบาท</h1>
-          <p className="text-sm text-red-600">คุณไม่มีสิทธิ์ดูหน้านี้</p>
+          <h1 className="text-xl font-semibold">{t(uiLocale, "settings.roles.detail.noAccessTitle")}</h1>
+          <p className="text-sm text-red-600">{t(uiLocale, "common.permissionDenied.viewPage")}</p>
           <Link
             href="/settings/roles"
             className="text-sm font-medium text-blue-700 hover:underline"
           >
-            กลับไปหน้าบทบาท
+            {t(uiLocale, "settings.roles.nav.backToRoles.title")}
           </Link>
         </section>
       );
@@ -164,14 +170,21 @@ export default async function SettingsRoleDetailPage({
       <section className="space-y-5">
         <header className="space-y-1 px-1">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            รายละเอียดบทบาท
+            {t(uiLocale, "settings.roles.detail.kicker")}
           </p>
-          <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">จัดการสิทธิ์บทบาท</h1>
-          <p className="text-sm text-slate-500">กำหนดสิทธิ์ของบทบาทให้ตรงตามการทำงานจริง</p>
+          <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
+            {t(uiLocale, "settings.roles.detail.title")}
+          </h1>
+          <p className="text-sm text-slate-500">{t(uiLocale, "settings.roles.detail.subtitle")}</p>
         </header>
 
         <Suspense fallback={<RoleDetailContentFallback />}>
-          <RoleDetailContent roleId={roleId} storeId={storeId} canManage={canManage} />
+          <RoleDetailContent
+            roleId={roleId}
+            storeId={storeId}
+            canManage={canManage}
+            uiLocale={uiLocale}
+          />
         </Suspense>
       </section>
     );

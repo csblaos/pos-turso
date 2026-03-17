@@ -1,8 +1,11 @@
 "use client";
 
-import { Edit, FileText, Package, ShoppingCart } from "lucide-react";
+import { Edit, FileText, Package, ShoppingCart, type LucideIcon } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
+
+import { t, type MessageKey } from "@/lib/i18n/messages";
+import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 
 type StockTabsProps = {
   recordingTab: ReactNode;
@@ -12,14 +15,40 @@ type StockTabsProps = {
   initialTab?: string;
 };
 
-const tabs = [
-  { id: "inventory", label: "ดูสต็อก", labelMobile: "สต็อก", icon: Package },
-  { id: "purchase", label: "สั่งซื้อ", labelMobile: "PO", icon: ShoppingCart },
-  { id: "recording", label: "บันทึกสต็อก", labelMobile: "บันทึก", icon: Edit },
-  { id: "history", label: "ประวัติ", labelMobile: "ประวัติ", icon: FileText },
-] as const;
+type TabId = "inventory" | "purchase" | "recording" | "history";
 
-type TabId = (typeof tabs)[number]["id"];
+const tabs: ReadonlyArray<{
+  id: TabId;
+  labelKey: MessageKey;
+  labelMobileKey: MessageKey;
+  icon: LucideIcon;
+}> = [
+  {
+    id: "inventory",
+    labelKey: "stock.tabs.inventory",
+    labelMobileKey: "stock.tabs.inventory.mobile",
+    icon: Package,
+  },
+  {
+    id: "purchase",
+    labelKey: "stock.tabs.purchase",
+    labelMobileKey: "stock.tabs.purchase.mobile",
+    icon: ShoppingCart,
+  },
+  {
+    id: "recording",
+    labelKey: "stock.tabs.recording",
+    labelMobileKey: "stock.tabs.recording.mobile",
+    icon: Edit,
+  },
+  {
+    id: "history",
+    labelKey: "stock.tabs.history",
+    labelMobileKey: "stock.tabs.history.mobile",
+    icon: FileText,
+  },
+];
+
 const isTabId = (value: string | null): value is TabId =>
   value === "recording" || value === "inventory" || value === "history" || value === "purchase";
 
@@ -31,6 +60,7 @@ export function StockTabs({
   initialTab = "inventory",
 }: StockTabsProps) {
   const router = useRouter();
+  const uiLocale = useUiLocale();
   const searchParams = useSearchParams();
   const tabFromQuery = searchParams.get("tab");
   const initialActiveTab: TabId = isTabId(tabFromQuery)
@@ -86,8 +116,8 @@ export function StockTabs({
               }}
             >
               <Icon className="h-4 w-4" />
-              <span className="md:hidden">{tab.labelMobile}</span>
-              <span className="hidden md:inline">{tab.label}</span>
+              <span className="md:hidden">{t(uiLocale, tab.labelMobileKey)}</span>
+              <span className="hidden md:inline">{t(uiLocale, tab.labelKey)}</span>
             </button>
           );
         })}
