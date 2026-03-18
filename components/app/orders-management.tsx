@@ -25,6 +25,9 @@ import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch } from "@/lib/auth/client-token";
 import { currencyLabel, parseStoreCurrency, vatModeLabel } from "@/lib/finance/store-financial";
+import { uiLocaleToDateLocale, type UiLocale } from "@/lib/i18n/locales";
+import { t, type MessageKey } from "@/lib/i18n/messages";
+import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 import { resolveLaosBankDisplayName } from "@/lib/payments/laos-banks";
 import {
   NEW_ORDER_DRAFT_DEFAULT_MAX_AGE_MS,
@@ -68,46 +71,46 @@ type OrdersManagementProps =
 
 type TabKey = OrderListTab;
 
-const tabOptions: Array<{ key: TabKey; label: string }> = [
-  { key: "ALL", label: "ทั้งหมด" },
-  { key: "PENDING_PAYMENT", label: "รอจ่าย/รับ" },
-  { key: "PAID", label: "จ่ายแล้ว" },
-  { key: "SHIPPED", label: "ส่งแล้ว" },
+const tabOptions: Array<{ key: TabKey; labelKey: MessageKey }> = [
+  { key: "ALL", labelKey: "orders.tab.ALL" },
+  { key: "PENDING_PAYMENT", labelKey: "orders.tab.PENDING_PAYMENT" },
+  { key: "PAID", labelKey: "orders.tab.PAID" },
+  { key: "SHIPPED", labelKey: "orders.tab.SHIPPED" },
 ];
 
-const channelSummaryLabel = (
+const channelSummaryLabelKey = (
   order: Pick<OrderListItem, "channel" | "status">,
-): "Facebook" | "WhatsApp" | "Walk-in" | "Pickup" => {
+): MessageKey => {
   if (order.channel === "FACEBOOK") {
-    return "Facebook";
+    return "orders.channelSummary.facebook";
   }
   if (order.channel === "WHATSAPP") {
-    return "WhatsApp";
+    return "orders.channelSummary.whatsapp";
   }
   if (order.status === "READY_FOR_PICKUP" || order.status === "PICKED_UP_PENDING_PAYMENT") {
-    return "Pickup";
+    return "orders.channelSummary.pickup";
   }
-  return "Walk-in";
+  return "orders.channelSummary.walkIn";
 };
 
-const paymentMethodLabel: Record<OrderListItem["paymentMethod"], string> = {
-  CASH: "เงินสด",
-  LAO_QR: "QR โอน",
-  ON_CREDIT: "ค้างจ่าย",
-  COD: "COD",
-  BANK_TRANSFER: "โอนเงิน",
+const paymentMethodLabelKey: Record<OrderListItem["paymentMethod"], MessageKey> = {
+  CASH: "orders.paymentMethod.CASH",
+  LAO_QR: "orders.paymentMethod.LAO_QR",
+  ON_CREDIT: "orders.paymentMethod.ON_CREDIT",
+  COD: "orders.paymentMethod.COD",
+  BANK_TRANSFER: "orders.paymentMethod.BANK_TRANSFER",
 };
 
-const statusLabel: Record<OrderListItem["status"], string> = {
-  DRAFT: "ร่าง",
-  PENDING_PAYMENT: "ค้างจ่าย",
-  READY_FOR_PICKUP: "รอรับที่ร้าน",
-  PICKED_UP_PENDING_PAYMENT: "รับสินค้าแล้ว (ค้างจ่าย)",
-  PAID: "ชำระแล้ว",
-  PACKED: "แพ็กแล้ว",
-  SHIPPED: "จัดส่งแล้ว",
-  COD_RETURNED: "COD ตีกลับ",
-  CANCELLED: "ยกเลิก",
+const statusLabelKey: Record<OrderListItem["status"], MessageKey> = {
+  DRAFT: "orders.status.DRAFT",
+  PENDING_PAYMENT: "orders.status.PENDING_PAYMENT",
+  READY_FOR_PICKUP: "orders.status.READY_FOR_PICKUP",
+  PICKED_UP_PENDING_PAYMENT: "orders.status.PICKED_UP_PENDING_PAYMENT",
+  PAID: "orders.status.PAID",
+  PACKED: "orders.status.PACKED",
+  SHIPPED: "orders.status.SHIPPED",
+  COD_RETURNED: "orders.status.COD_RETURNED",
+  CANCELLED: "orders.status.CANCELLED",
 };
 
 const statusClass: Record<OrderListItem["status"], string> = {
@@ -127,24 +130,27 @@ type OrderStatusBadge = {
   className: string;
 };
 
-const buildOrderStatusBadges = (order: Pick<OrderListItem, "channel" | "status" | "paymentMethod" | "paymentStatus">) => {
+const buildOrderStatusBadges = (
+  uiLocale: UiLocale,
+  order: Pick<OrderListItem, "channel" | "status" | "paymentMethod" | "paymentStatus">,
+) => {
   const badges: OrderStatusBadge[] = [];
   const isOnlineOrder = order.channel !== "WALK_IN";
 
   if (isOnlineOrder && order.status === "PENDING_PAYMENT") {
     badges.push({
-      label: "รอดำเนินการ",
+      label: t(uiLocale, "orders.badge.processing"),
       className: "bg-amber-100 text-amber-700",
     });
   } else {
     badges.push({
-      label: statusLabel[order.status],
+      label: t(uiLocale, statusLabelKey[order.status]),
       className: statusClass[order.status],
     });
   }
 
   if (order.status === "READY_FOR_PICKUP") {
-    const pickupBadge = pickupPaymentBadge(order);
+    const pickupBadge = pickupPaymentBadge(uiLocale, order);
     if (pickupBadge) {
       badges.push(pickupBadge);
     }
@@ -158,17 +164,20 @@ const buildOrderStatusBadges = (order: Pick<OrderListItem, "channel" | "status" 
   if (order.paymentMethod === "COD") {
     if (order.paymentStatus === "COD_SETTLED") {
       badges.push({
-        label: "ชำระแล้ว",
+        label: t(uiLocale, "orders.paymentStatus.PAID"),
         className: "bg-emerald-100 text-emerald-700",
       });
     } else if (order.paymentStatus === "FAILED") {
       badges.push({
-        label: "ชำระไม่สำเร็จ",
+        label: t(uiLocale, "orders.paymentStatus.FAILED"),
         className: "bg-rose-100 text-rose-700",
       });
     } else if (order.paymentStatus === "COD_PENDING_SETTLEMENT") {
       badges.push({
-        label: order.status === "SHIPPED" ? "COD รอปิดยอด" : "COD",
+        label:
+          order.status === "SHIPPED"
+            ? t(uiLocale, "orders.paymentStatus.COD_PENDING_SETTLEMENT")
+            : t(uiLocale, "orders.paymentMethod.COD"),
         className: "bg-indigo-100 text-indigo-700",
       });
     }
@@ -177,7 +186,7 @@ const buildOrderStatusBadges = (order: Pick<OrderListItem, "channel" | "status" 
 
   if (order.paymentStatus === "PAID") {
     badges.push({
-      label: "ชำระแล้ว",
+      label: t(uiLocale, "orders.paymentStatus.PAID"),
       className: "bg-emerald-100 text-emerald-700",
     });
     return badges;
@@ -185,7 +194,7 @@ const buildOrderStatusBadges = (order: Pick<OrderListItem, "channel" | "status" 
 
   if (order.paymentStatus === "PENDING_PROOF") {
     badges.push({
-      label: "รอตรวจสลิป",
+      label: t(uiLocale, "orders.paymentStatus.PENDING_PROOF"),
       className: "bg-violet-100 text-violet-700",
     });
     return badges;
@@ -193,14 +202,17 @@ const buildOrderStatusBadges = (order: Pick<OrderListItem, "channel" | "status" 
 
   if (order.paymentStatus === "FAILED") {
     badges.push({
-      label: "ชำระไม่สำเร็จ",
+      label: t(uiLocale, "orders.paymentStatus.FAILED"),
       className: "bg-rose-100 text-rose-700",
     });
     return badges;
   }
 
   badges.push({
-    label: order.paymentMethod === "ON_CREDIT" ? "ค้างจ่าย" : "ยังไม่ชำระ",
+    label:
+      order.paymentMethod === "ON_CREDIT"
+        ? t(uiLocale, "orders.paymentMethod.ON_CREDIT")
+        : t(uiLocale, "orders.paymentStatus.UNPAID"),
     className: "bg-amber-100 text-amber-700",
   });
 
@@ -208,6 +220,7 @@ const buildOrderStatusBadges = (order: Pick<OrderListItem, "channel" | "status" 
 };
 
 const pickupPaymentBadge = (
+  uiLocale: UiLocale,
   order: Pick<OrderListItem, "status" | "paymentStatus">,
 ): { label: string; className: string } | null => {
   if (order.status !== "READY_FOR_PICKUP") {
@@ -216,20 +229,20 @@ const pickupPaymentBadge = (
 
   if (order.paymentStatus === "PAID" || order.paymentStatus === "COD_SETTLED") {
     return {
-      label: "ชำระแล้ว",
+      label: t(uiLocale, "orders.paymentStatus.PAID"),
       className: "bg-emerald-100 text-emerald-700",
     };
   }
 
   if (order.paymentStatus === "PENDING_PROOF") {
     return {
-      label: "รอตรวจสลิป",
+      label: t(uiLocale, "orders.paymentStatus.PENDING_PROOF"),
       className: "bg-violet-100 text-violet-700",
     };
   }
 
   return {
-    label: "ค้างจ่าย",
+    label: t(uiLocale, "orders.status.PENDING_PAYMENT"),
     className: "bg-amber-100 text-amber-700",
   };
 };
@@ -309,10 +322,10 @@ const escapeHtml = (value: string) =>
     .replaceAll("\"", "&quot;")
     .replaceAll("'", "&#39;");
 
-const checkoutFlowLabel: Record<CheckoutFlow, string> = {
-  WALK_IN_NOW: "Walk-in ทันที",
-  PICKUP_LATER: "มารับที่ร้านภายหลัง",
-  ONLINE_DELIVERY: "สั่งออนไลน์/จัดส่ง",
+const checkoutFlowLabelKey: Record<CheckoutFlow, MessageKey> = {
+  WALK_IN_NOW: "orders.flow.WALK_IN_NOW",
+  PICKUP_LATER: "orders.flow.PICKUP_LATER",
+  ONLINE_DELIVERY: "orders.flow.ONLINE_DELIVERY",
 };
 const SCANNER_PERMISSION_STORAGE_KEY = "scanner-permission-seen";
 const CREATE_ONLY_SEARCH_STICKY_TOP_REM = 3.8;
@@ -406,6 +419,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
   const isCreateOnlyMode = props.mode === "create-only";
   const activeTab: OrderListTab = isCreateOnlyMode ? "ALL" : props.activeTab;
   const ordersPage = isCreateOnlyMode ? null : props.ordersPage;
+  const uiLocale = useUiLocale();
+  const numberLocale = uiLocaleToDateLocale(uiLocale);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [showScannerPermissionSheet, setShowScannerPermissionSheet] = useState(false);
@@ -500,8 +515,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
     if (name && phone) {
       return `${name} • ${phone}`;
     }
-    return name || phone || "ยังไม่เพิ่มข้อมูลผู้รับ";
-  }, [watchedCustomerName, watchedCustomerPhone]);
+    return name || phone || t(uiLocale, "orders.create.customerIdentity.none");
+  }, [uiLocale, watchedCustomerName, watchedCustomerPhone]);
   const showCustomerIdentityFields =
     isOnlineCheckout || (isPickupLaterCheckout && pickupLaterCustomerOpen);
   const requiresCustomerPhone = isOnlineCheckout;
@@ -531,19 +546,19 @@ export function OrdersManagement(props: OrdersManagementProps) {
     () => qrPaymentAccounts.find((account) => account.id === watchedPaymentAccountId) ?? null,
     [qrPaymentAccounts, watchedPaymentAccountId],
   );
-  const paymentMethodOptions = useMemo<Array<{ key: CheckoutPaymentMethod; label: string }>>(
+  const paymentMethodOptions = useMemo<Array<{ key: CheckoutPaymentMethod; labelKey: MessageKey }>>(
     () =>
       isOnlineCheckout
         ? [
-            { key: "CASH", label: "เงินสด" },
-            { key: "LAO_QR", label: "QR" },
-            { key: "ON_CREDIT", label: "ค้างจ่าย" },
-            { key: "COD", label: "COD" },
+            { key: "CASH", labelKey: "orders.paymentMethod.CASH" },
+            { key: "LAO_QR", labelKey: "orders.paymentMethod.LAO_QR" },
+            { key: "ON_CREDIT", labelKey: "orders.paymentMethod.ON_CREDIT" },
+            { key: "COD", labelKey: "orders.paymentMethod.COD" },
           ]
         : [
-            { key: "CASH", label: "เงินสด" },
-            { key: "LAO_QR", label: "QR" },
-            { key: "ON_CREDIT", label: "ค้างจ่าย" },
+            { key: "CASH", labelKey: "orders.paymentMethod.CASH" },
+            { key: "LAO_QR", labelKey: "orders.paymentMethod.LAO_QR" },
+            { key: "ON_CREDIT", labelKey: "orders.paymentMethod.ON_CREDIT" },
           ],
     [isOnlineCheckout],
   );
@@ -860,11 +875,11 @@ export function OrdersManagement(props: OrdersManagementProps) {
 
     try {
       await navigator.clipboard.writeText(selectedQrPaymentAccount.accountNumber);
-      toast.success("คัดลอกเลขบัญชีแล้ว");
+      toast.success(t(uiLocale, "orders.toast.copyAccount.success"));
     } catch {
-      toast.error("คัดลอกเลขบัญชีไม่สำเร็จ");
+      toast.error(t(uiLocale, "orders.toast.copyAccount.fail"));
     }
-  }, [selectedQrPaymentAccount]);
+  }, [selectedQrPaymentAccount, uiLocale]);
 
   const getSelectedQrImageActionUrl = useCallback(
     (download = false) => {
@@ -921,13 +936,13 @@ export function OrdersManagement(props: OrdersManagementProps) {
       link.click();
       link.remove();
       URL.revokeObjectURL(blobUrl);
-      toast.success("ดาวน์โหลดรูป QR แล้ว");
+      toast.success(t(uiLocale, "orders.toast.qrDownloaded"));
     } catch {
       const fallbackUrl = getSelectedQrImageActionUrl(false) ?? selectedQrPaymentAccount.qrImageUrl;
       window.open(fallbackUrl, "_blank", "noopener,noreferrer");
-      toast("เปิดรูป QR ในแท็บใหม่แทน");
+      toast(t(uiLocale, "orders.toast.openQrNewTab"));
     }
-  }, [getSelectedQrImageActionUrl, selectedQrPaymentAccount]);
+  }, [getSelectedQrImageActionUrl, selectedQrPaymentAccount, uiLocale]);
 
   useEffect(() => {
     if (showCheckoutSheet) {
@@ -997,27 +1012,31 @@ export function OrdersManagement(props: OrdersManagementProps) {
 
     if (parsed.customerName) {
       form.setValue("customerName", parsed.customerName, { shouldDirty: true, shouldValidate: true });
-      changed.push("ชื่อ");
+      changed.push(t(uiLocale, "orders.customer.field.name"));
     }
     if (parsed.customerPhone) {
       form.setValue("customerPhone", parsed.customerPhone, { shouldDirty: true, shouldValidate: true });
-      changed.push("เบอร์โทร");
+      changed.push(t(uiLocale, "orders.customer.field.phone"));
     }
     if (parsed.customerAddress) {
       form.setValue("customerAddress", parsed.customerAddress, { shouldDirty: true, shouldValidate: true });
-      changed.push("ที่อยู่");
+      changed.push(t(uiLocale, "orders.customer.field.address"));
     }
 
     if (changed.length <= 0) {
-      toast.error("ไม่พบข้อมูลที่เติมอัตโนมัติได้");
+      toast.error(t(uiLocale, "orders.toast.autofill.noData"));
       return;
     }
 
     form.setValue("contactId", "", { shouldDirty: true, shouldValidate: true });
     form.clearErrors(["contactId", "customerPhone", "customerAddress"]);
     setOnlineQuickFillInput("");
-    toast.success(`เติมข้อมูลแล้ว: ${changed.join(" / ")}`);
-  }, [form, onlineQuickFillInput]);
+    toast.success(
+      `${t(uiLocale, "orders.toast.autofill.success.prefix")} ${changed.join(
+        t(uiLocale, "orders.toast.autofill.success.separator"),
+      )}`,
+    );
+  }, [form, onlineQuickFillInput, uiLocale]);
   const onSelectShippingProviderChip = useCallback(
     (provider: string) => {
       setOnlineCustomProviderOpen(false);
@@ -1082,16 +1101,21 @@ export function OrdersManagement(props: OrdersManagementProps) {
     }
     const availableQty = getProductAvailableQty(productId);
     if (availableQty <= 0) {
-      setScanMessage(`สินค้า ${product.sku} - ${product.name} หมดสต็อก/ติดจอง เพิ่มไม่ได้`);
+      setScanMessage(
+        `${t(uiLocale, "orders.create.scan.productPrefix")} ${product.sku} - ${product.name} ${t(uiLocale, "orders.create.scan.outOfStockOrReserved.suffix")}`,
+      );
       const nowMs = Date.now();
       const canShowToast =
         !outOfStockToastRef.current ||
         outOfStockToastRef.current.productId !== productId ||
         nowMs - outOfStockToastRef.current.shownAtMs > 1200;
       if (canShowToast) {
-        toast.error(`สินค้า ${product.name} หมดสต็อก/ติดจอง`, {
+        toast.error(
+          `${t(uiLocale, "orders.create.scan.productPrefix")} ${product.name} ${t(uiLocale, "orders.create.scan.outOfStockOrReserved.toastSuffix")}`,
+          {
           duration: 1600,
-        });
+          },
+        );
         outOfStockToastRef.current = {
           productId,
           shownAtMs: nowMs,
@@ -1105,7 +1129,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
       const currentQty = Number(form.getValues(`items.${existingIndex}.qty`) ?? 0);
       if (currentQty >= availableQty) {
         setScanMessage(
-          `สินค้า ${product.sku} - ${product.name} เพิ่มได้สูงสุด ${availableQty.toLocaleString("th-TH")} ชิ้น`,
+          `${t(uiLocale, "orders.create.scan.productPrefix")} ${product.sku} - ${product.name} ${t(uiLocale, "orders.create.scan.maxQty.prefix")} ${availableQty.toLocaleString(numberLocale)} ${t(uiLocale, "orders.create.scan.maxQty.unit")}`,
         );
         return null;
       }
@@ -1133,7 +1157,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
         const product = productsById.get(productId);
         if (product) {
           setScanMessage(
-            `สินค้า ${product.sku} - ${product.name} เพิ่มได้สูงสุด ${availableQty.toLocaleString("th-TH")} ชิ้น`,
+            `${t(uiLocale, "orders.create.scan.productPrefix")} ${product.sku} - ${product.name} ${t(uiLocale, "orders.create.scan.maxQty.prefix")} ${availableQty.toLocaleString(numberLocale)} ${t(uiLocale, "orders.create.scan.maxQty.unit")}`,
           );
         }
       }
@@ -1142,7 +1166,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
         shouldValidate: true,
       });
     },
-    [form, getProductAvailableQty, productsById],
+    [form, getProductAvailableQty, numberLocale, productsById, uiLocale],
   );
   const increaseItemQty = useCallback(
     (index: number) => {
@@ -1174,7 +1198,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
     if (matched) {
       const addedProduct = addProductFromCatalog(matched.productId);
       if (addedProduct) {
-        setScanMessage(`เพิ่มสินค้า ${addedProduct.sku} - ${addedProduct.name} แล้ว`);
+        setScanMessage(
+          `${t(uiLocale, "orders.create.scan.addedProduct.prefix")} ${addedProduct.sku} - ${addedProduct.name} ${t(uiLocale, "orders.create.scan.addedProduct.suffix")}`,
+        );
       }
       setNotFoundBarcode(null);
       setManualSearchKeyword("");
@@ -1194,7 +1220,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
       return;
     }
 
-    setScanMessage(`เพิ่มสินค้า ${addedProduct.sku} - ${addedProduct.name} แล้ว`);
+    setScanMessage(
+      `${t(uiLocale, "orders.create.scan.addedProduct.prefix")} ${addedProduct.sku} - ${addedProduct.name} ${t(uiLocale, "orders.create.scan.addedProduct.suffix")}`,
+    );
     setNotFoundBarcode(null);
     setManualSearchKeyword("");
   };
@@ -1222,19 +1250,21 @@ export function OrdersManagement(props: OrdersManagementProps) {
     () => [
       {
         accessorKey: "orderNo",
-        header: "เลขที่ออเดอร์",
+        header: t(uiLocale, "orders.table.header.orderNo"),
       },
       {
         id: "customer",
-        header: "ลูกค้า",
+        header: t(uiLocale, "orders.table.header.customer"),
         cell: ({ row }) =>
-          row.original.customerName || row.original.contactDisplayName || "ลูกค้าทั่วไป",
+          row.original.customerName ||
+          row.original.contactDisplayName ||
+          t(uiLocale, "orders.codReconcile.customer.walkIn"),
       },
       {
         accessorKey: "status",
-        header: "สถานะ",
+        header: t(uiLocale, "orders.table.header.status"),
         cell: ({ row }) => {
-          const badges = buildOrderStatusBadges(row.original);
+          const badges = buildOrderStatusBadges(uiLocale, row.original);
           return (
             <div className="flex flex-wrap items-center gap-1">
               {badges.map((badge) => (
@@ -1248,19 +1278,17 @@ export function OrdersManagement(props: OrdersManagementProps) {
       },
       {
         id: "channel",
-        header: "ช่องทาง",
+        header: t(uiLocale, "orders.table.header.channel"),
         cell: ({ row }) =>
-          `${channelSummaryLabel(row.original)} • ${row.original.paymentCurrency} • ${
-            paymentMethodLabel[row.original.paymentMethod]
-          }`,
+          `${t(uiLocale, channelSummaryLabelKey(row.original))} • ${row.original.paymentCurrency} • ${t(uiLocale, paymentMethodLabelKey[row.original.paymentMethod])}`,
       },
       {
         accessorKey: "total",
-        header: "ยอดรวม",
-        cell: ({ row }) => `${row.original.total.toLocaleString("th-TH")} ${catalog.storeCurrency}`,
+        header: t(uiLocale, "orders.table.header.total"),
+        cell: ({ row }) => `${row.original.total.toLocaleString(numberLocale)} ${catalog.storeCurrency}`,
       },
     ],
-    [catalog.storeCurrency],
+    [catalog.storeCurrency, numberLocale, uiLocale],
   );
 
   const ordersTable = useReactTable({
@@ -1296,7 +1324,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
     if (requiresCustomerPhone && !normalizedCustomerPhone) {
       form.setError("customerPhone", {
         type: "manual",
-        message: "กรุณากรอกเบอร์โทรลูกค้า",
+        message: t(uiLocale, "orders.validation.customerPhoneRequired"),
       });
       return;
     }
@@ -1304,7 +1332,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
     if (checkoutFlow === "ONLINE_DELIVERY" && !normalizedCustomerAddress) {
       form.setError("customerAddress", {
         type: "manual",
-        message: "กรุณากรอกที่อยู่จัดส่ง",
+        message: t(uiLocale, "orders.validation.addressRequired"),
       });
       return;
     }
@@ -1312,7 +1340,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
     if (checkoutFlow === "ONLINE_DELIVERY" && !normalizedShippingProvider) {
       form.setError("shippingProvider", {
         type: "manual",
-        message: "กรุณาเลือกผู้ให้บริการขนส่ง",
+        message: t(uiLocale, "orders.validation.shippingProviderRequired"),
       });
       return;
     }
@@ -1321,10 +1349,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
 
     const fallbackCustomerName =
       checkoutFlow === "PICKUP_LATER"
-        ? "ลูกค้ารับที่ร้าน"
+        ? t(uiLocale, "orders.customer.pickupDefault")
         : normalizedChannel === "WALK_IN"
-          ? "ลูกค้าหน้าร้าน"
-          : "ลูกค้าออนไลน์";
+          ? t(uiLocale, "orders.customer.walkInDefault")
+          : t(uiLocale, "orders.customer.onlineDefault");
     const payload: CreateOrderInput = {
       ...values,
       channel: normalizedChannel,
@@ -1357,12 +1385,14 @@ export function OrdersManagement(props: OrdersManagementProps) {
       | null;
 
     if (!response.ok) {
-      setErrorMessage(data?.message ?? "สร้างออเดอร์ไม่สำเร็จ");
+      setErrorMessage(data?.message ?? t(uiLocale, "orders.error.createFailed"));
       setLoading(false);
       return;
     }
 
-    setSuccessMessage(`สร้างออเดอร์ ${data?.orderNo ?? ""} เรียบร้อย`);
+    setSuccessMessage(
+      `${t(uiLocale, "orders.create.success.prefix")} ${data?.orderNo ?? ""} ${t(uiLocale, "orders.create.success.suffix")}`,
+    );
     setShowCartSheet(false);
     setShowCheckoutSheet(false);
     setShowCheckoutCloseConfirm(false);
@@ -1413,10 +1443,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
       );
       const data = (await response.json().catch(() => null)) as RecentOrdersApiResponse | null;
       if (!response.ok) {
-        throw new Error(data?.message ?? "ไม่สามารถโหลดออเดอร์ล่าสุดได้");
+        throw new Error(data?.message ?? t(uiLocale, "orders.create.recentOrders.error.loadFailed"));
       }
       if (!Array.isArray(data?.orders)) {
-        throw new Error("ข้อมูลออเดอร์ล่าสุดไม่ถูกต้อง");
+        throw new Error(t(uiLocale, "orders.create.recentOrders.error.invalidData"));
       }
       const mappedOrders = data.orders.slice(0, CREATE_ONLY_RECENT_ORDERS_LIMIT).map((order) => ({
         id: order.id,
@@ -1431,13 +1461,15 @@ export function OrdersManagement(props: OrdersManagementProps) {
       setRecentOrders(mappedOrders);
     } catch (error) {
       const message =
-        error instanceof Error && error.message ? error.message : "ไม่สามารถโหลดออเดอร์ล่าสุดได้";
+        error instanceof Error && error.message
+          ? error.message
+          : t(uiLocale, "orders.create.recentOrders.error.loadFailed");
       setRecentOrdersError(message);
       setRecentOrders([]);
     } finally {
       setRecentOrdersLoading(false);
     }
-  }, [isCreateOnlyMode]);
+  }, [isCreateOnlyMode, uiLocale]);
 
   const openRecentOrderSummary = useCallback((order: RecentOrderItem) => {
     setShowRecentOrdersSheet(false);
@@ -1465,7 +1497,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
   const cancelRecentOrderWithApproval = useCallback(
     async (payload: ManagerCancelApprovalPayload): Promise<ManagerCancelApprovalResult> => {
       if (!cancelApprovalTargetOrder) {
-        return { ok: false, message: "ไม่พบออเดอร์ที่ต้องการยกเลิก" };
+        return { ok: false, message: t(uiLocale, "orders.cancel.error.notFound") };
       }
 
       setCancelApprovalSubmitting(true);
@@ -1490,45 +1522,48 @@ export function OrdersManagement(props: OrdersManagementProps) {
         });
         const data = (await response.json().catch(() => null)) as { message?: string } | null;
         if (!response.ok) {
-          const message = data?.message ?? "ยกเลิกออเดอร์ไม่สำเร็จ";
+          const message = data?.message ?? t(uiLocale, "orders.cancel.error.failed");
           setErrorMessage(message);
           return { ok: false, message };
         }
 
-        setSuccessMessage(`ยกเลิกออเดอร์ ${cancelApprovalTargetOrder.orderNo} แล้ว`);
+        setSuccessMessage(
+          `${t(uiLocale, "orders.cancel.success.prefix")} ${cancelApprovalTargetOrder.orderNo} ${t(uiLocale, "orders.cancel.success.suffix")}`,
+        );
         setCancelApprovalTargetOrder(null);
         await fetchRecentOrders();
         router.refresh();
         return { ok: true };
       } catch {
-        const message = "ยกเลิกออเดอร์ไม่สำเร็จ";
+        const message = t(uiLocale, "orders.cancel.error.failed");
         setErrorMessage(message);
         return { ok: false, message };
       } finally {
         setCancelApprovalSubmitting(false);
       }
     },
-    [cancelApprovalTargetOrder, fetchRecentOrders, router],
+    [cancelApprovalTargetOrder, fetchRecentOrders, router, uiLocale],
   );
 
   const fetchOrderReceiptPreview = useCallback(async (orderId: string) => {
     const response = await authFetch(`/api/orders/${orderId}`);
     const data = (await response.json().catch(() => null)) as OrderDetailApiResponse | null;
     if (!response.ok || !data?.order) {
-      throw new Error(data?.message ?? "ไม่สามารถโหลดข้อมูลใบเสร็จได้");
+      throw new Error(data?.message ?? t(uiLocale, "orders.print.error.loadReceiptData"));
     }
     return data.order;
-  }, []);
+  }, [uiLocale]);
 
   const buildReceiptPrintHtml = useCallback((order: ReceiptPreviewOrder) => {
-    const receiptDateText = new Date(order.createdAt).toLocaleString("th-TH");
-    const receiptCustomerName = order.customerName || order.contactDisplayName || "ลูกค้าทั่วไป";
+    const receiptDateText = new Date(order.createdAt).toLocaleString(numberLocale);
+    const receiptCustomerName =
+      order.customerName || order.contactDisplayName || t(uiLocale, "orders.customer.guest");
     const rowsHtml = order.items
       .map((item) => {
         const productName = escapeHtml(item.productName);
         const productSku = escapeHtml(item.productSku || "-");
-        const qtyText = `${item.qty.toLocaleString("th-TH")} ${escapeHtml(item.unitCode)}`;
-        const lineTotalText = item.lineTotal.toLocaleString("th-TH");
+        const qtyText = `${item.qty.toLocaleString(numberLocale)} ${escapeHtml(item.unitCode)}`;
+        const lineTotalText = item.lineTotal.toLocaleString(numberLocale);
         return `<tr>
   <td class="col-item"><div>${productName}</div><div class="sku">${productSku}</div></td>
   <td class="col-qty">${qtyText}</td>
@@ -1538,11 +1573,11 @@ export function OrdersManagement(props: OrdersManagementProps) {
       .join("");
 
     return `<!doctype html>
-<html lang="th">
+<html lang="${escapeHtml(uiLocale)}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Receipt ${escapeHtml(order.orderNo)}</title>
+    <title>${escapeHtml(t(uiLocale, "orders.print.receipt.title"))} ${escapeHtml(order.orderNo)}</title>
     <style>
       @page { size: 80mm auto; margin: 4mm; }
       * { box-sizing: border-box; }
@@ -1578,21 +1613,21 @@ export function OrdersManagement(props: OrdersManagementProps) {
   </head>
   <body>
     <main class="receipt">
-      <p class="title center">ใบเสร็จรับเงิน</p>
-      <p class="meta center">เลขที่ ${escapeHtml(order.orderNo)}</p>
+      <p class="title center">${escapeHtml(t(uiLocale, "orders.print.receipt.title"))}</p>
+      <p class="meta center">${escapeHtml(t(uiLocale, "orders.print.receipt.noPrefix"))} ${escapeHtml(order.orderNo)}</p>
       <div class="sep"></div>
 
-      <div>ลูกค้า: ${escapeHtml(receiptCustomerName)}</div>
-      <div>วันที่: ${escapeHtml(receiptDateText)}</div>
+      <div>${escapeHtml(t(uiLocale, "orders.print.receipt.customerPrefix"))} ${escapeHtml(receiptCustomerName)}</div>
+      <div>${escapeHtml(t(uiLocale, "orders.print.receipt.datePrefix"))} ${escapeHtml(receiptDateText)}</div>
 
       <div class="sep"></div>
 
       <table>
         <thead>
           <tr>
-            <th>รายการ</th>
-            <th style="text-align:right;">จำนวน</th>
-            <th style="text-align:right;">รวม</th>
+            <th>${escapeHtml(t(uiLocale, "orders.print.receipt.table.item"))}</th>
+            <th style="text-align:right;">${escapeHtml(t(uiLocale, "orders.print.receipt.table.qty"))}</th>
+            <th style="text-align:right;">${escapeHtml(t(uiLocale, "orders.print.receipt.table.total"))}</th>
           </tr>
         </thead>
         <tbody>
@@ -1602,34 +1637,35 @@ export function OrdersManagement(props: OrdersManagementProps) {
 
       <div class="sep"></div>
 
-      <div class="totals-row"><span>ยอดสินค้า</span><span>${order.subtotal.toLocaleString("th-TH")}</span></div>
-      <div class="totals-row"><span>ส่วนลด</span><span>${order.discount.toLocaleString("th-TH")}</span></div>
-      <div class="totals-row"><span>VAT</span><span>${order.vatAmount.toLocaleString("th-TH")} (${escapeHtml(vatModeLabel(order.storeVatMode))})</span></div>
-      <div class="totals-row"><span>ค่าส่ง</span><span>${order.shippingFeeCharged.toLocaleString("th-TH")}</span></div>
-      <div class="totals-row totals-main"><span>ยอดสุทธิ</span><span>${order.total.toLocaleString("th-TH")} ${escapeHtml(order.storeCurrency)}</span></div>
-      <div class="totals-row muted"><span>สกุลชำระ</span><span>${escapeHtml(currencyLabel(order.paymentCurrency))}</span></div>
-      <div class="totals-row muted"><span>วิธีชำระ</span><span>${escapeHtml(paymentMethodLabel[order.paymentMethod])}</span></div>
+      <div class="totals-row"><span>${escapeHtml(t(uiLocale, "orders.print.receipt.summary.subtotal"))}</span><span>${order.subtotal.toLocaleString(numberLocale)}</span></div>
+      <div class="totals-row"><span>${escapeHtml(t(uiLocale, "orders.print.receipt.summary.discount"))}</span><span>${order.discount.toLocaleString(numberLocale)}</span></div>
+      <div class="totals-row"><span>${escapeHtml(t(uiLocale, "orders.print.receipt.summary.vat"))}</span><span>${order.vatAmount.toLocaleString(numberLocale)} (${escapeHtml(vatModeLabel(uiLocale, order.storeVatMode))})</span></div>
+      <div class="totals-row"><span>${escapeHtml(t(uiLocale, "orders.print.receipt.summary.shipping"))}</span><span>${order.shippingFeeCharged.toLocaleString(numberLocale)}</span></div>
+      <div class="totals-row totals-main"><span>${escapeHtml(t(uiLocale, "orders.print.receipt.summary.netTotal"))}</span><span>${order.total.toLocaleString(numberLocale)} ${escapeHtml(order.storeCurrency)}</span></div>
+      <div class="totals-row muted"><span>${escapeHtml(t(uiLocale, "orders.print.receipt.summary.paymentCurrency"))}</span><span>${escapeHtml(currencyLabel(order.paymentCurrency))}</span></div>
+      <div class="totals-row muted"><span>${escapeHtml(t(uiLocale, "orders.print.receipt.summary.paymentMethod"))}</span><span>${escapeHtml(t(uiLocale, paymentMethodLabelKey[order.paymentMethod]))}</span></div>
 
       <div class="sep"></div>
-      <p class="thanks">ขอบคุณที่ใช้บริการ</p>
+      <p class="thanks">${escapeHtml(t(uiLocale, "orders.print.receipt.thanks"))}</p>
     </main>
   </body>
 </html>`;
-  }, []);
+  }, [numberLocale, uiLocale]);
 
   const buildShippingLabelPrintHtml = useCallback((order: ReceiptPreviewOrder) => {
-    const labelDateText = new Date(order.createdAt).toLocaleString("th-TH");
-    const receiverName = order.customerName || order.contactDisplayName || "ลูกค้าทั่วไป";
+    const labelDateText = new Date(order.createdAt).toLocaleString(numberLocale);
+    const receiverName =
+      order.customerName || order.contactDisplayName || t(uiLocale, "orders.customer.guest");
     const receiverPhone = order.customerPhone || order.contactPhone || "-";
     const shippingProviderLabel = order.shippingProvider || order.shippingCarrier || "-";
     const trackingNo = order.trackingNo || "-";
 
     return `<!doctype html>
-<html lang="th">
+<html lang="${escapeHtml(uiLocale)}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Shipping Label ${escapeHtml(order.orderNo)}</title>
+    <title>${escapeHtml(t(uiLocale, "orders.print.label.title"))} ${escapeHtml(order.orderNo)}</title>
     <style>
       @page { size: A6 portrait; margin: 6mm; }
       * { box-sizing: border-box; }
@@ -1676,35 +1712,35 @@ export function OrdersManagement(props: OrdersManagementProps) {
   <body>
     <main class="label">
       <section>
-        <div class="order-no">ออเดอร์ ${escapeHtml(order.orderNo)}</div>
-        <div class="section-title">ป้ายจัดส่ง</div>
+        <div class="order-no">${escapeHtml(t(uiLocale, "orders.print.label.orderPrefix"))} ${escapeHtml(order.orderNo)}</div>
+        <div class="section-title">${escapeHtml(t(uiLocale, "orders.print.label.title"))}</div>
         <div class="receiver">${escapeHtml(receiverName)}</div>
-        <div class="phone">โทร: ${escapeHtml(receiverPhone)}</div>
-        <div class="address">ที่อยู่: ${escapeHtml(order.customerAddress || "-")}</div>
+        <div class="phone">${escapeHtml(t(uiLocale, "orders.print.label.phonePrefix"))} ${escapeHtml(receiverPhone)}</div>
+        <div class="address">${escapeHtml(t(uiLocale, "orders.print.label.addressPrefix"))} ${escapeHtml(order.customerAddress || "-")}</div>
       </section>
 
       <section class="meta">
         <div class="meta-row">
-          <span class="meta-label">ขนส่ง</span>
+          <span class="meta-label">${escapeHtml(t(uiLocale, "orders.print.label.shippingPrefix"))}</span>
           <span class="meta-value">${escapeHtml(shippingProviderLabel)}</span>
         </div>
         <div class="meta-row">
-          <span class="meta-label">Tracking</span>
+          <span class="meta-label">${escapeHtml(t(uiLocale, "orders.print.label.trackingPrefix"))}</span>
           <span class="meta-value">${escapeHtml(trackingNo)}</span>
         </div>
         <div class="meta-row">
-          <span class="meta-label">ต้นทุนค่าส่ง</span>
-          <span class="meta-value">${order.shippingCost.toLocaleString("th-TH")} ${escapeHtml(order.storeCurrency)}</span>
+          <span class="meta-label">${escapeHtml(t(uiLocale, "orders.print.label.shippingCostPrefix"))}</span>
+          <span class="meta-value">${order.shippingCost.toLocaleString(numberLocale)} ${escapeHtml(order.storeCurrency)}</span>
         </div>
         <div class="meta-row">
-          <span class="meta-label">วันที่สร้าง</span>
+          <span class="meta-label">${escapeHtml(t(uiLocale, "orders.print.label.createdAtPrefix"))}</span>
           <span class="meta-value">${escapeHtml(labelDateText)}</span>
         </div>
       </section>
     </main>
   </body>
 </html>`;
-  }, []);
+  }, [numberLocale, uiLocale]);
 
   const printDocumentViaWindow = useCallback((html: string, kind: "receipt" | "label") => {
     if (typeof window === "undefined") {
@@ -1804,14 +1840,16 @@ export function OrdersManagement(props: OrdersManagementProps) {
         } catch {
           window.removeEventListener("afterprint", handleAfterPrint);
           setErrorMessage(
-            kind === "receipt" ? "ไม่สามารถพิมพ์ใบเสร็จได้" : "ไม่สามารถพิมพ์สติ๊กเกอร์จัดส่งได้",
+            kind === "receipt"
+              ? t(uiLocale, "orders.print.error.receiptPrintFailed")
+              : t(uiLocale, "orders.print.error.labelPrintFailed"),
           );
           settleLoading();
           cleanup();
         }
       });
     });
-  }, []);
+  }, [uiLocale]);
 
   const openOrderReceiptPrint = useCallback(
     (orderId: string) => {
@@ -1825,7 +1863,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
       const order = receiptPreviewOrder && receiptPreviewOrder.id === orderId ? receiptPreviewOrder : null;
       if (!order) {
         setReceiptPrintLoading(false);
-        setErrorMessage("กำลังโหลดตัวอย่างใบเสร็จ กรุณากดพิมพ์อีกครั้ง");
+        setErrorMessage(t(uiLocale, "orders.print.error.receiptPreviewNotReady"));
         return;
       }
 
@@ -1833,12 +1871,14 @@ export function OrdersManagement(props: OrdersManagementProps) {
         printDocumentViaWindow(buildReceiptPrintHtml(order), "receipt");
       } catch (error) {
         const message =
-          error instanceof Error && error.message ? error.message : "ไม่สามารถพิมพ์ใบเสร็จได้";
+          error instanceof Error && error.message
+            ? error.message
+            : t(uiLocale, "orders.print.error.receiptPrintFailed");
         setErrorMessage(message);
         setReceiptPrintLoading(false);
       }
     },
-    [buildReceiptPrintHtml, printDocumentViaWindow, receiptPreviewOrder],
+    [buildReceiptPrintHtml, printDocumentViaWindow, receiptPreviewOrder, uiLocale],
   );
 
   const openCreatedOrderDetail = useCallback(
@@ -1865,7 +1905,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
       const order = receiptPreviewOrder && receiptPreviewOrder.id === orderId ? receiptPreviewOrder : null;
       if (!order) {
         setShippingLabelPrintLoading(false);
-        setErrorMessage("กำลังโหลดตัวอย่างสติ๊กเกอร์ กรุณากดพิมพ์อีกครั้ง");
+        setErrorMessage(t(uiLocale, "orders.print.error.labelPreviewNotReady"));
         return;
       }
 
@@ -1875,7 +1915,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
         const message =
           error instanceof Error && error.message
             ? error.message
-            : "ไม่สามารถเปิดหน้าพิมพ์สติ๊กเกอร์ได้";
+            : t(uiLocale, "orders.print.error.labelPrintFailed");
         setErrorMessage(message);
         setShippingLabelPrintLoading(false);
       }
@@ -1884,6 +1924,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
       buildShippingLabelPrintHtml,
       printDocumentViaWindow,
       receiptPreviewOrder,
+      uiLocale,
     ],
   );
 
@@ -1940,7 +1981,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
           return;
         }
         const message =
-          error instanceof Error && error.message ? error.message : "ไม่สามารถโหลดตัวอย่างใบเสร็จได้";
+          error instanceof Error && error.message
+            ? error.message
+            : t(uiLocale, "orders.print.error.receiptPreviewLoadFailed");
         setReceiptPreviewError(message);
         setReceiptPreviewOrder(null);
       })
@@ -1953,7 +1996,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
     return () => {
       cancelled = true;
     };
-  }, [createdOrderSuccess, fetchOrderReceiptPreview]);
+  }, [createdOrderSuccess, fetchOrderReceiptPreview, uiLocale]);
 
   useEffect(() => {
     if (!showRecentOrdersSheet) {
@@ -1988,7 +2031,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
 
     form.reset(restored);
     setCheckoutFlow(savedDraft.checkoutFlow);
-    setScanMessage("กู้คืนตะกร้าที่ค้างจากการรีเฟรชแล้ว");
+    setScanMessage(t(uiLocale, "orders.create.draftRestore.notice"));
     setNewOrderDraftFlag(true);
     setHasInitializedDraftRestore(true);
   }, [
@@ -1996,6 +2039,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
     hasInitializedDraftRestore,
     isCreateOnlyMode,
     restoreDraftFormForCatalog,
+    uiLocale,
   ]);
 
   useEffect(() => {
@@ -2303,7 +2347,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
               onClick={() => setCreateStep("products")}
               disabled={loading}
             >
-              1) เลือกสินค้า
+              1) {t(uiLocale, "orders.create.steps.products")}
             </button>
             <button
               type="button"
@@ -2313,7 +2357,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
               onClick={() => setCreateStep("details")}
               disabled={loading || !canContinueToDetails}
             >
-              2) รายละเอียดออเดอร์
+              2) {t(uiLocale, "orders.create.steps.details")}
             </button>
           </div>
         ) : null}
@@ -2321,26 +2365,32 @@ export function OrdersManagement(props: OrdersManagementProps) {
         {isDetailsStep ? (
           <>
             <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs font-medium text-slate-700">ประเภทออเดอร์</p>
+              <p className="text-xs font-medium text-slate-700">
+                {t(uiLocale, "orders.create.section.orderType.title")}
+              </p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 {(
                   [
                     {
                       key: "WALK_IN_NOW",
-                      label: "Walk-in ทันที",
-                      description: "รับและจบออเดอร์หน้างาน",
+                      labelKey: "orders.flow.WALK_IN_NOW",
+                      descriptionKey: "orders.create.flow.WALK_IN_NOW.description",
                     },
                     {
                       key: "PICKUP_LATER",
-                      label: "มารับที่ร้านภายหลัง",
-                      description: "โทรสั่งไว้ก่อนแล้วค่อยมารับ",
+                      labelKey: "orders.flow.PICKUP_LATER",
+                      descriptionKey: "orders.create.flow.PICKUP_LATER.description",
                     },
                     {
                       key: "ONLINE_DELIVERY",
-                      label: "สั่งออนไลน์/จัดส่ง",
-                      description: "ต้องมีช่องทางและข้อมูลส่งของ",
+                      labelKey: "orders.flow.ONLINE_DELIVERY",
+                      descriptionKey: "orders.create.flow.ONLINE_DELIVERY.description",
                     },
-                  ] satisfies Array<{ key: CheckoutFlow; label: string; description: string }>
+                  ] satisfies Array<{
+                    key: CheckoutFlow;
+                    labelKey: MessageKey;
+                    descriptionKey: MessageKey;
+                  }>
                 ).map((flowOption) => (
                   <button
                     key={flowOption.key}
@@ -2353,8 +2403,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     onClick={() => applyCheckoutFlow(flowOption.key)}
                     disabled={loading}
                   >
-                    <p className="text-xs font-medium">{flowOption.label}</p>
-                    <p className="mt-0.5 text-[11px] text-slate-500">{flowOption.description}</p>
+                    <p className="text-xs font-medium">{t(uiLocale, flowOption.labelKey)}</p>
+                    <p className="mt-0.5 text-[11px] text-slate-500">
+                      {t(uiLocale, flowOption.descriptionKey)}
+                    </p>
                   </button>
                 ))}
               </div>
@@ -2363,15 +2415,15 @@ export function OrdersManagement(props: OrdersManagementProps) {
             {isOnlineCheckout ? (
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">
-                  ช่องทางออเดอร์ออนไลน์
+                  {t(uiLocale, "orders.create.online.channel.label")}
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {(
                     [
-                      { key: "FACEBOOK", label: "Facebook" },
-                      { key: "WHATSAPP", label: "WhatsApp" },
-                      { key: "OTHER", label: "อื่นๆ" },
-                    ] satisfies Array<{ key: OnlineChannelMode; label: string }>
+                      { key: "FACEBOOK", labelKey: "orders.channelSummary.facebook" },
+                      { key: "WHATSAPP", labelKey: "orders.channelSummary.whatsapp" },
+                      { key: "OTHER", labelKey: "orders.create.online.channel.other" },
+                    ] satisfies Array<{ key: OnlineChannelMode; labelKey: MessageKey }>
                   ).map((option) => {
                     const isActive = onlineChannelMode === option.key;
                     return (
@@ -2386,7 +2438,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                         onClick={() => onSelectOnlineChannelMode(option.key)}
                         disabled={loading}
                       >
-                        {option.label}
+                        {t(uiLocale, option.labelKey)}
                       </button>
                     );
                   })}
@@ -2395,7 +2447,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                   <input
                     type="text"
                     className="h-10 w-full rounded-md border bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
-                    placeholder="แพลตฟอร์มอื่น (ไม่บังคับ)"
+                    placeholder={t(uiLocale, "orders.create.online.channel.other.placeholder")}
                     value={onlineOtherChannelInput}
                     onChange={(event) => setOnlineOtherChannelInput(event.target.value)}
                     disabled={loading}
@@ -2403,8 +2455,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 ) : null}
                 <p className="text-[11px] text-slate-500">
                   {onlineChannelMode === "OTHER"
-                    ? "ตอนนี้ระบบยังบันทึกช่องทางหลักเป็น Facebook/WhatsApp ชั่วคราว จนกว่าจะเปิดเชื่อม API เต็ม"
-                    : "เลือกช่องทางหลักของออเดอร์นี้เพื่อช่วยแยก flow"}
+                    ? t(uiLocale, "orders.create.online.channel.hint.other")
+                    : t(uiLocale, "orders.create.online.channel.hint.default")}
                 </p>
               </div>
             ) : null}
@@ -2419,10 +2471,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     disabled={loading}
                   >
                     {onlineContactPickerOpen
-                      ? "ซ่อนรายชื่อลูกค้า"
+                      ? t(uiLocale, "orders.create.online.contactPicker.hide")
                       : selectedOnlineContactLabel
-                        ? "แก้ไขลูกค้าที่เลือก"
-                        : "+ เลือกจากรายชื่อลูกค้า (ไม่บังคับ)"}
+                        ? t(uiLocale, "orders.create.online.contactPicker.editSelected")
+                        : t(uiLocale, "orders.create.online.contactPicker.pickOptional")}
                   </button>
                   {watchedContactId ? (
                     <button
@@ -2431,14 +2483,14 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       onClick={() => onPickContact("")}
                       disabled={loading}
                     >
-                      ล้าง
+                      {t(uiLocale, "common.action.clear")}
                     </button>
                   ) : null}
                 </div>
                 <p className="text-xs text-slate-500">
                   {selectedOnlineContactLabel
-                    ? `เลือกแล้ว: ${selectedOnlineContactLabel}`
-                    : "ถ้ายังไม่มีรายชื่อ ให้ข้ามแล้วกรอกชื่อ/เบอร์เองได้"}
+                    ? `${t(uiLocale, "orders.create.online.contactPicker.selectedPrefix")} ${selectedOnlineContactLabel}`
+                    : t(uiLocale, "orders.create.online.contactPicker.noSelectionHint")}
                 </p>
                 {onlineContactPickerOpen ? (
                   <>
@@ -2449,7 +2501,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       value={form.watch("contactId") ?? ""}
                       onChange={(event) => onPickContact(event.target.value)}
                     >
-                      <option value="">ไม่เลือกลูกค้า (กรอกชื่อ/เบอร์เอง)</option>
+                      <option value="">{t(uiLocale, "orders.create.online.contactPicker.option.none")}</option>
                       {onlineChannelContacts.map((contact) => (
                         <option key={contact.id} value={contact.id}>
                           {contact.displayName}
@@ -2458,7 +2510,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     </select>
                     {onlineChannelContacts.length <= 0 ? (
                       <p className="text-xs text-slate-500">
-                        ยังไม่มีรายชื่อลูกค้าช่องทางนี้ (เลือกข้ามแล้วกรอกเองได้)
+                        {t(uiLocale, "orders.create.online.contactPicker.emptyHint")}
                       </p>
                     ) : null}
                     <p className="text-xs text-red-600">{form.formState.errors.contactId?.message}</p>
@@ -2470,12 +2522,12 @@ export function OrdersManagement(props: OrdersManagementProps) {
             {isOnlineCheckout ? (
               <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3">
                 <label className="text-xs font-medium text-slate-700" htmlFor="online-quick-fill">
-                  เติมข้อมูลลูกค้าแบบเร็ว (ไม่บังคับ)
+                  {t(uiLocale, "orders.create.online.quickFill.labelOptional")}
                 </label>
                 <textarea
                   id="online-quick-fill"
                   className="min-h-24 w-full rounded-md border bg-white px-3 py-2 text-sm outline-none ring-primary focus:ring-2"
-                  placeholder={`เช่น\nlex\n77964565\nAnousith nongboon`}
+                  placeholder={t(uiLocale, "orders.create.online.quickFill.placeholderExample")}
                   value={onlineQuickFillInput}
                   onChange={(event) => setOnlineQuickFillInput(event.target.value)}
                   disabled={loading}
@@ -2487,7 +2539,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     onClick={() => setOnlineQuickFillInput("")}
                     disabled={loading || onlineQuickFillInput.trim().length <= 0}
                   >
-                    ล้าง
+                    {t(uiLocale, "common.action.clear")}
                   </button>
                   <button
                     type="button"
@@ -2495,11 +2547,11 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     onClick={applyOnlineQuickFill}
                     disabled={loading || onlineQuickFillInput.trim().length <= 0}
                   >
-                    เติมอัตโนมัติ
+                    {t(uiLocale, "orders.create.online.quickFill.apply")}
                   </button>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  ระบบจะพยายามแยกชื่อ/เบอร์/ที่อยู่จากข้อความที่วาง และคุณแก้ต่อได้ทุกช่อง
+                  {t(uiLocale, "orders.create.online.quickFill.hint")}
                 </p>
               </div>
             ) : null}
@@ -2513,16 +2565,19 @@ export function OrdersManagement(props: OrdersManagementProps) {
                   disabled={loading}
                 >
                   {pickupLaterCustomerOpen
-                    ? "ซ่อนข้อมูลผู้รับ"
+                    ? t(uiLocale, "orders.create.pickupLater.toggle.hide")
                     : hasPickupCustomerIdentity
-                      ? "แก้ไขข้อมูลผู้รับ (ไม่บังคับ)"
-                      : "+ เพิ่มข้อมูลผู้รับ (ไม่บังคับ)"}
+                      ? t(uiLocale, "orders.create.pickupLater.toggle.editOptional")
+                      : t(uiLocale, "orders.create.pickupLater.toggle.addOptional")}
                 </button>
                 {!pickupLaterCustomerOpen ? (
-                  <p className="text-xs text-slate-500">สถานะ: {pickupCustomerIdentitySummary}</p>
+                  <p className="text-xs text-slate-500">
+                    {t(uiLocale, "orders.create.pickupLater.summary.statusPrefix")}{" "}
+                    {pickupCustomerIdentitySummary}
+                  </p>
                 ) : (
                   <p className="text-xs text-slate-500">
-                    กรอกชื่อหรือเบอร์อย่างน้อย 1 อย่าง (ถ้าทราบ) เพื่อช่วยติดตามออเดอร์
+                    {t(uiLocale, "orders.create.pickupLater.summary.hint")}
                   </p>
                 )}
               </div>
@@ -2532,7 +2587,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
               <>
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground" htmlFor="order-customer-name">
-                    {isOnlineCheckout ? "ชื่อลูกค้า/ผู้รับสินค้า" : "ชื่อลูกค้า (ไม่บังคับ)"}
+                    {isOnlineCheckout
+                      ? t(uiLocale, "orders.create.customer.name.labelOnline")
+                      : t(uiLocale, "orders.create.customer.name.labelOptional")}
                   </label>
                   <input
                     id="order-customer-name"
@@ -2544,7 +2601,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
 
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground" htmlFor="order-customer-phone">
-                    {requiresCustomerPhone ? "เบอร์โทร (จำเป็น)" : "เบอร์โทร"}
+                    {requiresCustomerPhone
+                      ? t(uiLocale, "orders.create.customer.phone.labelRequired")
+                      : t(uiLocale, "orders.create.customer.phone.label")}
                   </label>
                   <input
                     id="order-customer-phone"
@@ -2555,7 +2614,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                   <p className="text-xs text-red-600">{form.formState.errors.customerPhone?.message}</p>
                   {!isOnlineCheckout ? (
                     <p className="text-xs text-slate-500">
-                      ไม่บังคับ แต่แนะนำกรอกชื่อหรือเบอร์อย่างน้อย 1 อย่าง ถ้าทราบ
+                      {t(uiLocale, "orders.create.customer.phone.hintOptional")}
                     </p>
                   ) : null}
                 </div>
@@ -2566,7 +2625,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
               <div className="space-y-3">
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground" htmlFor="order-address">
-                    ที่อยู่จัดส่ง (จำเป็น)
+                    {t(uiLocale, "orders.create.customer.address.labelRequired")}
                   </label>
                   <textarea
                     id="order-address"
@@ -2579,7 +2638,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
 
                 <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3">
                   <p className="text-xs font-medium text-slate-700">
-                    ข้อมูลขนส่ง (สำหรับเชื่อมออกใบส่งอัตโนมัติในอนาคต)
+                    {t(uiLocale, "orders.create.shipping.section.title")}
                   </p>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {shippingProviderChipOptions.map((provider) => {
@@ -2610,14 +2669,14 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       onClick={onToggleCustomShippingProvider}
                       disabled={loading}
                     >
-                      อื่นๆ
+                      {t(uiLocale, "common.other")}
                     </button>
                   </div>
                   {onlineCustomProviderOpen ? (
                     <input
                       type="text"
                       className="h-9 w-full rounded-md border bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
-                      placeholder="ผู้ให้บริการขนส่งอื่น (ไม่บังคับ)"
+                      placeholder={t(uiLocale, "orders.create.shipping.other.placeholder")}
                       value={isKnownShippingProvider ? "" : watchedShippingProvider}
                       onChange={(event) => {
                         form.setValue("shippingProvider", event.target.value, {
@@ -2634,17 +2693,21 @@ export function OrdersManagement(props: OrdersManagementProps) {
                   {form.formState.errors.shippingProvider?.message ? (
                     <p className="text-xs text-red-600">{form.formState.errors.shippingProvider.message}</p>
                   ) : watchedShippingProvider.trim().length <= 0 ? (
-                    <p className="text-[11px] text-amber-700">ยังไม่ระบุขนส่ง (ต้องเลือกก่อนสร้างออเดอร์)</p>
+                    <p className="text-[11px] text-amber-700">
+                      {t(uiLocale, "orders.create.shipping.missingWarning")}
+                    </p>
                   ) : (
-                    <p className="text-[11px] text-slate-500">เลือกผู้ให้บริการขนส่งสำหรับออเดอร์นี้</p>
+                    <p className="text-[11px] text-slate-500">
+                      {t(uiLocale, "orders.create.shipping.selectedHint")}
+                    </p>
                   )}
                 </div>
               </div>
             ) : (
               <p className="rounded-md border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500">
                 {isPickupLaterCheckout
-                  ? "โหมดรับที่ร้านภายหลัง: ไม่บังคับชื่อ/เบอร์ แต่แนะนำให้กรอกอย่างน้อย 1 อย่างเพื่อช่วยติดตามออเดอร์"
-                  : "โหมด Walk-in ทันที: ไม่จำเป็นต้องกรอกข้อมูลจัดส่ง"}
+                  ? t(uiLocale, "orders.create.modeHint.pickupLater")
+                  : t(uiLocale, "orders.create.modeHint.walkInNow")}
               </p>
             )}
           </>
@@ -2654,7 +2717,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
           <div id="order-cart-section" className="space-y-3 rounded-lg border p-3">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-medium">
-              รายการสินค้า ({watchedItems.length.toLocaleString("th-TH")} รายการ)
+              {t(uiLocale, "orders.create.products.sectionTitle")} (
+              {watchedItems.length.toLocaleString(numberLocale)} {t(uiLocale, "orders.unit.items")})
             </p>
             <div className="flex items-center gap-2">
               <button
@@ -2663,7 +2727,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 disabled={loading || !hasCatalogProducts}
                 onClick={openScannerSheet}
               >
-                สแกนเพิ่มสินค้า
+                {t(uiLocale, "orders.create.products.action.scanAdd")}
               </button>
               <button
                 type="button"
@@ -2677,18 +2741,20 @@ export function OrdersManagement(props: OrdersManagementProps) {
                   })
                 }
               >
-                + เพิ่มรายการ
+                {t(uiLocale, "orders.create.products.action.addLineItem")}
               </button>
             </div>
           </div>
 
           <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-            <p className="text-xs font-medium text-slate-700">เพิ่มสินค้าแบบแตะเร็ว (POS-lite)</p>
+            <p className="text-xs font-medium text-slate-700">
+              {t(uiLocale, "orders.create.products.quickAdd.title")}
+            </p>
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 className="h-10 flex-1 rounded-md border bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
-                placeholder="ค้นหา SKU, ชื่อ หรือบาร์โค้ด"
+                placeholder={t(uiLocale, "orders.create.products.search.placeholder")}
                 value={quickAddKeyword}
                 onChange={(event) => setQuickAddKeyword(event.target.value)}
                 disabled={loading || !hasCatalogProducts}
@@ -2700,7 +2766,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                   onClick={() => setQuickAddKeyword("")}
                   disabled={loading}
                 >
-                  ล้าง
+                  {t(uiLocale, "common.action.clear")}
                 </button>
               ) : null}
             </div>
@@ -2715,13 +2781,19 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 onClick={() => setQuickAddOnlyAvailable((prev) => !prev)}
                 disabled={loading || !hasCatalogProducts}
               >
-                {quickAddOnlyAvailable ? "เฉพาะมีสต็อก: เปิด" : "เฉพาะมีสต็อก"}
+                {quickAddOnlyAvailable
+                  ? t(uiLocale, "orders.create.products.filter.available.on")
+                  : t(uiLocale, "orders.create.products.filter.available.off")}
               </button>
             </div>
             {!hasCatalogProducts ? (
-              <p className="text-xs text-slate-500">ยังไม่มีสินค้าในระบบ</p>
+              <p className="text-xs text-slate-500">
+                {t(uiLocale, "orders.create.products.quickAdd.emptyCatalog")}
+              </p>
             ) : quickAddProducts.length === 0 ? (
-              <p className="text-xs text-slate-500">ไม่พบสินค้าที่ตรงกับคำค้น</p>
+              <p className="text-xs text-slate-500">
+                {t(uiLocale, "orders.create.products.quickAdd.noMatch")}
+              </p>
             ) : (
               <div className="grid max-h-56 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
                 {quickAddProducts.map((product) => (
@@ -2733,7 +2805,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       const addedProduct = addProductFromCatalog(product.productId);
                       if (addedProduct) {
                         setScanMessage(
-                          `เพิ่มสินค้า ${addedProduct.sku} - ${addedProduct.name} แล้ว`,
+                          `${t(uiLocale, "orders.create.scan.addedProduct.prefix")} ${addedProduct.sku} - ${addedProduct.name} ${t(uiLocale, "orders.create.scan.addedProduct.suffix")}`,
                         );
                       }
                     }}
@@ -2742,15 +2814,19 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     <p className="text-xs text-slate-500">{product.sku}</p>
                     <p className="truncate text-sm font-medium text-slate-800">{product.name}</p>
                     <p className="text-xs text-slate-500">
-                      คงเหลือ {product.available.toLocaleString("th-TH")}
+                      {t(uiLocale, "orders.create.products.stockRemainingPrefix")}{" "}
+                      {product.available.toLocaleString(numberLocale)}
                     </p>
                     {product.available > 0 ? (
                       <p className="mt-1 text-xs font-medium text-blue-700">
-                        + เพิ่ม {getProductDefaultUnitPrice(product).toLocaleString("th-TH")}{" "}
+                        {t(uiLocale, "orders.create.products.quickAdd.addPrefix")}{" "}
+                        {getProductDefaultUnitPrice(product).toLocaleString(numberLocale)}{" "}
                         {catalog.storeCurrency}
                       </p>
                     ) : (
-                      <p className="mt-1 text-xs font-medium text-rose-600">หมดสต็อก/ติดจอง</p>
+                      <p className="mt-1 text-xs font-medium text-rose-600">
+                        {t(uiLocale, "orders.create.products.outOfStockBadge")}
+                      </p>
                     )}
                   </button>
                 ))}
@@ -2763,17 +2839,19 @@ export function OrdersManagement(props: OrdersManagementProps) {
           {notFoundBarcode ? (
             <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-2">
               <p className="text-xs text-amber-700">
-                ไม่พบบาร์โค้ด <span className="font-semibold">{notFoundBarcode}</span> กรุณาค้นหาเอง
+                {t(uiLocale, "orders.create.products.notFoundBarcode.prefix")}{" "}
+                <span className="font-semibold">{notFoundBarcode}</span>{" "}
+                {t(uiLocale, "orders.create.products.notFoundBarcode.suffix")}
               </p>
               <div className="flex flex-col gap-2 sm:flex-row">
-                <input
-                  type="text"
-                  className="h-10 flex-1 rounded-md border border-amber-300 bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
-                  placeholder="ค้นหาด้วยชื่อสินค้า, SKU หรือบาร์โค้ด"
-                  value={manualSearchKeyword}
-                  onChange={(event) => setManualSearchKeyword(event.target.value)}
-                  disabled={loading}
-                />
+                  <input
+                    type="text"
+                    className="h-10 flex-1 rounded-md border border-amber-300 bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
+                    placeholder={t(uiLocale, "orders.create.products.search.placeholder")}
+                    value={manualSearchKeyword}
+                    onChange={(event) => setManualSearchKeyword(event.target.value)}
+                    disabled={loading}
+                  />
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -2781,7 +2859,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     onClick={openScannerSheet}
                     disabled={loading}
                   >
-                    สแกนใหม่
+                    {t(uiLocale, "orders.create.products.action.scanAgain")}
                   </button>
                   <button
                     type="button"
@@ -2792,7 +2870,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     }}
                     disabled={loading}
                   >
-                    ปิด
+                    {t(uiLocale, "common.action.close")}
                   </button>
                 </div>
               </div>
@@ -2816,7 +2894,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-amber-700">ไม่พบสินค้าจากคำค้นนี้</p>
+                  <p className="text-xs text-amber-700">
+                    {t(uiLocale, "orders.create.products.manualSearch.noMatch")}
+                  </p>
                 )
               ) : null}
             </div>
@@ -2825,7 +2905,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
           <div className="space-y-2 sm:hidden">
             {watchedItems.length === 0 ? (
               <p className="rounded-lg border border-dashed p-3 text-xs text-slate-500">
-                ยังไม่มีรายการสินค้า
+                {t(uiLocale, "orders.create.products.emptyCart")}
               </p>
             ) : (
               watchedItems.slice(0, 2).map((item, index) => {
@@ -2845,7 +2925,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                   >
                     <p className="text-xs text-slate-500">{selectedProduct?.sku ?? "-"}</p>
                     <p className="text-sm font-medium text-slate-900">
-                      {selectedProduct?.name ?? "ไม่พบสินค้า"}
+                      {selectedProduct?.name ?? t(uiLocale, "orders.create.products.productNotFound")}
                     </p>
                     <div className="grid grid-cols-[1fr_auto] items-center gap-2">
                       <select
@@ -2871,19 +2951,19 @@ export function OrdersManagement(props: OrdersManagementProps) {
                           className="h-9 w-9 rounded-md border text-base text-slate-700"
                           onClick={() => decreaseItemQty(index)}
                           disabled={loading}
-                          aria-label="ลดจำนวน"
+                          aria-label={t(uiLocale, "orders.create.products.qty.decreaseAria")}
                         >
                           -
                         </button>
                         <div className="min-w-10 text-center text-sm font-medium text-slate-800">
-                          {(Number(item.qty ?? 0) || 0).toLocaleString("th-TH")}
+                          {(Number(item.qty ?? 0) || 0).toLocaleString(numberLocale)}
                         </div>
                         <button
                           type="button"
                           className="h-9 w-9 rounded-md border text-base text-slate-700"
                           onClick={() => increaseItemQty(index)}
                           disabled={loading || availableQty <= 0 || currentQty >= availableQty}
-                          aria-label="เพิ่มจำนวน"
+                          aria-label={t(uiLocale, "orders.create.products.qty.increaseAria")}
                         >
                           +
                         </button>
@@ -2891,7 +2971,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <p className="text-slate-500">
-                        คงเหลือ {selectedProduct?.available.toLocaleString("th-TH") ?? 0}
+                        {t(uiLocale, "orders.create.products.stockRemainingPrefix")}{" "}
+                        {selectedProduct?.available.toLocaleString(numberLocale) ?? 0}
                       </p>
                       <button
                         type="button"
@@ -2899,11 +2980,12 @@ export function OrdersManagement(props: OrdersManagementProps) {
                         onClick={() => remove(index)}
                         disabled={loading}
                       >
-                        ลบ
+                        {t(uiLocale, "common.action.delete")}
                       </button>
                     </div>
                     <p className="text-xs font-medium text-blue-700">
-                      รวมรายการ {lineTotal.toLocaleString("th-TH")} {catalog.storeCurrency}
+                      {t(uiLocale, "orders.create.products.lineTotalPrefix")}{" "}
+                      {lineTotal.toLocaleString(numberLocale)} {catalog.storeCurrency}
                     </p>
                   </div>
                 );
@@ -2915,7 +2997,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 className="w-full rounded-lg border border-dashed px-3 py-2 text-xs font-medium text-blue-700"
                 onClick={() => setShowCartSheet(true)}
               >
-                มีอีก {(watchedItems.length - 2).toLocaleString("th-TH")} รายการ แตะเพื่อดูทั้งหมด
+                {t(uiLocale, "orders.create.products.moreItems.prefix")}{" "}
+                {(watchedItems.length - 2).toLocaleString(numberLocale)}{" "}
+                {t(uiLocale, "orders.create.products.moreItems.suffix")}
               </button>
             ) : null}
           </div>
@@ -2968,7 +3052,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       />
 
                       <div className="h-10 rounded-md border bg-slate-50 px-2 py-2 text-xs text-slate-600">
-                        คงเหลือ {selectedProduct?.available.toLocaleString("th-TH") ?? 0}
+                        {t(uiLocale, "orders.create.products.stockRemainingPrefix")}{" "}
+                        {selectedProduct?.available.toLocaleString(numberLocale) ?? 0}
                       </div>
 
                       <button
@@ -2977,13 +3062,14 @@ export function OrdersManagement(props: OrdersManagementProps) {
                         onClick={() => remove(index)}
                         disabled={loading}
                       >
-                        ลบ
+                        {t(uiLocale, "common.action.delete")}
                       </button>
                     </div>
                   </div>
 
                   <p className="text-xs text-blue-700">
-                    รวมรายการ {lineTotal.toLocaleString("th-TH")} {catalog.storeCurrency}
+                    {t(uiLocale, "orders.create.products.lineTotalPrefix")}{" "}
+                    {lineTotal.toLocaleString(numberLocale)} {catalog.storeCurrency}
                   </p>
                 </div>
               );
@@ -2999,11 +3085,12 @@ export function OrdersManagement(props: OrdersManagementProps) {
               disabled={watchedItems.length === 0}
             >
               <span>
-                ดูตะกร้า {watchedItems.length.toLocaleString("th-TH")} รายการ /{" "}
-                {cartQtyTotal.toLocaleString("th-TH")} ชิ้น
+                {t(uiLocale, "orders.create.cart.viewCartPrefix")}{" "}
+                {watchedItems.length.toLocaleString(numberLocale)} {t(uiLocale, "orders.unit.items")} /{" "}
+                {cartQtyTotal.toLocaleString(numberLocale)} {t(uiLocale, "orders.unit.pcs")}
               </span>
               <span>
-                {totals.total.toLocaleString("th-TH")} {catalog.storeCurrency}
+                {totals.total.toLocaleString(numberLocale)} {catalog.storeCurrency}
               </span>
             </button>
           ) : null}
@@ -3012,7 +3099,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
           <div className="space-y-2 rounded-lg border p-3">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-medium">
-                รายการสินค้า ({watchedItems.length.toLocaleString("th-TH")} รายการ)
+                {t(uiLocale, "orders.create.products.sectionTitle")} (
+                {watchedItems.length.toLocaleString(numberLocale)} {t(uiLocale, "orders.unit.items")})
               </p>
               <button
                 type="button"
@@ -3025,12 +3113,16 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 }}
                 disabled={loading}
               >
-                {inSheet ? "กลับไปเลือกสินค้า" : "แก้รายการสินค้า"}
+                {inSheet
+                  ? t(uiLocale, "orders.create.products.action.backToProducts")
+                  : t(uiLocale, "orders.create.products.action.editItems")}
               </button>
             </div>
             <p className="text-xs text-slate-500">
-              จำนวน {cartQtyTotal.toLocaleString("th-TH")} ชิ้น • ยอดรวม{" "}
-              {totals.total.toLocaleString("th-TH")} {catalog.storeCurrency}
+              {t(uiLocale, "orders.create.cart.summary.qtyPrefix")}{" "}
+              {cartQtyTotal.toLocaleString(numberLocale)} {t(uiLocale, "orders.unit.pcs")} •{" "}
+              {t(uiLocale, "orders.create.cart.summary.totalPrefix")}{" "}
+              {totals.total.toLocaleString(numberLocale)} {catalog.storeCurrency}
             </p>
             <p className="text-xs text-red-600">{form.formState.errors.items?.message}</p>
           </div>
@@ -3042,10 +3134,12 @@ export function OrdersManagement(props: OrdersManagementProps) {
               <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="space-y-1">
-                    <p className="text-xs font-medium text-slate-700">ส่วนลด</p>
+                    <p className="text-xs font-medium text-slate-700">
+                      {t(uiLocale, "orders.create.discount.title")}
+                    </p>
                     <p className="text-[11px] text-slate-500">
-                      ไม่บังคับ • ลดได้สูงสุด {maxDiscountAmount.toLocaleString("th-TH")}{" "}
-                      {catalog.storeCurrency}
+                      {t(uiLocale, "orders.create.discount.hint.prefix")}{" "}
+                      {maxDiscountAmount.toLocaleString(numberLocale)} {catalog.storeCurrency}
                     </p>
                   </div>
                   <button
@@ -3067,7 +3161,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     }}
                     disabled={loading}
                   >
-                    {discountEnabled ? "ปิดส่วนลด" : "เปิดส่วนลด"}
+                    {discountEnabled
+                      ? t(uiLocale, "orders.create.discount.toggle.off")
+                      : t(uiLocale, "orders.create.discount.toggle.on")}
                   </button>
                 </div>
 
@@ -3088,7 +3184,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                           }}
                           disabled={loading}
                         >
-                          จำนวนเงิน
+                          {t(uiLocale, "orders.create.discount.mode.amount")}
                         </button>
                         <button
                           type="button"
@@ -3194,11 +3290,14 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     )}
 
                     <p className="text-xs font-medium text-emerald-700">
-                      คิดส่วนลดจริง -{totals.discount.toLocaleString("th-TH")} {catalog.storeCurrency}
+                      {t(uiLocale, "orders.create.discount.actual.prefix")} -
+                      {totals.discount.toLocaleString(numberLocale)} {catalog.storeCurrency}
                     </p>
                   </div>
                 ) : (
-                  <p className="text-xs text-slate-500">ยังไม่ใช้ส่วนลดในออเดอร์นี้</p>
+                  <p className="text-xs text-slate-500">
+                    {t(uiLocale, "orders.create.discount.emptyHint")}
+                  </p>
                 )}
                 <p className="text-xs text-red-600">{form.formState.errors.discount?.message}</p>
               </div>
@@ -3207,8 +3306,12 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="space-y-1">
-                      <p className="text-xs font-medium text-slate-700">ค่าขนส่ง</p>
-                      <p className="text-[11px] text-slate-500">ไม่บังคับ • ใช้เก็บค่าส่งจากลูกค้าและต้นทุนจริง</p>
+                      <p className="text-xs font-medium text-slate-700">
+                        {t(uiLocale, "orders.create.shippingFee.title")}
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        {t(uiLocale, "orders.create.shippingFee.hint")}
+                      </p>
                     </div>
                     <button
                       type="button"
@@ -3234,14 +3337,18 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       }}
                       disabled={loading}
                     >
-                      {shippingFeeEnabled ? "ปิดค่าขนส่ง" : "เปิดค่าขนส่ง"}
+                      {shippingFeeEnabled
+                        ? t(uiLocale, "orders.create.shippingFee.toggle.off")
+                        : t(uiLocale, "orders.create.shippingFee.toggle.on")}
                     </button>
                   </div>
 
                   {shippingFeeEnabled ? (
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <div className="space-y-2">
-                        <label className="text-xs text-muted-foreground">ค่าส่งที่เรียกเก็บ</label>
+                        <label className="text-xs text-muted-foreground">
+                          {t(uiLocale, "orders.create.shippingFee.field.feeCharged.label")}
+                        </label>
                         <input
                           type="number"
                           min={0}
@@ -3253,7 +3360,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       </div>
 
                       <div className="space-y-2">
-                        <label className="text-xs text-muted-foreground">ต้นทุนค่าส่ง</label>
+                        <label className="text-xs text-muted-foreground">
+                          {t(uiLocale, "orders.create.shippingFee.field.cost.label")}
+                        </label>
                         <input
                           type="number"
                           min={0}
@@ -3265,14 +3374,18 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       </div>
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-500">ยังไม่ใช้ค่าขนส่งในออเดอร์นี้</p>
+                    <p className="text-xs text-slate-500">
+                      {t(uiLocale, "orders.create.shippingFee.emptyHint")}
+                    </p>
                   )}
                 </div>
               ) : null}
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs text-muted-foreground">วิธีรับชำระ</label>
+              <label className="text-xs text-muted-foreground">
+                {t(uiLocale, "orders.create.paymentMethod.label")}
+              </label>
               <div className="flex flex-wrap items-center gap-2">
                 {paymentMethodOptions.map((methodOption) => {
                   const isActive = watchedPaymentMethod === methodOption.key;
@@ -3288,15 +3401,15 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       onClick={() => setCheckoutPaymentMethod(methodOption.key)}
                       disabled={loading}
                     >
-                      {methodOption.label}
+                      {t(uiLocale, methodOption.labelKey)}
                     </button>
                   );
                 })}
               </div>
               <p className="text-xs text-slate-500">
                 {isOnlineCheckout
-                  ? "ออนไลน์: เลือกได้ เงินสด, QR, ค้างจ่าย หรือ COD"
-                  : "หน้าร้าน/รับที่ร้าน: เลือกได้ เงินสด, QR หรือค้างจ่าย"}
+                  ? t(uiLocale, "orders.create.paymentMethod.help.online")
+                  : t(uiLocale, "orders.create.paymentMethod.help.offline")}
               </p>
               <p className="text-xs text-red-600">{form.formState.errors.paymentMethod?.message}</p>
             </div>
@@ -3304,7 +3417,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
             {watchedPaymentMethod === "LAO_QR" ? (
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground" htmlFor="payment-account">
-                  บัญชีรับเงิน (QR)
+                  {t(uiLocale, "orders.create.paymentAccount.label")}
                 </label>
                 <select
                   id="payment-account"
@@ -3315,7 +3428,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     form.setValue("paymentAccountId", event.target.value, { shouldValidate: true })
                   }
                 >
-                  <option value="">เลือกบัญชี QR</option>
+                  <option value="">{t(uiLocale, "orders.create.paymentAccount.placeholder")}</option>
                   {qrPaymentAccounts.map((account) => (
                     <option key={account.id} value={account.id}>
                       {account.displayName} ({resolveLaosBankDisplayName(account.bankName)})
@@ -3327,9 +3440,11 @@ export function OrdersManagement(props: OrdersManagementProps) {
                   <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-xs font-medium text-slate-700">ดู QR และข้อมูลบัญชี</p>
+                        <p className="text-xs font-medium text-slate-700">
+                          {t(uiLocale, "orders.create.paymentAccount.qrPreview.title")}
+                        </p>
                         <p className="text-[11px] text-slate-500">
-                          เปิดเมื่อจำเป็นเพื่อเช็ก QR กับเลขบัญชีให้ตรงก่อนรับชำระ
+                          {t(uiLocale, "orders.create.paymentAccount.qrPreview.hint")}
                         </p>
                       </div>
                       <button
@@ -3342,7 +3457,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
                         onClick={() => setShowQrAccountPreview((current) => !current)}
                         disabled={loading}
                       >
-                        {showQrAccountPreview ? "ซ่อน QR" : "แสดง QR"}
+                        {showQrAccountPreview
+                          ? t(uiLocale, "orders.create.paymentAccount.qrPreview.toggle.hide")
+                          : t(uiLocale, "orders.create.paymentAccount.qrPreview.toggle.show")}
                       </button>
                     </div>
 
@@ -3356,8 +3473,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
 	                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 shadow-sm hover:border-slate-400"
 	                                onClick={openQrImageFull}
 	                                disabled={loading}
-	                                aria-label="เปิดรูป QR เต็ม"
-	                                title="เปิดรูป QR เต็ม"
+	                                aria-label={t(uiLocale, "orders.create.paymentAccount.qrPreview.openFullAria")}
+	                                title={t(uiLocale, "orders.create.paymentAccount.qrPreview.openFullAria")}
 	                              >
 	                                <Expand className="h-4 w-4" />
 	                              </button>
@@ -3368,8 +3485,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
 	                                  void downloadQrImage();
 	                                }}
 	                                disabled={loading}
-	                                aria-label="ดาวน์โหลดรูป QR"
-	                                title="ดาวน์โหลดรูป QR"
+	                                aria-label={t(uiLocale, "orders.create.paymentAccount.qrPreview.downloadAria")}
+	                                title={t(uiLocale, "orders.create.paymentAccount.qrPreview.downloadAria")}
 	                              >
 	                                <ArrowDownToLine className="h-4 w-4" />
 	                              </button>
@@ -3385,17 +3502,25 @@ export function OrdersManagement(props: OrdersManagementProps) {
                           </div>
                         ) : (
                           <p className="rounded-md border border-dashed border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                            บัญชีนี้ยังไม่มีรูป QR
+                            {t(uiLocale, "orders.create.paymentAccount.qrPreview.noQrImage")}
                           </p>
                         )}
 
                         <div className="space-y-1.5 text-xs text-slate-600">
                           <p className="font-medium text-slate-800">{selectedQrPaymentAccount.displayName}</p>
-                          <p>ธนาคาร: {resolveLaosBankDisplayName(selectedQrPaymentAccount.bankName)}</p>
-                          <p>ชื่อบัญชี: {selectedQrPaymentAccount.accountName}</p>
+                          <p>
+                            {t(uiLocale, "orders.create.paymentAccount.details.bankPrefix")}{" "}
+                            {resolveLaosBankDisplayName(selectedQrPaymentAccount.bankName)}
+                          </p>
+                          <p>
+                            {t(uiLocale, "orders.create.paymentAccount.details.accountNamePrefix")}{" "}
+                            {selectedQrPaymentAccount.accountName}
+                          </p>
                           <div className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
                             <div className="min-w-0">
-                              <p className="text-[11px] text-slate-500">เลขบัญชี</p>
+                              <p className="text-[11px] text-slate-500">
+                                {t(uiLocale, "orders.create.paymentAccount.details.accountNumberLabel")}
+                              </p>
                               <p className="truncate font-medium text-slate-900">
                                 {selectedQrPaymentAccount.accountNumber || "-"}
                               </p>
@@ -3409,7 +3534,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                                 }}
                                 disabled={loading}
                               >
-                                คัดลอกเลขบัญชี
+                                {t(uiLocale, "orders.create.paymentAccount.details.copyAccountNumber")}
                               </button>
                             ) : null}
                           </div>
@@ -3420,25 +3545,27 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 ) : null}
                 <p className="text-xs text-slate-500">
                   {catalog.requireSlipForLaoQr
-                    ? "นโยบายร้าน: ต้องแนบสลิปก่อนยืนยันชำระ"
-                    : "นโยบายร้าน: ไม่บังคับแนบสลิป"}
+                    ? t(uiLocale, "orders.create.paymentAccount.policy.requireSlip")
+                    : t(uiLocale, "orders.create.paymentAccount.policy.noSlip")}
                 </p>
               </div>
             ) : null}
 
             {watchedPaymentMethod === "ON_CREDIT" ? (
               <p className="rounded-md border border-dashed border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                โหมดค้างจ่าย: สร้างออเดอร์แบบยังไม่รับเงิน และค่อยยืนยันชำระภายหลัง
+                {t(uiLocale, "orders.create.paymentMethod.hint.onCredit")}
               </p>
             ) : null}
 
             {watchedPaymentMethod === "COD" ? (
               <p className="rounded-md border border-dashed border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                COD: ลูกค้าจ่ายปลายทาง ระบบจะตั้งสถานะชำระเป็นรอปิดยอด COD
+                {t(uiLocale, "orders.create.paymentMethod.hint.cod")}
               </p>
             ) : null}
             <div className="space-y-2">
-              <label className="text-xs text-muted-foreground">สกุลที่รับชำระในออเดอร์นี้</label>
+              <label className="text-xs text-muted-foreground">
+                {t(uiLocale, "orders.create.paymentCurrency.label")}
+              </label>
               {supportedPaymentCurrencies.length <= 1 ? (
                 <div className="flex h-10 items-center rounded-md border bg-slate-50 px-3 text-sm font-medium text-slate-700">
                   {currencyLabel(selectedPaymentCurrency)}
@@ -3472,37 +3599,57 @@ export function OrdersManagement(props: OrdersManagementProps) {
               )}
               <p className="text-xs text-slate-500">
                 {supportedPaymentCurrencies.length <= 1
-                  ? `ร้านนี้รับ ${currencyLabel(selectedPaymentCurrency)} สกุลเดียว (ระบบเลือกให้อัตโนมัติ)`
-                  : `เลือกรับชำระได้: ${supportedPaymentCurrencies.map((currency) => currencyLabel(currency)).join(" / ")}`}
+                  ? `${t(uiLocale, "orders.create.paymentCurrency.hint.single.prefix")} ${currencyLabel(
+                      selectedPaymentCurrency,
+                    )} ${t(uiLocale, "orders.create.paymentCurrency.hint.single.suffix")}`
+                  : `${t(uiLocale, "orders.create.paymentCurrency.hint.multi.prefix")} ${supportedPaymentCurrencies
+                      .map((currency) => currencyLabel(currency))
+                      .join(" / ")}`}
               </p>
             </div>
 
             <div className="rounded-lg bg-slate-50 p-3 text-sm">
-              <p>ยอดสินค้า: {subtotal.toLocaleString("th-TH")} {catalog.storeCurrency}</p>
-              <p>ส่วนลด: {totals.discount.toLocaleString("th-TH")} {catalog.storeCurrency}</p>
               <p>
-                VAT ({vatModeLabel(catalog.vatMode)}): {totals.vatAmount.toLocaleString("th-TH")}{" "}
+                {t(uiLocale, "orders.create.summary.subtotalPrefix")}:{" "}
+                {subtotal.toLocaleString(numberLocale)} {catalog.storeCurrency}
+              </p>
+              <p>
+                {t(uiLocale, "orders.create.summary.discountPrefix")}:{" "}
+                {totals.discount.toLocaleString(numberLocale)} {catalog.storeCurrency}
+              </p>
+              <p>
+                {t(uiLocale, "orders.create.summary.vatPrefix")} ({vatModeLabel(uiLocale, catalog.vatMode)}):{" "}
+                {totals.vatAmount.toLocaleString(numberLocale)}{" "}
                 {catalog.storeCurrency}
               </p>
               <p className="font-semibold">
-                ยอดรวม: {totals.total.toLocaleString("th-TH")} {catalog.storeCurrency}
+                {t(uiLocale, "orders.create.summary.totalPrefix")}:{" "}
+                {totals.total.toLocaleString(numberLocale)} {catalog.storeCurrency}
               </p>
               <p className="text-xs text-slate-500">
-                สกุลชำระที่เลือก: {currencyLabel(selectedPaymentCurrency)}
+                {t(uiLocale, "orders.create.summary.selectedCurrencyPrefix")}:{" "}
+                {currencyLabel(selectedPaymentCurrency)}
               </p>
               <p className="text-xs text-slate-500">
-                ประเภทออเดอร์: {checkoutFlowLabel[checkoutFlow]}
+                {t(uiLocale, "orders.create.summary.checkoutFlowPrefix")}{" "}
+                {t(uiLocale, checkoutFlowLabelKey[checkoutFlow])}
               </p>
-              <p className="text-xs text-slate-500">วิธีชำระ: {paymentMethodLabel[watchedPaymentMethod]}</p>
+              <p className="text-xs text-slate-500">
+                {t(uiLocale, "orders.create.summary.paymentMethodPrefix")}{" "}
+                {t(uiLocale, paymentMethodLabelKey[watchedPaymentMethod])}
+              </p>
               {isOnlineCheckout && watchedShippingProvider.trim() ? (
-                <p className="text-xs text-slate-500">ขนส่ง: {watchedShippingProvider.trim()}</p>
+                <p className="text-xs text-slate-500">
+                  {t(uiLocale, "orders.create.summary.shippingProviderPrefix")}{" "}
+                  {watchedShippingProvider.trim()}
+                </p>
               ) : null}
             </div>
 
             {!inSheet ? (
               <div>
                 <Button type="submit" className="h-10 w-full" disabled={loading || !canCreate}>
-                  {loading ? "กำลังบันทึก..." : "สร้างออเดอร์"}
+                  {loading ? t(uiLocale, "common.action.saving") : t(uiLocale, "orders.create.action.submit")}
                 </Button>
               </div>
             ) : null}
@@ -3510,7 +3657,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
         ) : (
           <div className="space-y-2 rounded-lg border border-dashed p-3">
             <p className="text-xs text-slate-600">
-              เลือกสินค้าเสร็จแล้วให้กดไปขั้นถัดไป เพื่อกรอกลูกค้า/การชำระเงิน/ที่อยู่จัดส่ง
+              {t(uiLocale, "orders.create.products.stepHint")}
             </p>
             <Button
               type="button"
@@ -3518,7 +3665,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
               onClick={() => setCreateStep("details")}
               disabled={loading || !canContinueToDetails}
             >
-              ถัดไป: รายละเอียดออเดอร์
+              {t(uiLocale, "orders.create.action.nextDetails")}
             </Button>
           </div>
         )}
@@ -3537,7 +3684,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
             <input
               type="text"
               className="h-10 min-w-0 w-full rounded-md border bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
-              placeholder="ค้นหา SKU, ชื่อ หรือบาร์โค้ด"
+              placeholder={t(uiLocale, "orders.create.products.search.placeholder")}
               value={quickAddKeyword}
               onChange={(event) => setQuickAddKeyword(event.target.value)}
               disabled={loading || !hasCatalogProducts}
@@ -3548,11 +3695,11 @@ export function OrdersManagement(props: OrdersManagementProps) {
               className="h-10 w-10 p-0"
               disabled={loading || !hasCatalogProducts}
               onClick={openScannerSheet}
-              aria-label="สแกนบาร์โค้ด"
-              title="สแกนบาร์โค้ด"
+              aria-label={t(uiLocale, "orders.create.products.action.scanBarcode")}
+              title={t(uiLocale, "orders.create.products.action.scanBarcode")}
             >
               <ScanLine className="h-4 w-4" />
-              <span className="sr-only">สแกนบาร์โค้ด</span>
+              <span className="sr-only">{t(uiLocale, "orders.create.products.action.scanBarcode")}</span>
             </Button>
             <button
               type="button"
@@ -3564,7 +3711,12 @@ export function OrdersManagement(props: OrdersManagementProps) {
               onClick={() => setQuickAddOnlyAvailable((prev) => !prev)}
               disabled={loading || !hasCatalogProducts}
             >
-              {quickAddOnlyAvailable ? "มีสต็อก✓" : "มีสต็อก"}
+              {t(
+                uiLocale,
+                quickAddOnlyAvailable
+                  ? "orders.create.products.filter.available.compact.on"
+                  : "orders.create.products.filter.available.compact.off",
+              )}
             </button>
           </div>
 
@@ -3577,7 +3729,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
               disabled={loading}
             >
               <Clock3 className="h-3.5 w-3.5" />
-              ล่าสุด
+              {t(uiLocale, "orders.create.recentOrders.openButton")}
             </Button>
           </div>
 
@@ -3593,7 +3745,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 onClick={() => setQuickAddCategoryId("ALL")}
                 disabled={loading || !hasCatalogProducts}
               >
-                ทั้งหมด
+                {t(uiLocale, "common.filter.all")}
               </button>
               {quickAddCategories.map((category) => (
                 <button
@@ -3618,17 +3770,19 @@ export function OrdersManagement(props: OrdersManagementProps) {
           {notFoundBarcode ? (
             <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-2">
               <p className="text-xs text-amber-700">
-                ไม่พบบาร์โค้ด <span className="font-semibold">{notFoundBarcode}</span> กรุณาค้นหาเอง
+                {t(uiLocale, "orders.create.products.notFoundBarcode.prefix")}{" "}
+                <span className="font-semibold">{notFoundBarcode}</span>{" "}
+                {t(uiLocale, "orders.create.products.notFoundBarcode.suffix")}
               </p>
               <div className="flex flex-col gap-2 sm:flex-row">
-                <input
-                  type="text"
-                  className="h-10 flex-1 rounded-md border border-amber-300 bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
-                  placeholder="ค้นหาด้วยชื่อสินค้า, SKU หรือบาร์โค้ด"
-                  value={manualSearchKeyword}
-                  onChange={(event) => setManualSearchKeyword(event.target.value)}
-                  disabled={loading}
-                />
+                  <input
+                    type="text"
+                    className="h-10 flex-1 rounded-md border border-amber-300 bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
+                    placeholder={t(uiLocale, "orders.create.products.manualSearch.placeholder")}
+                    value={manualSearchKeyword}
+                    onChange={(event) => setManualSearchKeyword(event.target.value)}
+                    disabled={loading}
+                  />
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -3636,7 +3790,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     onClick={openScannerSheet}
                     disabled={loading}
                   >
-                    สแกนใหม่
+                    {t(uiLocale, "orders.create.products.action.scanAgain")}
                   </button>
                   <button
                     type="button"
@@ -3647,7 +3801,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     }}
                     disabled={loading}
                   >
-                    ปิด
+                    {t(uiLocale, "common.action.close")}
                   </button>
                 </div>
               </div>
@@ -3670,7 +3824,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-amber-700">ไม่พบสินค้าจากคำค้นนี้</p>
+                  <p className="text-xs text-amber-700">
+                    {t(uiLocale, "orders.create.products.manualSearch.noMatch")}
+                  </p>
                 )
               ) : null}
             </div>
@@ -3680,18 +3836,20 @@ export function OrdersManagement(props: OrdersManagementProps) {
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_20rem] md:items-start">
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-slate-900">สินค้า</p>
+              <p className="text-sm font-semibold text-slate-900">
+                {t(uiLocale, "orders.create.products.sectionTitle")}
+              </p>
               <p className="text-xs text-slate-500">
-                {quickAddProducts.length.toLocaleString("th-TH")} รายการ
+                {quickAddProducts.length.toLocaleString(numberLocale)} {t(uiLocale, "orders.unit.items")}
               </p>
             </div>
             {!hasCatalogProducts ? (
               <p className="rounded-lg border border-dashed p-3 text-sm text-slate-500">
-                ยังไม่มีสินค้าในระบบ
+                {t(uiLocale, "orders.create.products.quickAdd.emptyCatalog")}
               </p>
             ) : quickAddProducts.length === 0 ? (
               <p className="rounded-lg border border-dashed p-3 text-sm text-slate-500">
-                ไม่พบสินค้าที่ตรงกับคำค้น
+                {t(uiLocale, "orders.create.products.quickAdd.noMatch")}
               </p>
             ) : (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
@@ -3703,7 +3861,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     onClick={() => {
                       const addedProduct = addProductFromCatalog(product.productId);
                       if (addedProduct) {
-                        setScanMessage(`เพิ่มสินค้า ${addedProduct.sku} - ${addedProduct.name} แล้ว`);
+                        setScanMessage(
+                          `${t(uiLocale, "orders.create.scan.addedProduct.prefix")} ${addedProduct.sku} - ${addedProduct.name} ${t(uiLocale, "orders.create.scan.addedProduct.suffix")}`,
+                        );
                       }
                     }}
                     disabled={loading}
@@ -3719,7 +3879,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-[11px] text-slate-400">
-                          NO IMG
+                          {t(uiLocale, "common.noImageShort")}
                         </div>
                       )}
                     </div>
@@ -3728,19 +3888,20 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       {product.name}
                     </p>
                     <p className="text-[11px] font-semibold text-blue-700 sm:text-xs">
-                      {getProductDefaultUnitPrice(product).toLocaleString("th-TH")} {catalog.storeCurrency}
+                      {getProductDefaultUnitPrice(product).toLocaleString(numberLocale)} {catalog.storeCurrency}
                     </p>
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-[11px] text-slate-500">
-                        คงเหลือ {product.available.toLocaleString("th-TH")}
+                        {t(uiLocale, "orders.create.products.stockRemainingPrefix")}{" "}
+                        {product.available.toLocaleString(numberLocale)}
                       </p>
                       {product.available > 0 ? (
                         <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
-                          + เพิ่ม
+                          {t(uiLocale, "orders.create.products.quickAdd.addPrefix")}
                         </span>
                       ) : (
                         <span className="rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-700">
-                          หมด
+                          {t(uiLocale, "orders.create.products.outOfStockShort")}
                         </span>
                       )}
                     </div>
@@ -3760,7 +3921,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
           >
             <div className="flex items-center justify-between gap-2 pb-2">
               <p className="text-sm font-semibold text-slate-900">
-                ตะกร้า ({watchedItems.length.toLocaleString("th-TH")})
+                {t(uiLocale, "orders.create.cart.title")} ({watchedItems.length.toLocaleString(numberLocale)})
               </p>
               <button
                 type="button"
@@ -3768,13 +3929,13 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 onClick={() => setShowCartSheet(true)}
                 disabled={loading || watchedItems.length === 0}
               >
-                เปิดเต็ม
+                {t(uiLocale, "orders.create.cart.expand")}
               </button>
             </div>
 
             {watchedItems.length === 0 ? (
               <p className="rounded-lg border border-dashed p-3 text-xs text-slate-500">
-                ยังไม่มีรายการสินค้าในตะกร้า
+                {t(uiLocale, "orders.create.products.emptyCart")}
               </p>
             ) : (
               <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
@@ -3793,10 +3954,11 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-xs font-medium text-slate-900">
-                            {selectedProduct?.name ?? "ไม่พบสินค้า"}
+                            {selectedProduct?.name ?? t(uiLocale, "orders.create.products.productNotFound")}
                           </p>
                           <p className="text-[11px] text-slate-500">
-                            คงเหลือ {selectedProduct?.available.toLocaleString("th-TH") ?? 0}
+                            {t(uiLocale, "orders.create.products.stockRemainingPrefix")}{" "}
+                            {selectedProduct?.available.toLocaleString(numberLocale) ?? 0}
                           </p>
                         </div>
                         <button
@@ -3805,7 +3967,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                           onClick={() => remove(index)}
                           disabled={loading}
                         >
-                          ลบ
+                          {t(uiLocale, "common.action.delete")}
                         </button>
                       </div>
 
@@ -3833,25 +3995,25 @@ export function OrdersManagement(props: OrdersManagementProps) {
                             className="h-7 w-7 rounded-md border text-xs text-slate-700"
                             onClick={() => decreaseItemQty(index)}
                             disabled={loading}
-                            aria-label="ลดจำนวน"
+                            aria-label={t(uiLocale, "orders.create.products.qty.decreaseAria")}
                           >
                             -
                           </button>
                           <div className="min-w-7 text-center text-xs font-medium text-slate-900">
-                            {(Number(item.qty ?? 0) || 0).toLocaleString("th-TH")}
+                            {(Number(item.qty ?? 0) || 0).toLocaleString(numberLocale)}
                           </div>
                           <button
                             type="button"
                             className="h-7 w-7 rounded-md border text-xs text-slate-700"
                             onClick={() => increaseItemQty(index)}
                             disabled={loading || availableQty <= 0 || currentQty >= availableQty}
-                            aria-label="เพิ่มจำนวน"
+                            aria-label={t(uiLocale, "orders.create.products.qty.increaseAria")}
                           >
                             +
                           </button>
                         </div>
                         <span className="text-right text-xs font-semibold tabular-nums text-slate-900">
-                          {lineTotal.toLocaleString("th-TH")}
+                          {lineTotal.toLocaleString(numberLocale)}
                         </span>
                       </div>
                     </div>
@@ -3863,10 +4025,11 @@ export function OrdersManagement(props: OrdersManagementProps) {
             <div className="mt-3 shrink-0 space-y-2 border-t border-slate-200 bg-white pt-3">
               <div className="space-y-1 rounded-lg bg-slate-50 p-3 text-xs">
                 <p className="text-slate-600">
-                  {watchedItems.length.toLocaleString("th-TH")} รายการ • {cartQtyTotal.toLocaleString("th-TH")} ชิ้น
+                  {watchedItems.length.toLocaleString(numberLocale)} {t(uiLocale, "orders.unit.items")} •{" "}
+                  {cartQtyTotal.toLocaleString(numberLocale)} {t(uiLocale, "orders.unit.pcs")}
                 </p>
                 <p className="text-base font-semibold text-slate-900">
-                  {totals.total.toLocaleString("th-TH")} {catalog.storeCurrency}
+                  {totals.total.toLocaleString(numberLocale)} {catalog.storeCurrency}
                 </p>
               </div>
 
@@ -3876,7 +4039,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 onClick={openCheckoutSheet}
                 disabled={loading || watchedItems.length === 0}
               >
-                ถัดไป: ชำระเงิน
+                {t(uiLocale, "orders.create.action.nextPayment")}
               </Button>
             </div>
           </aside>
@@ -3886,7 +4049,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
           <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
             <div className="flex items-center justify-between gap-2 text-[11px] text-slate-600">
               <p>
-                {watchedItems.length.toLocaleString("th-TH")} รายการ • {cartQtyTotal.toLocaleString("th-TH")} ชิ้น
+                {watchedItems.length.toLocaleString(numberLocale)} {t(uiLocale, "orders.unit.items")} •{" "}
+                {cartQtyTotal.toLocaleString(numberLocale)} {t(uiLocale, "orders.unit.pcs")}
               </p>
               <button
                 type="button"
@@ -3894,7 +4058,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 onClick={() => setShowCartSheet(true)}
                 disabled={watchedItems.length === 0}
               >
-                ตะกร้า
+                {t(uiLocale, "orders.create.cart.title")}
               </button>
             </div>
             <button
@@ -3903,7 +4067,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
               onClick={openCheckoutSheet}
               disabled={watchedItems.length === 0 || loading}
             >
-              ถัดไป: ชำระเงิน {totals.total.toLocaleString("th-TH")} {catalog.storeCurrency}
+              {t(uiLocale, "orders.create.action.nextPayment")} {totals.total.toLocaleString(numberLocale)}{" "}
+              {catalog.storeCurrency}
             </button>
           </div>
         </div>
@@ -3917,13 +4082,13 @@ export function OrdersManagement(props: OrdersManagementProps) {
         canCreate ? (
           renderCreateOnlyPosCatalog()
         ) : (
-          <p className="text-sm text-red-600">คุณไม่มีสิทธิ์สร้างออเดอร์</p>
+          <p className="text-sm text-red-600">{t(uiLocale, "orders.create.error.noPermission")}</p>
         )
       ) : (
         <>
           <article className="space-y-3 rounded-xl border bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold">รายการออเดอร์</h2>
+              <h2 className="text-sm font-semibold">{t(uiLocale, "orders.management.listTitle")}</h2>
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
@@ -3931,7 +4096,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                   onClick={() => router.push("/orders/new")}
                   disabled={!canCreate || loading}
                 >
-                  เข้าโหมด POS
+                  {t(uiLocale, "orders.management.enterPosMode")}
                 </Button>
               </div>
             </div>
@@ -3946,7 +4111,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     activeTab === tab.key ? "bg-blue-600 text-white" : "border bg-white text-slate-600"
                   }`}
                 >
-                  {tab.label}
+                  {t(uiLocale, tab.labelKey)}
                 </button>
               ))}
             </div>
@@ -3955,13 +4120,13 @@ export function OrdersManagement(props: OrdersManagementProps) {
           <section className="space-y-2">
             {visibleOrders.length === 0 ? (
               <article className="rounded-xl border bg-white p-4 text-sm text-muted-foreground shadow-sm">
-                ไม่พบออเดอร์ในแท็บนี้
+                {t(uiLocale, "orders.page.emptyTab")}
               </article>
             ) : (
               <>
                 <div className="space-y-2 md:hidden">
                   {visibleOrders.map((order) => {
-                    const badges = buildOrderStatusBadges(order);
+                    const badges = buildOrderStatusBadges(uiLocale, order);
                     return (
                       <Link
                         key={order.id}
@@ -3972,11 +4137,13 @@ export function OrdersManagement(props: OrdersManagementProps) {
                           <div>
                             <p className="text-xs text-muted-foreground">{order.orderNo}</p>
                             <h3 className="text-sm font-semibold">
-                              {order.customerName || order.contactDisplayName || "ลูกค้าทั่วไป"}
+                              {order.customerName ||
+                                order.contactDisplayName ||
+                                t(uiLocale, "orders.customer.guest")}
                             </h3>
                             <p className="text-xs text-muted-foreground">
-                              {channelSummaryLabel(order)} • {order.paymentCurrency} •{" "}
-                              {paymentMethodLabel[order.paymentMethod]}
+                              {t(uiLocale, channelSummaryLabelKey(order))} • {order.paymentCurrency} •{" "}
+                              {t(uiLocale, paymentMethodLabelKey[order.paymentMethod])}
                             </p>
                           </div>
                           <div className="flex flex-col items-end gap-1">
@@ -3991,7 +4158,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                           </div>
                         </div>
                         <p className="mt-2 text-sm font-medium">
-                          {order.total.toLocaleString("th-TH")} {catalog.storeCurrency}
+                          {order.total.toLocaleString(numberLocale)} {catalog.storeCurrency}
                         </p>
                       </Link>
                     );
@@ -4023,7 +4190,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                           className="cursor-pointer border-t transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                           role="link"
                           tabIndex={0}
-                          aria-label={`เปิดรายละเอียดออเดอร์ ${row.original.orderNo}`}
+                          aria-label={`${t(uiLocale, "orders.management.table.openOrderAria.prefix")} ${row.original.orderNo}`}
                           onClick={() => router.push(`/orders/${row.original.id}`)}
                           onKeyDown={(event) => {
                             if (event.key === "Enter" || event.key === " ") {
@@ -4051,8 +4218,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
 
                 <div className="flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-xs">
                   <p className="text-muted-foreground">
-                    หน้า {ordersPage!.page.toLocaleString("th-TH")} /{" "}
-                    {ordersPage!.pageCount.toLocaleString("th-TH")} ({ordersPage!.total.toLocaleString("th-TH")} รายการ)
+                    {t(uiLocale, "orders.pagination.pagePrefix")}{" "}
+                    {ordersPage!.page.toLocaleString(numberLocale)} /{" "}
+                    {ordersPage!.pageCount.toLocaleString(numberLocale)} (
+                    {ordersPage!.total.toLocaleString(numberLocale)} {t(uiLocale, "orders.pagination.itemsSuffix")})
                   </p>
                   <div className="flex items-center gap-2">
                     <Button
@@ -4062,7 +4231,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       disabled={ordersPage!.page <= 1}
                       onClick={() => router.push(buildOrdersUrl(activeTab, ordersPage!.page - 1))}
                     >
-                      ก่อนหน้า
+                      {t(uiLocale, "orders.pagination.prev")}
                     </Button>
                     <Button
                       type="button"
@@ -4071,7 +4240,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       disabled={ordersPage!.page >= ordersPage!.pageCount}
                       onClick={() => router.push(buildOrdersUrl(activeTab, ordersPage!.page + 1))}
                     >
-                      ถัดไป
+                      {t(uiLocale, "orders.pagination.next")}
                     </Button>
                   </div>
                 </div>
@@ -4084,16 +4253,18 @@ export function OrdersManagement(props: OrdersManagementProps) {
       <SlideUpSheet
         isOpen={showScannerPermissionSheet}
         onClose={() => setShowScannerPermissionSheet(false)}
-        title="ขออนุญาตใช้กล้อง"
-        description="ระบบต้องใช้กล้องเพื่อสแกนบาร์โค้ดสินค้า"
+        title={t(uiLocale, "products.scannerPermission.title")}
+        description={t(uiLocale, "products.scannerPermission.description")}
       >
         <div className="space-y-3">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-            <p className="font-medium text-slate-700">ทำไมต้องใช้กล้อง?</p>
+            <p className="font-medium text-slate-700">
+              {t(uiLocale, "products.scannerPermission.whyTitle")}
+            </p>
             <ul className="mt-2 list-disc space-y-1 pl-4">
-              <li>สแกนบาร์โค้ดได้เร็วขึ้น</li>
-              <li>ลดความผิดพลาดจากการพิมพ์</li>
-              <li>ใช้งานได้ทันทีในหน้านี้</li>
+              <li>{t(uiLocale, "products.scannerPermission.bullet.fast")}</li>
+              <li>{t(uiLocale, "products.scannerPermission.bullet.fewerTypos")}</li>
+              <li>{t(uiLocale, "products.scannerPermission.bullet.ready")}</li>
             </ul>
           </div>
 
@@ -4104,7 +4275,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
               className="h-10 flex-1"
               onClick={() => setShowScannerPermissionSheet(false)}
             >
-              ยกเลิก
+              {t(uiLocale, "common.action.cancel")}
             </Button>
             <Button
               type="button"
@@ -4116,7 +4287,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 setShowScannerSheet(true);
               }}
             >
-              อนุญาตและสแกน
+              {t(uiLocale, "products.scannerPermission.allowAndScan")}
             </Button>
           </div>
         </div>
@@ -4124,8 +4295,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
       <SlideUpSheet
         isOpen={showScannerSheet}
         onClose={() => setShowScannerSheet(false)}
-        title="สแกนบาร์โค้ดสินค้า"
-        description="สแกนแล้วเพิ่มสินค้าเข้าออเดอร์อัตโนมัติ"
+        title={t(uiLocale, "products.scanner.title")}
+        description={t(uiLocale, "orders.create.scanner.description")}
         disabled={loading}
       >
         <div className="p-4">
@@ -4143,14 +4314,18 @@ export function OrdersManagement(props: OrdersManagementProps) {
         <SlideUpSheet
           isOpen={showRecentOrdersSheet}
           onClose={() => setShowRecentOrdersSheet(false)}
-          title="ออเดอร์ล่าสุด"
-          description={`ล่าสุด ${CREATE_ONLY_RECENT_ORDERS_LIMIT} รายการ`}
+          title={t(uiLocale, "orders.create.recentOrders.title")}
+          description={`${t(uiLocale, "orders.create.recentOrders.description.prefix")} ${CREATE_ONLY_RECENT_ORDERS_LIMIT.toLocaleString(numberLocale)} ${t(uiLocale, "orders.create.recentOrders.description.suffix")}`}
           disabled={recentOrdersLoading}
         >
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-slate-600">
-                เลือกรายการแล้วกด <span className="font-semibold text-slate-800">เปิดสรุป</span> เพื่อกลับไป modal สำเร็จ
+                {t(uiLocale, "orders.create.recentOrders.instruction.prefix")}{" "}
+                <span className="font-semibold text-slate-800">
+                  {t(uiLocale, "orders.action.openSummary")}
+                </span>{" "}
+                {t(uiLocale, "orders.create.recentOrders.instruction.suffix")}
               </p>
               <Button
                 type="button"
@@ -4161,12 +4336,12 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 }}
                 disabled={recentOrdersLoading}
               >
-                {recentOrdersLoading ? "กำลังโหลด..." : "รีเฟรช"}
+                {recentOrdersLoading ? t(uiLocale, "common.loading") : t(uiLocale, "common.action.refresh")}
               </Button>
             </div>
             {recentOrdersLoading ? (
               <p className="rounded-lg border border-dashed p-3 text-xs text-slate-500">
-                กำลังโหลดออเดอร์ล่าสุด...
+                {t(uiLocale, "orders.create.recentOrders.loading")}
               </p>
             ) : recentOrdersError ? (
               <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-600">
@@ -4174,7 +4349,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
               </p>
             ) : recentOrders.length === 0 ? (
               <p className="rounded-lg border border-dashed p-3 text-xs text-slate-500">
-                ยังไม่มีออเดอร์ล่าสุดให้แสดง
+                {t(uiLocale, "orders.create.recentOrders.empty")}
               </p>
             ) : (
               <div className="space-y-2">
@@ -4184,16 +4359,17 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       <div>
                         <p className="text-sm font-semibold text-slate-900">{order.orderNo}</p>
                         <p className="text-xs text-slate-500">
-                          {new Date(order.createdAt).toLocaleString("th-TH")}
+                          {new Date(order.createdAt).toLocaleString(numberLocale)}
                         </p>
                       </div>
                       <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
-                        {checkoutFlowLabel[order.checkoutFlow]}
+                        {t(uiLocale, checkoutFlowLabelKey[order.checkoutFlow])}
                       </span>
                     </div>
                     <p className="mt-2 text-xs text-slate-600">
-                      ยอด {order.total.toLocaleString("th-TH")} {order.paymentCurrency} •{" "}
-                      {paymentMethodLabel[order.paymentMethod]}
+                      {t(uiLocale, "orders.create.recentOrders.totalPrefix")}{" "}
+                      {order.total.toLocaleString(numberLocale)} {order.paymentCurrency} •{" "}
+                      {t(uiLocale, paymentMethodLabelKey[order.paymentMethod])}
                     </p>
                     <div
                       className={`mt-2 grid gap-2 ${
@@ -4207,7 +4383,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                         className="h-8 text-xs"
                         onClick={() => openRecentOrderSummary(order)}
                       >
-                        เปิดสรุป
+                        {t(uiLocale, "orders.action.openSummary")}
                       </Button>
                       <Button
                         type="button"
@@ -4218,7 +4394,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                           router.push(`/orders/${order.id}`);
                         }}
                       >
-                        ดูรายละเอียด
+                        {t(uiLocale, "orders.action.viewDetail")}
                       </Button>
                       {canRequestCancel && CANCELLABLE_ORDER_STATUSES.has(order.status) ? (
                         <Button
@@ -4226,7 +4402,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                           className="h-8 bg-rose-600 text-xs text-white hover:bg-rose-700"
                           onClick={() => openRecentOrderCancelModal(order)}
                         >
-                          ยกเลิก
+                          {t(uiLocale, "orders.action.cancelOrder")}
                         </Button>
                       ) : null}
                     </div>
@@ -4260,14 +4436,14 @@ export function OrdersManagement(props: OrdersManagementProps) {
       <SlideUpSheet
         isOpen={showCartSheet}
         onClose={() => setShowCartSheet(false)}
-        title="ตะกร้าสินค้า"
-        description="ตรวจสอบและแก้จำนวนสินค้าก่อนสร้างออเดอร์"
+        title={t(uiLocale, "orders.create.cart.sheet.title")}
+        description={t(uiLocale, "orders.create.cart.sheet.description")}
         disabled={loading}
       >
         <div className="space-y-3">
           {watchedItems.length === 0 ? (
             <p className="rounded-lg border border-dashed p-3 text-sm text-slate-500">
-              ยังไม่มีรายการสินค้าในตะกร้า
+              {t(uiLocale, "orders.create.products.emptyCart")}
             </p>
           ) : (
             <div className="space-y-2">
@@ -4286,10 +4462,11 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-slate-900">
-                          {selectedProduct?.name ?? "ไม่พบสินค้า"}
+                          {selectedProduct?.name ?? t(uiLocale, "orders.create.products.productNotFound")}
                         </p>
                         <p className="text-xs text-slate-500">
-                          คงเหลือ {selectedProduct?.available.toLocaleString("th-TH") ?? 0}
+                          {t(uiLocale, "orders.create.products.stockRemainingPrefix")}{" "}
+                          {selectedProduct?.available.toLocaleString(numberLocale) ?? 0}
                         </p>
                       </div>
                       <button
@@ -4298,7 +4475,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                         onClick={() => remove(index)}
                         disabled={loading}
                       >
-                        ลบ
+                        {t(uiLocale, "common.action.delete")}
                       </button>
                     </div>
 
@@ -4326,25 +4503,25 @@ export function OrdersManagement(props: OrdersManagementProps) {
                           className="h-8 w-8 rounded-md border text-sm text-slate-700"
                           onClick={() => decreaseItemQty(index)}
                           disabled={loading}
-                          aria-label="ลดจำนวน"
+                          aria-label={t(uiLocale, "orders.create.products.qty.decreaseAria")}
                         >
                           -
                         </button>
                         <div className="min-w-8 text-center text-xs font-medium text-slate-800">
-                          {(Number(item.qty ?? 0) || 0).toLocaleString("th-TH")}
+                          {(Number(item.qty ?? 0) || 0).toLocaleString(numberLocale)}
                         </div>
                         <button
                           type="button"
                           className="h-8 w-8 rounded-md border text-sm text-slate-700"
                           onClick={() => increaseItemQty(index)}
                           disabled={loading || availableQty <= 0 || currentQty >= availableQty}
-                          aria-label="เพิ่มจำนวน"
+                          aria-label={t(uiLocale, "orders.create.products.qty.increaseAria")}
                         >
                           +
                         </button>
                       </div>
                       <p className="text-right text-sm font-semibold tabular-nums text-slate-900">
-                        {lineTotal.toLocaleString("th-TH")} {catalog.storeCurrency}
+                        {lineTotal.toLocaleString(numberLocale)} {catalog.storeCurrency}
                       </p>
                     </div>
                   </div>
@@ -4355,17 +4532,20 @@ export function OrdersManagement(props: OrdersManagementProps) {
 
           <div className="rounded-lg bg-slate-50 p-3 text-sm">
             <p>
-              จำนวนทั้งหมด: {cartQtyTotal.toLocaleString("th-TH")} ชิ้น ({watchedItems.length.toLocaleString("th-TH")} รายการ)
+              {t(uiLocale, "orders.create.cart.summary.qtyPrefix")}: {cartQtyTotal.toLocaleString(numberLocale)}{" "}
+              {t(uiLocale, "orders.unit.pcs")} ({watchedItems.length.toLocaleString(numberLocale)}{" "}
+              {t(uiLocale, "orders.unit.items")})
             </p>
             <p className="font-semibold">
-              ยอดรวมสุทธิ: {totals.total.toLocaleString("th-TH")} {catalog.storeCurrency}
+              {t(uiLocale, "orders.print.receipt.summary.netTotal")}:{" "}
+              {totals.total.toLocaleString(numberLocale)} {catalog.storeCurrency}
             </p>
           </div>
 
           {isCreateOnlyMode ? (
             <div className="space-y-2">
               <Button type="button" className="h-10 w-full" onClick={openCheckoutSheet}>
-                ไปชำระเงิน / กรอกรายละเอียด
+                {t(uiLocale, "orders.create.cart.sheet.checkoutCta")}
               </Button>
               <Button
                 type="button"
@@ -4373,12 +4553,12 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 className="h-10 w-full"
                 onClick={() => setShowCartSheet(false)}
               >
-                กลับไปเลือกสินค้า
+                {t(uiLocale, "orders.create.products.action.backToProducts")}
               </Button>
             </div>
           ) : (
             <Button type="button" className="h-10 w-full" onClick={() => setShowCartSheet(false)}>
-              กลับไปแก้ฟอร์มออเดอร์
+              {t(uiLocale, "orders.management.cartSheet.backToForm")}
             </Button>
           )}
         </div>
@@ -4389,8 +4569,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
           onClose={requestCloseCheckoutSheet}
           closeOnBackdrop={false}
           scrollToTopOnOpen
-          title="ชำระเงินและรายละเอียดออเดอร์"
-          description="กรอกข้อมูลลูกค้า การชำระเงิน และยืนยันสร้างออเดอร์"
+          title={t(uiLocale, "orders.create.details.sheet.title")}
+          description={t(uiLocale, "orders.create.details.sheet.description")}
           disabled={loading}
           footer={
             <Button
@@ -4399,7 +4579,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
               className="h-10 w-full"
               disabled={loading || !canCreate}
             >
-              {loading ? "กำลังบันทึก..." : "สร้างออเดอร์"}
+              {loading ? t(uiLocale, "common.action.saving") : t(uiLocale, "orders.create.action.submit")}
             </Button>
           }
         >
@@ -4422,10 +4602,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
             className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-4 shadow-xl"
           >
             <h3 id="checkout-close-confirm-title" className="text-sm font-semibold text-slate-900">
-              ปิดหน้าชำระเงิน?
+              {t(uiLocale, "orders.create.details.closeConfirm.title")}
             </h3>
             <p className="mt-1 text-xs text-slate-600">
-              มีข้อมูลที่กรอกไว้ในขั้นตอนนี้ ต้องการปิดหน้าชำระเงินและกลับไปเลือกสินค้าหรือไม่
+              {t(uiLocale, "orders.create.details.closeConfirm.description")}
             </p>
             <div className="mt-4 grid grid-cols-2 gap-2">
               <Button
@@ -4434,10 +4614,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 className="h-9"
                 onClick={() => setShowCheckoutCloseConfirm(false)}
               >
-                กลับไปแก้ไข
+                {t(uiLocale, "orders.create.details.closeConfirm.backEdit")}
               </Button>
               <Button type="button" className="h-9" onClick={closeCheckoutSheet}>
-                ปิดหน้าชำระเงิน
+                {t(uiLocale, "orders.create.details.closeConfirm.close")}
               </Button>
             </div>
           </div>
@@ -4455,15 +4635,15 @@ export function OrdersManagement(props: OrdersManagementProps) {
             <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-3 py-2.5 text-slate-100">
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{selectedQrPaymentAccount.displayName}</p>
-                <p className="truncate text-xs text-slate-400">ดู QR เต็มในหน้าเดิม</p>
+                <p className="truncate text-xs text-slate-400">{t(uiLocale, "orders.qrViewer.sameTabHint")}</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-100 hover:border-slate-500"
                   onClick={openQrImageInNewTab}
-                  aria-label="เปิดรูป QR ในแท็บใหม่"
-                  title="เปิดรูป QR ในแท็บใหม่"
+                  aria-label={t(uiLocale, "orders.qrViewer.openNewTabAria")}
+                  title={t(uiLocale, "orders.qrViewer.openNewTabAria")}
                 >
                   <ExternalLink className="h-4 w-4" />
                 </button>
@@ -4473,8 +4653,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
                   onClick={() => {
                     void downloadQrImage();
                   }}
-                  aria-label="ดาวน์โหลดรูป QR"
-                  title="ดาวน์โหลดรูป QR"
+                  aria-label={t(uiLocale, "orders.qrViewer.downloadAria")}
+                  title={t(uiLocale, "orders.qrViewer.downloadAria")}
                 >
                   <ArrowDownToLine className="h-4 w-4" />
                 </button>
@@ -4482,8 +4662,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
                   type="button"
                   className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-100 hover:border-slate-500"
                   onClick={() => setShowQrImageViewer(false)}
-                  aria-label="ปิดรูป QR"
-                  title="ปิดรูป QR"
+                  aria-label={t(uiLocale, "orders.qrViewer.closeAria")}
+                  title={t(uiLocale, "orders.qrViewer.closeAria")}
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -4508,38 +4688,54 @@ export function OrdersManagement(props: OrdersManagementProps) {
           onClose={closeCreatedOrderSuccess}
           title={
             createdOrderSuccess.checkoutFlow === "PICKUP_LATER"
-              ? "สร้างออเดอร์รับที่ร้านแล้ว"
+              ? t(uiLocale, "orders.create.success.title.pickup")
               : createdOrderSuccess.checkoutFlow === "ONLINE_DELIVERY"
-                ? "สร้างออเดอร์จัดส่งแล้ว"
-                : "สร้างออเดอร์หน้าร้านแล้ว"
+                ? t(uiLocale, "orders.create.success.title.online")
+                : t(uiLocale, "orders.create.success.title.walkIn")
           }
-          description={`เลขที่ออเดอร์ ${createdOrderSuccess.orderNo}`}
+          description={`${t(uiLocale, "orders.table.header.orderNo")} ${createdOrderSuccess.orderNo}`}
         >
           <div className="space-y-3">
             <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
               {createdOrderSuccess.checkoutFlow === "PICKUP_LATER"
-                ? "แนะนำพิมพ์ใบรับสินค้าให้ลูกค้า หรือเปิดรายละเอียดเพื่อติดตามการรับสินค้า"
+                ? t(uiLocale, "orders.create.success.hint.pickup")
                 : createdOrderSuccess.checkoutFlow === "ONLINE_DELIVERY"
-                  ? "ตรวจข้อมูลจัดส่งและพิมพ์บิล/สติ๊กเกอร์ก่อนส่งงานต่อ"
-                  : "แนะนำพิมพ์ใบเสร็จให้ลูกค้า แล้วเริ่มออเดอร์ถัดไปได้ทันที"}
+                  ? t(uiLocale, "orders.create.success.hint.online")
+                  : t(uiLocale, "orders.create.success.hint.walkIn")}
             </p>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-xs font-medium text-slate-700">ตัวอย่างบิล</p>
-                <p className="text-[11px] text-slate-500">พิมพ์แบบใบเสร็จล้วน (ไม่มี layout แอป)</p>
+                <p className="text-xs font-medium text-slate-700">
+                  {t(uiLocale, "orders.create.success.preview.receipt.title")}
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  {t(uiLocale, "orders.create.success.preview.receipt.note")}
+                </p>
               </div>
               {receiptPreviewLoading ? (
-                <p className="text-xs text-slate-500">กำลังโหลดตัวอย่างใบเสร็จ...</p>
+                <p className="text-xs text-slate-500">
+                  {t(uiLocale, "orders.create.success.preview.receipt.loading")}
+                </p>
               ) : receiptPreviewError ? (
                 <p className="text-xs text-red-600">{receiptPreviewError}</p>
               ) : receiptPreviewOrder ? (
                 <div className="mx-auto w-[80mm] rounded-md border border-slate-200 bg-white p-2 text-[10px] text-slate-900">
-                  <p className="text-center text-[11px] font-semibold">ใบเสร็จรับเงิน</p>
-                  <p className="text-center text-[10px]">เลขที่ {receiptPreviewOrder.orderNo}</p>
-                  <p className="mt-1.5">
-                    ลูกค้า: {receiptPreviewOrder.customerName || receiptPreviewOrder.contactDisplayName || "ลูกค้าทั่วไป"}
+                  <p className="text-center text-[11px] font-semibold">
+                    {t(uiLocale, "orders.print.receipt.title")}
                   </p>
-                  <p>วันที่: {new Date(receiptPreviewOrder.createdAt).toLocaleString("th-TH")}</p>
+                  <p className="text-center text-[10px]">
+                    {t(uiLocale, "orders.print.receipt.noPrefix")} {receiptPreviewOrder.orderNo}
+                  </p>
+                  <p className="mt-1.5">
+                    {t(uiLocale, "orders.print.receipt.customerPrefix")}{" "}
+                    {receiptPreviewOrder.customerName ||
+                      receiptPreviewOrder.contactDisplayName ||
+                      t(uiLocale, "orders.customer.guest")}
+                  </p>
+                  <p>
+                    {t(uiLocale, "orders.print.receipt.datePrefix")}{" "}
+                    {new Date(receiptPreviewOrder.createdAt).toLocaleString(numberLocale)}
+                  </p>
                   <div className="my-1 border-t border-dashed border-slate-400" />
                   <div className="space-y-1">
                     {receiptPreviewOrder.items.slice(0, 4).map((item) => (
@@ -4549,73 +4745,95 @@ export function OrdersManagement(props: OrdersManagementProps) {
                           <p className="truncate text-[9px] text-slate-500">{item.productSku}</p>
                         </div>
                         <p className="shrink-0 text-right">
-                          {item.qty} {item.unitCode}
+                          {item.qty.toLocaleString(numberLocale)} {item.unitCode}
                         </p>
-                        <p className="shrink-0 text-right">{item.lineTotal.toLocaleString("th-TH")}</p>
+                        <p className="shrink-0 text-right">{item.lineTotal.toLocaleString(numberLocale)}</p>
                       </div>
                     ))}
                     {receiptPreviewOrder.items.length > 4 ? (
                       <p className="text-[9px] text-slate-500">
-                        และอีก {receiptPreviewOrder.items.length - 4} รายการ...
+                        {t(uiLocale, "orders.create.success.preview.receipt.moreItems.prefix")}{" "}
+                        {(receiptPreviewOrder.items.length - 4).toLocaleString(numberLocale)}{" "}
+                        {t(uiLocale, "orders.create.success.preview.receipt.moreItems.suffix")}
                       </p>
                     ) : null}
                   </div>
                   <div className="my-1 border-t border-dashed border-slate-400" />
                   <p className="flex justify-between">
-                    <span>ยอดสุทธิ</span>
+                    <span>{t(uiLocale, "orders.print.receipt.summary.netTotal")}</span>
                     <span className="font-semibold">
-                      {receiptPreviewOrder.total.toLocaleString("th-TH")} {receiptPreviewOrder.storeCurrency}
+                      {receiptPreviewOrder.total.toLocaleString(numberLocale)} {receiptPreviewOrder.storeCurrency}
                     </span>
                   </p>
                 </div>
               ) : (
-                <p className="text-xs text-slate-500">ไม่มีข้อมูลตัวอย่างใบเสร็จ</p>
+                <p className="text-xs text-slate-500">
+                  {t(uiLocale, "orders.create.success.preview.receipt.empty")}
+                </p>
               )}
             </div>
             {createdOrderSuccess.checkoutFlow === "ONLINE_DELIVERY" ? (
               <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium text-slate-700">ตัวอย่างสติ๊กเกอร์จัดส่ง</p>
-                  <p className="text-[11px] text-slate-500">พิมพ์แบบ label A6</p>
+                  <p className="text-xs font-medium text-slate-700">
+                    {t(uiLocale, "orders.create.success.preview.label.title")}
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    {t(uiLocale, "orders.create.success.preview.label.note")}
+                  </p>
                 </div>
                 {receiptPreviewLoading ? (
-                  <p className="text-xs text-slate-500">กำลังโหลดข้อมูลจัดส่ง...</p>
+                  <p className="text-xs text-slate-500">
+                    {t(uiLocale, "orders.create.success.preview.label.loading")}
+                  </p>
                 ) : receiptPreviewError ? (
                   <p className="text-xs text-red-600">{receiptPreviewError}</p>
                 ) : receiptPreviewOrder ? (
                   <div className="mx-auto max-w-[320px] rounded-md border border-slate-200 bg-white p-2 text-[10px] text-slate-900">
-                    <p className="text-center text-[11px] font-semibold">ป้ายจัดส่ง A6</p>
-                    <p className="text-center text-[10px]">ออเดอร์ {receiptPreviewOrder.orderNo}</p>
+                    <p className="text-center text-[11px] font-semibold">
+                      {t(uiLocale, "orders.print.label.title")}
+                    </p>
+                    <p className="text-center text-[10px]">
+                      {t(uiLocale, "orders.print.label.orderPrefix")} {receiptPreviewOrder.orderNo}
+                    </p>
                     <div className="my-1 border-t border-dashed border-slate-400" />
                     <div className="space-y-1">
                       <p className="font-semibold">
                         {receiptPreviewOrder.customerName ||
                           receiptPreviewOrder.contactDisplayName ||
-                          "ลูกค้าทั่วไป"}
+                          t(uiLocale, "orders.customer.guest")}
                       </p>
-                      <p>โทร: {receiptPreviewOrder.customerPhone || receiptPreviewOrder.contactPhone || "-"}</p>
+                      <p>
+                        {t(uiLocale, "orders.print.label.phonePrefix")}{" "}
+                        {receiptPreviewOrder.customerPhone || receiptPreviewOrder.contactPhone || "-"}
+                      </p>
                       <p className="whitespace-pre-wrap">
-                        ที่อยู่: {receiptPreviewOrder.customerAddress || "-"}
+                        {t(uiLocale, "orders.print.label.addressPrefix")}{" "}
+                        {receiptPreviewOrder.customerAddress || "-"}
                       </p>
                     </div>
                     <div className="my-1 border-t border-dashed border-slate-400" />
                     <div className="space-y-0.5 text-[9px] text-slate-700">
                       <p>
-                        ขนส่ง:{" "}
+                        {t(uiLocale, "orders.print.label.shippingPrefix")}{" "}
                         {receiptPreviewOrder.shippingProvider ||
                           receiptPreviewOrder.shippingCarrier ||
                           "-"}
                       </p>
-                      <p>Tracking: {receiptPreviewOrder.trackingNo || "ยังไม่มี"}</p>
                       <p>
-                        ต้นทุนค่าส่ง:{" "}
-                        {receiptPreviewOrder.shippingCost.toLocaleString("th-TH")}{" "}
+                        {t(uiLocale, "orders.print.label.trackingPrefix")}{" "}
+                        {receiptPreviewOrder.trackingNo ||
+                          t(uiLocale, "orders.create.success.preview.label.trackingFallback")}
+                      </p>
+                      <p>
+                        {t(uiLocale, "orders.print.label.shippingCostPrefix")}{" "}
+                        {receiptPreviewOrder.shippingCost.toLocaleString(numberLocale)}{" "}
                         {receiptPreviewOrder.storeCurrency}
                       </p>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-slate-500">ไม่มีข้อมูลจัดส่ง</p>
+                  <p className="text-xs text-slate-500">{t(uiLocale, "orders.create.success.preview.label.empty")}</p>
                 )}
               </div>
             ) : null}
@@ -4631,10 +4849,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
               onClick={() => openOrderReceiptPrint(createdOrderSuccess.orderId)}
             >
               {receiptPrintLoading
-                ? "กำลังเปิดหน้าพิมพ์..."
+                ? t(uiLocale, "orders.detail.actions.print.loading")
                 : createdOrderSuccess.checkoutFlow === "PICKUP_LATER"
-                  ? "พิมพ์ใบรับสินค้า"
-                  : "พิมพ์ใบเสร็จ"}
+                  ? t(uiLocale, "orders.create.success.print.pickupSlip")
+                  : t(uiLocale, "orders.detail.actions.print.receipt")}
             </Button>
             {createdOrderSuccess.checkoutFlow === "ONLINE_DELIVERY" ? (
               <Button
@@ -4649,7 +4867,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 }
                 onClick={() => openOrderShippingLabelPrint(createdOrderSuccess.orderId)}
               >
-                {shippingLabelPrintLoading ? "กำลังเปิดหน้าพิมพ์..." : "พิมพ์สติ๊กเกอร์จัดส่ง"}
+                {shippingLabelPrintLoading
+                  ? t(uiLocale, "orders.detail.actions.print.loading")
+                  : t(uiLocale, "orders.create.success.print.shippingLabel")}
               </Button>
             ) : null}
             {createdOrderSuccess.checkoutFlow === "PICKUP_LATER" ||
@@ -4660,7 +4880,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 className="h-10 w-full"
                 onClick={() => openCreatedOrderDetail(createdOrderSuccess.orderId)}
               >
-                ดูรายละเอียดออเดอร์
+                {t(uiLocale, "orders.create.success.action.viewDetail")}
               </Button>
             ) : (
               <Button
@@ -4669,7 +4889,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 className="h-10 w-full"
                 onClick={closeCreatedOrderSuccess}
               >
-                ออเดอร์ใหม่ต่อ
+                {t(uiLocale, "orders.create.success.action.newOrder")}
               </Button>
             )}
             {createdOrderSuccess.checkoutFlow === "PICKUP_LATER" ||
@@ -4680,7 +4900,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 className="h-10 w-full"
                 onClick={closeCreatedOrderSuccess}
               >
-                ออเดอร์ใหม่ต่อ
+                {t(uiLocale, "orders.create.success.action.newOrder")}
               </Button>
             ) : null}
             <button
@@ -4688,7 +4908,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
               className="w-full text-center text-xs font-medium text-blue-700 hover:text-blue-800"
               onClick={closeCreatedOrderSuccess}
             >
-              ปิดหน้าต่างนี้
+              {t(uiLocale, "orders.create.success.action.closeWindow")}
             </button>
           </div>
         </SlideUpSheet>

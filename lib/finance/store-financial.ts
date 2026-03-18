@@ -1,3 +1,6 @@
+import type { UiLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
+
 export const storeCurrencyValues = ["LAK", "THB", "USD"] as const;
 export type StoreCurrency = (typeof storeCurrencyValues)[number];
 
@@ -86,6 +89,10 @@ export function currencySymbol(currency: StoreCurrency): string {
   return CURRENCY_SYMBOLS[currency] ?? currency;
 }
 
-export function vatModeLabel(mode: StoreVatMode) {
-  return mode === "INCLUSIVE" ? "รวม VAT" : "ไม่รวม VAT";
+export function vatModeLabel(mode: StoreVatMode): string;
+export function vatModeLabel(locale: UiLocale, mode: StoreVatMode): string;
+export function vatModeLabel(arg1: StoreVatMode | UiLocale, arg2?: StoreVatMode) {
+  const locale = arg2 ? (arg1 as UiLocale) : "th";
+  const mode = arg2 ?? (arg1 as StoreVatMode);
+  return t(locale, mode === "INCLUSIVE" ? "finance.vatMode.INCLUSIVE" : "finance.vatMode.EXCLUSIVE");
 }
