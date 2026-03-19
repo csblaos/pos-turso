@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type ColumnDef,
@@ -12,7 +11,15 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowDownToLine, Clock3, Expand, ExternalLink, ScanLine, X } from "lucide-react";
+import {
+  ArrowDownToLine,
+  CheckCheck,
+  Clock3,
+  Expand,
+  ExternalLink,
+  ScanLine,
+  X,
+} from "lucide-react";
 import { toast } from "react-hot-toast";
 
 import { BarcodeScannerPanel } from "@/components/app/barcode-scanner-panel";
@@ -58,6 +65,11 @@ type OrdersManagementProps =
       activeTab: OrderListTab;
       catalog: OrderCatalog;
       canCreate: boolean;
+      canUpdate?: boolean;
+      canMarkPaid?: boolean;
+      canPack?: boolean;
+      canShip?: boolean;
+      canCodReturn?: boolean;
       canRequestCancel?: boolean;
       canSelfApproveCancel?: boolean;
     }
@@ -65,6 +77,11 @@ type OrdersManagementProps =
       mode: "create-only";
       catalog: OrderCatalog;
       canCreate: boolean;
+      canUpdate?: boolean;
+      canMarkPaid?: boolean;
+      canPack?: boolean;
+      canShip?: boolean;
+      canCodReturn?: boolean;
       canRequestCancel?: boolean;
       canSelfApproveCancel?: boolean;
     };
@@ -73,9 +90,11 @@ type TabKey = OrderListTab;
 
 const tabOptions: Array<{ key: TabKey; labelKey: MessageKey }> = [
   { key: "ALL", labelKey: "orders.tab.ALL" },
-  { key: "PENDING_PAYMENT", labelKey: "orders.tab.PENDING_PAYMENT" },
-  { key: "PAID", labelKey: "orders.tab.PAID" },
-  { key: "SHIPPED", labelKey: "orders.tab.SHIPPED" },
+  { key: "PAYMENT_REVIEW", labelKey: "orders.tab.PAYMENT_REVIEW" },
+  { key: "TO_PACK", labelKey: "orders.tab.TO_PACK" },
+  { key: "TO_SHIP", labelKey: "orders.tab.TO_SHIP" },
+  { key: "PICKUP_READY", labelKey: "orders.tab.PICKUP_READY" },
+  { key: "COD_RECONCILE", labelKey: "orders.tab.COD_RECONCILE" },
 ];
 
 const channelSummaryLabelKey = (
@@ -129,6 +148,66 @@ type OrderStatusBadge = {
   label: string;
   className: string;
 };
+
+type OrderListQuickAction =
+  | {
+      type: "patch";
+      key: "confirm-paid" | "mark-packed" | "mark-shipped" | "submit";
+      labelKey: MessageKey;
+      requestAction: "confirm_paid" | "mark_packed" | "mark_shipped" | "submit_for_payment";
+      successKey: MessageKey;
+      requiresConfirm: boolean;
+      confirmTitleKey?: MessageKey;
+      confirmDescriptionKey?: MessageKey;
+    }
+  | {
+      type: "detail";
+      key: "detail";
+      labelKey: MessageKey;
+      reasonKey?: MessageKey;
+    }
+  | {
+      type: "review";
+      key: "review-confirm-paid" | "review-cod-reconcile" | "review-cod-return";
+      labelKey: MessageKey;
+      reviewKind: "confirm-paid" | "cod-reconcile" | "cod-return";
+      reasonKey?: MessageKey;
+    };
+
+type OrderListQuickActionPermissions = {
+  canUpdate: boolean;
+  canMarkPaid: boolean;
+  canPack: boolean;
+  canShip: boolean;
+  canCodReturn: boolean;
+};
+
+type OrderListPatchQuickAction = Extract<OrderListQuickAction, { type: "patch" }>;
+type OrderBulkActionKey = OrderListPatchQuickAction["key"];
+type OrderListReviewAction = Extract<OrderListQuickAction, { type: "review" }>;
+
+type OrderBulkActionGroup = {
+  key: OrderBulkActionKey;
+  buttonLabelKey: MessageKey;
+  requestAction: OrderListPatchQuickAction["requestAction"];
+  orders: Array<Pick<OrderListItem, "id" | "orderNo">>;
+};
+
+type BulkPrintKind = "receipt" | "label";
+
+const bulkActionButtonLabelKey: Record<OrderBulkActionKey, MessageKey> = {
+  "confirm-paid": "orders.management.bulk.action.confirmPaid",
+  "mark-packed": "orders.management.bulk.action.markPacked",
+  "mark-shipped": "orders.management.bulk.action.markShipped",
+  submit: "orders.management.bulk.action.submitForPayment",
+};
+
+const bulkActionOrder: OrderBulkActionKey[] = [
+  "confirm-paid",
+  "mark-packed",
+  "mark-shipped",
+  "submit",
+];
 
 const buildOrderStatusBadges = (
   uiLocale: UiLocale,
@@ -247,6 +326,176 @@ const pickupPaymentBadge = (
   };
 };
 
+const getOrderCustomerDisplay = (
+  uiLocale: UiLocale,
+  order: Pick<OrderListItem, "customerName" | "contactDisplayName">,
+) => order.customerName || order.contactDisplayName || t(uiLocale, "orders.customer.guest");
+
+const createCodReconcileIdempotencyKey = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `cod-reconcile-${crypto.randomUUID()}`;
+  }
+  return `cod-reconcile-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
+const getOrderListQuickAction = (
+  order: Pick<OrderListItem, "channel" | "paymentMethod" | "paymentStatus" | "status">,
+  permissions: OrderListQuickActionPermissions,
+): OrderListQuickAction | null => {
+  const isWalkInOrder = order.channel === "WALK_IN";
+  const isOnlineOrder = !isWalkInOrder;
+  const isCodPendingAfterShipped =
+    order.paymentMethod === "COD" &&
+    order.status === "SHIPPED" &&
+    order.paymentStatus === "COD_PENDING_SETTLEMENT";
+  const isPickupReadyPrepaid =
+    order.paymentMethod !== "COD" &&
+    order.status === "READY_FOR_PICKUP" &&
+    order.paymentStatus === "PAID";
+  const isWalkInPaidComplete =
+    isWalkInOrder &&
+    order.status === "PAID" &&
+    order.paymentStatus === "PAID";
+  const isInStoreCreditSettlement =
+    isWalkInOrder &&
+    order.paymentMethod === "ON_CREDIT" &&
+    ((order.status === "PENDING_PAYMENT" && order.paymentStatus !== "PAID") ||
+      (order.status === "READY_FOR_PICKUP" && order.paymentStatus !== "PAID") ||
+      (order.status === "PICKED_UP_PENDING_PAYMENT" && order.paymentStatus !== "PAID"));
+  const isSlipPendingProof =
+    isOnlineOrder && order.paymentMethod === "LAO_QR" && order.paymentStatus === "PENDING_PROOF";
+  const canConfirmPaid =
+    permissions.canMarkPaid &&
+    (isCodPendingAfterShipped ||
+      (order.paymentMethod !== "COD" &&
+        (order.status === "PENDING_PAYMENT" ||
+          order.status === "READY_FOR_PICKUP" ||
+          order.status === "PICKED_UP_PENDING_PAYMENT")));
+  const canMarkPacked =
+    !isWalkInPaidComplete &&
+    permissions.canPack &&
+    (order.status === "PAID" ||
+      (order.paymentMethod === "COD" &&
+        order.status === "PENDING_PAYMENT" &&
+        order.paymentStatus === "COD_PENDING_SETTLEMENT"));
+  const canMarkShipped = !isWalkInPaidComplete && permissions.canShip && order.status === "PACKED";
+
+  if (canConfirmPaid) {
+    const labelKey: MessageKey = isCodPendingAfterShipped
+      ? "orders.detail.action.confirmCodReceived"
+      : isPickupReadyPrepaid
+        ? "orders.detail.action.confirmPickupReceived"
+        : isSlipPendingProof
+          ? "orders.detail.action.reviewSlipAndConfirm"
+          : isOnlineOrder
+            ? "orders.detail.action.confirmPaid"
+            : "orders.detail.action.confirmPaymentReceived";
+
+    if (isCodPendingAfterShipped || isInStoreCreditSettlement) {
+      return {
+        type: "review",
+        key: isCodPendingAfterShipped ? "review-cod-reconcile" : "review-confirm-paid",
+        labelKey,
+        reviewKind: isCodPendingAfterShipped ? "cod-reconcile" : "confirm-paid",
+        reasonKey: "orders.management.quickAction.requiresReview",
+      };
+    }
+
+    const successKey: MessageKey = isPickupReadyPrepaid
+      ? "orders.detail.toast.pickupConfirmed"
+      : isOnlineOrder
+        ? "orders.detail.toast.markedPaid"
+        : "orders.detail.toast.paymentConfirmed";
+    const confirmTitleKey: MessageKey = isPickupReadyPrepaid
+      ? "orders.detail.confirmPaid.title.pickup"
+      : isSlipPendingProof
+        ? "orders.detail.confirmPaid.title.slip"
+        : "orders.detail.confirmPaid.title.default";
+    const confirmDescriptionKey: MessageKey = isPickupReadyPrepaid
+      ? "orders.detail.confirmPaid.description.pickup"
+      : isSlipPendingProof
+        ? "orders.detail.confirmPaid.description.slip"
+        : "orders.detail.confirmPaid.description.default";
+
+    return {
+      type: "patch",
+      key: "confirm-paid",
+      labelKey,
+      requestAction: "confirm_paid",
+      successKey,
+      requiresConfirm: true,
+      confirmTitleKey,
+      confirmDescriptionKey,
+    };
+  }
+
+  if (canMarkPacked) {
+    return {
+      type: "patch",
+      key: "mark-packed",
+      labelKey: isOnlineOrder
+        ? "orders.detail.action.markPacked.online"
+        : "orders.detail.action.markPacked.offline",
+      requestAction: "mark_packed",
+      successKey: isOnlineOrder
+        ? "orders.detail.toast.markPacked.online"
+        : "orders.detail.toast.markPacked.offline",
+      requiresConfirm: false,
+    };
+  }
+
+  if (canMarkShipped) {
+    return {
+      type: "patch",
+      key: "mark-shipped",
+      labelKey: isOnlineOrder
+        ? "orders.detail.action.markShipped.online"
+        : "orders.detail.action.markShipped.offline",
+      requestAction: "mark_shipped",
+      successKey: isOnlineOrder
+        ? "orders.detail.toast.markShipped.online"
+        : "orders.detail.toast.markShipped.offline",
+      requiresConfirm: false,
+    };
+  }
+
+  if (order.status === "DRAFT" && permissions.canUpdate) {
+    return {
+      type: "patch",
+      key: "submit",
+      labelKey: "orders.detail.action.submitForPayment",
+      requestAction: "submit_for_payment",
+      successKey: "orders.detail.toast.submittedForPayment",
+      requiresConfirm: false,
+    };
+  }
+
+  return null;
+};
+
+const getOrderListSecondaryQuickAction = (
+  order: Pick<OrderListItem, "paymentMethod" | "paymentStatus" | "status">,
+  permissions: OrderListQuickActionPermissions,
+): OrderListReviewAction | null => {
+  const canMarkCodReturned =
+    permissions.canCodReturn &&
+    order.paymentMethod === "COD" &&
+    order.status === "SHIPPED" &&
+    order.paymentStatus === "COD_PENDING_SETTLEMENT";
+
+  if (!canMarkCodReturned) {
+    return null;
+  }
+
+  return {
+    type: "review",
+    key: "review-cod-return",
+    labelKey: "orders.detail.action.markCodReturned",
+    reviewKind: "cod-return",
+    reasonKey: "orders.management.quickAction.codReturnHint",
+  };
+};
+
 type CreateOrderStep = "products" | "details";
 type DiscountInputMode = "AMOUNT" | "PERCENT";
 type CheckoutPaymentMethod = "CASH" | "LAO_QR" | "ON_CREDIT" | "COD";
@@ -313,6 +562,44 @@ type RecentOrdersApiResponse = {
   message?: string;
   orders?: OrderListItem[];
 };
+type OrderReviewSheetState =
+  | {
+      kind: "confirm-paid";
+      orderId: string;
+      orderNo: string;
+      customerLabel: string;
+      total: number;
+      paymentCurrency: OrderListItem["paymentCurrency"];
+      actionLabelKey: MessageKey;
+      paymentMethod: "CASH" | "LAO_QR";
+      paymentAccountId: string;
+    }
+  | {
+      kind: "cod-reconcile";
+      orderId: string;
+      orderNo: string;
+      customerLabel: string;
+      total: number;
+      shippingCost: number;
+      codFeeAccumulated: number;
+      paymentCurrency: OrderListItem["paymentCurrency"];
+      actionLabelKey: MessageKey;
+      codAmount: string;
+      codFee: string;
+    }
+  | {
+      kind: "cod-return";
+      orderId: string;
+      orderNo: string;
+      customerLabel: string;
+      total: number;
+      shippingCost: number;
+      codFeeAccumulated: number;
+      paymentCurrency: OrderListItem["paymentCurrency"];
+      actionLabelKey: MessageKey;
+      codFee: string;
+      codReturnNote: string;
+    };
 
 const escapeHtml = (value: string) =>
   value
@@ -414,6 +701,11 @@ const defaultValues = (catalog: OrderCatalog): CreateOrderFormInput => ({
 
 export function OrdersManagement(props: OrdersManagementProps) {
   const { catalog, canCreate } = props;
+  const canUpdate = props.canUpdate ?? false;
+  const canMarkPaid = props.canMarkPaid ?? false;
+  const canPack = props.canPack ?? false;
+  const canShip = props.canShip ?? false;
+  const canCodReturn = props.canCodReturn ?? false;
   const canRequestCancel = props.canRequestCancel ?? false;
   const canSelfApproveCancel = props.canSelfApproveCancel ?? false;
   const isCreateOnlyMode = props.mode === "create-only";
@@ -427,6 +719,17 @@ export function OrdersManagement(props: OrdersManagementProps) {
   const [showScannerSheet, setShowScannerSheet] = useState(false);
   const [hasSeenScannerPermission, setHasSeenScannerPermission] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [quickActionLoadingKey, setQuickActionLoadingKey] = useState<string | null>(null);
+  const [bulkActionLoadingKey, setBulkActionLoadingKey] = useState<OrderBulkActionKey | null>(null);
+  const [bulkPrintLoadingKind, setBulkPrintLoadingKind] = useState<BulkPrintKind | null>(null);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [quickActionConfirm, setQuickActionConfirm] = useState<{
+    orderId: string;
+    orderNo: string;
+    config: Extract<OrderListQuickAction, { type: "patch" }>;
+  } | null>(null);
+  const [orderReviewSheet, setOrderReviewSheet] = useState<OrderReviewSheetState | null>(null);
+  const [bulkActionConfirm, setBulkActionConfirm] = useState<OrderBulkActionGroup | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
@@ -541,6 +844,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
   const qrPaymentAccounts = useMemo(
     () => catalog.paymentAccounts.filter((account) => account.accountType === "LAO_QR"),
     [catalog.paymentAccounts],
+  );
+  const activeQrPaymentAccounts = useMemo(
+    () => qrPaymentAccounts.filter((account) => account.isActive),
+    [qrPaymentAccounts],
   );
   const selectedQrPaymentAccount = useMemo(
     () => qrPaymentAccounts.find((account) => account.id === watchedPaymentAccountId) ?? null,
@@ -696,7 +1003,490 @@ export function OrdersManagement(props: OrdersManagementProps) {
     return Array.from(categoryMap.values()).sort((a, b) => a.name.localeCompare(b.name, "th"));
   }, [catalog.products]);
 
-  const visibleOrders = isCreateOnlyMode ? [] : (ordersPage?.rows ?? []);
+  const visibleOrders = useMemo(
+    () => (isCreateOnlyMode ? [] : (ordersPage?.rows ?? [])),
+    [isCreateOnlyMode, ordersPage],
+  );
+  const activeTabOption = useMemo(
+    () => tabOptions.find((tab) => tab.key === activeTab) ?? tabOptions[0],
+    [activeTab],
+  );
+  const visibleOrderIds = useMemo(() => visibleOrders.map((order) => order.id), [visibleOrders]);
+  const selectedOrderIdSet = useMemo(() => new Set(selectedOrderIds), [selectedOrderIds]);
+  const selectedOrders = useMemo(
+    () => visibleOrders.filter((order) => selectedOrderIdSet.has(order.id)),
+    [selectedOrderIdSet, visibleOrders],
+  );
+  const orderQuickActionPermissions = useMemo<OrderListQuickActionPermissions>(
+    () => ({
+      canUpdate,
+      canMarkPaid,
+      canPack,
+      canShip,
+      canCodReturn,
+    }),
+    [canCodReturn, canMarkPaid, canPack, canShip, canUpdate],
+  );
+  useEffect(() => {
+    if (isCreateOnlyMode) {
+      return;
+    }
+    const visibleIdSet = new Set(visibleOrderIds);
+    setSelectedOrderIds((current) => current.filter((id) => visibleIdSet.has(id)));
+  }, [isCreateOnlyMode, visibleOrderIds]);
+  const clearSelectedOrders = useCallback(() => {
+    setSelectedOrderIds([]);
+  }, []);
+  const toggleOrderSelection = useCallback((orderId: string) => {
+    setSelectedOrderIds((current) =>
+      current.includes(orderId) ? current.filter((id) => id !== orderId) : [...current, orderId],
+    );
+  }, []);
+  const areAllVisibleOrdersSelected =
+    visibleOrderIds.length > 0 && visibleOrderIds.every((orderId) => selectedOrderIdSet.has(orderId));
+  const toggleSelectAllVisibleOrders = useCallback(() => {
+    setSelectedOrderIds((current) => {
+      const currentSet = new Set(current);
+      const allSelected =
+        visibleOrderIds.length > 0 && visibleOrderIds.every((orderId) => currentSet.has(orderId));
+      if (allSelected) {
+        return current.filter((id) => !visibleOrderIds.includes(id));
+      }
+      const next = current.filter((id) => !visibleOrderIds.includes(id));
+      return [...next, ...visibleOrderIds];
+    });
+  }, [visibleOrderIds]);
+  const selectedQuickActionGroups = useMemo<OrderBulkActionGroup[]>(() => {
+    const groups = new Map<OrderBulkActionKey, OrderBulkActionGroup>();
+
+    for (const order of selectedOrders) {
+      const quickAction = getOrderListQuickAction(order, orderQuickActionPermissions);
+      if (!quickAction || quickAction.type !== "patch") {
+        continue;
+      }
+
+      const existing = groups.get(quickAction.key);
+      if (existing) {
+        existing.orders.push({
+          id: order.id,
+          orderNo: order.orderNo,
+        });
+        continue;
+      }
+
+      groups.set(quickAction.key, {
+        key: quickAction.key,
+        buttonLabelKey: bulkActionButtonLabelKey[quickAction.key],
+        requestAction: quickAction.requestAction,
+        orders: [
+          {
+            id: order.id,
+            orderNo: order.orderNo,
+          },
+        ],
+      });
+    }
+
+    return bulkActionOrder
+      .map((actionKey) => groups.get(actionKey))
+      .filter((group): group is OrderBulkActionGroup => Boolean(group));
+  }, [orderQuickActionPermissions, selectedOrders]);
+  const selectedOrdersTotal = useMemo(
+    () => selectedOrders.reduce((sum, order) => sum + order.total, 0),
+    [selectedOrders],
+  );
+  const selectedReceiptPrintOrders = selectedOrders;
+  const selectedLabelPrintOrders = useMemo(
+    () => selectedOrders.filter((order) => order.channel !== "WALK_IN"),
+    [selectedOrders],
+  );
+  const selectedReviewQrAccount = useMemo(() => {
+    if (!orderReviewSheet || orderReviewSheet.kind !== "confirm-paid") {
+      return null;
+    }
+    return (
+      activeQrPaymentAccounts.find((account) => account.id === orderReviewSheet.paymentAccountId) ??
+      null
+    );
+  }, [activeQrPaymentAccounts, orderReviewSheet]);
+  const buildOrderQuickActionLoadingKey = useCallback(
+    (orderId: string, actionKey: string) => `${orderId}:${actionKey}`,
+    [],
+  );
+  const orderReviewLoadingKey = orderReviewSheet
+    ? buildOrderQuickActionLoadingKey(orderReviewSheet.orderId, orderReviewSheet.kind)
+    : null;
+  const reviewCodAmountNumber =
+    orderReviewSheet?.kind === "cod-reconcile" ? Number(orderReviewSheet.codAmount) : null;
+  const reviewCodFeeNumber =
+    orderReviewSheet?.kind === "cod-reconcile" || orderReviewSheet?.kind === "cod-return"
+      ? Number(orderReviewSheet.codFee)
+      : null;
+  const runOrderQuickAction = useCallback(
+    async (
+      order: Pick<OrderListItem, "id" | "orderNo">,
+      config: Extract<OrderListQuickAction, { type: "patch" }>,
+    ) => {
+      const loadingKey = buildOrderQuickActionLoadingKey(order.id, config.key);
+      setQuickActionLoadingKey(loadingKey);
+      setErrorMessage(null);
+      setSuccessMessage(null);
+
+      try {
+        const response = await authFetch(`/api/orders/${order.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: config.requestAction,
+          }),
+        });
+
+        const data = (await response.json().catch(() => null)) as
+          | {
+              message?: string;
+            }
+          | null;
+
+        if (!response.ok) {
+          const message = data?.message ?? t(uiLocale, "common.error.saveFailed");
+          setErrorMessage(message);
+          toast.error(message);
+          return;
+        }
+
+        const successText = t(uiLocale, config.successKey);
+        setSuccessMessage(successText);
+        toast.success(successText);
+        setQuickActionConfirm(null);
+        router.refresh();
+      } catch {
+        const message = t(uiLocale, "common.error.saveFailed");
+        setErrorMessage(message);
+        toast.error(message);
+      } finally {
+        setQuickActionLoadingKey(null);
+      }
+    },
+    [buildOrderQuickActionLoadingKey, router, uiLocale],
+  );
+  const openOrderReviewSheet = useCallback(
+    (
+      order: Pick<
+        OrderListItem,
+        | "id"
+        | "orderNo"
+        | "customerName"
+        | "contactDisplayName"
+        | "paymentCurrency"
+        | "total"
+        | "shippingCost"
+        | "codFee"
+        | "codReturnNote"
+      >,
+      quickAction: OrderListReviewAction,
+    ) => {
+      const customerLabel = getOrderCustomerDisplay(uiLocale, order);
+      if (quickAction.reviewKind === "cod-reconcile") {
+        setOrderReviewSheet({
+          kind: "cod-reconcile",
+          orderId: order.id,
+          orderNo: order.orderNo,
+          customerLabel,
+          total: order.total,
+          shippingCost: order.shippingCost,
+          codFeeAccumulated: order.codFee,
+          paymentCurrency: order.paymentCurrency,
+          actionLabelKey: quickAction.labelKey,
+          codAmount: String(order.total),
+          codFee: "0",
+        });
+        return;
+      }
+
+      if (quickAction.reviewKind === "cod-return") {
+        setOrderReviewSheet({
+          kind: "cod-return",
+          orderId: order.id,
+          orderNo: order.orderNo,
+          customerLabel,
+          total: order.total,
+          shippingCost: order.shippingCost,
+          codFeeAccumulated: order.codFee,
+          paymentCurrency: order.paymentCurrency,
+          actionLabelKey: quickAction.labelKey,
+          codFee: "0",
+          codReturnNote: order.codReturnNote ?? "",
+        });
+        return;
+      }
+
+      setOrderReviewSheet({
+        kind: "confirm-paid",
+        orderId: order.id,
+        orderNo: order.orderNo,
+        customerLabel,
+        total: order.total,
+        paymentCurrency: order.paymentCurrency,
+        actionLabelKey: quickAction.labelKey,
+        paymentMethod: "CASH",
+        paymentAccountId: activeQrPaymentAccounts[0]?.id ?? "",
+      });
+    },
+    [activeQrPaymentAccounts, uiLocale],
+  );
+  const runOrderReviewAction = useCallback(async () => {
+    if (!orderReviewSheet) {
+      return;
+    }
+
+    const loadingKey = buildOrderQuickActionLoadingKey(orderReviewSheet.orderId, orderReviewSheet.kind);
+    setQuickActionLoadingKey(loadingKey);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      if (orderReviewSheet.kind === "confirm-paid") {
+        if (
+          orderReviewSheet.paymentMethod === "LAO_QR" &&
+          !orderReviewSheet.paymentAccountId.trim()
+        ) {
+          const message = t(uiLocale, "orders.management.review.confirmPaid.error.paymentAccountRequired");
+          setErrorMessage(message);
+          toast.error(message);
+          return;
+        }
+
+        const response = await authFetch(`/api/orders/${orderReviewSheet.orderId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "confirm_paid",
+            paymentMethod: orderReviewSheet.paymentMethod,
+            paymentAccountId:
+              orderReviewSheet.paymentMethod === "LAO_QR"
+                ? orderReviewSheet.paymentAccountId
+                : undefined,
+          }),
+        });
+        const data = (await response.json().catch(() => null)) as { message?: string } | null;
+        if (!response.ok) {
+          const message = data?.message ?? t(uiLocale, "common.error.saveFailed");
+          setErrorMessage(message);
+          toast.error(message);
+          return;
+        }
+
+        const successText = t(uiLocale, "orders.detail.toast.paymentConfirmed");
+        setSuccessMessage(successText);
+        toast.success(successText);
+        setOrderReviewSheet(null);
+        router.refresh();
+        return;
+      }
+
+      const codFee = Number(orderReviewSheet.codFee);
+      if (orderReviewSheet.kind === "cod-reconcile") {
+        const codAmount = Number(orderReviewSheet.codAmount);
+        if (!Number.isFinite(codAmount) || codAmount < 0 || !Number.isFinite(codFee) || codFee < 0) {
+          const message = t(uiLocale, "orders.management.review.cod.error.invalidAmount");
+          setErrorMessage(message);
+          toast.error(message);
+          return;
+        }
+
+        const response = await authFetch("/api/orders/cod-reconcile", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": createCodReconcileIdempotencyKey(),
+          },
+          body: JSON.stringify({
+            items: [
+              {
+                orderId: orderReviewSheet.orderId,
+                codAmount: Math.trunc(codAmount),
+                codFee: Math.trunc(codFee),
+              },
+            ],
+          }),
+        });
+        const data = (await response.json().catch(() => null)) as
+          | {
+              message?: string;
+              ok?: boolean;
+              settledCount?: number;
+              failedCount?: number;
+              results?: Array<{ ok: boolean; message?: string }>;
+            }
+          | null;
+        if (
+          !response.ok ||
+          !data?.ok ||
+          (data.settledCount ?? 0) <= 0 ||
+          (data.results?.some((item) => !item.ok) ?? false)
+        ) {
+          const message = data?.message ?? t(uiLocale, "orders.codReconcile.error.settleFailed");
+          setErrorMessage(message);
+          toast.error(message);
+          return;
+        }
+
+        const successText = t(uiLocale, "orders.detail.toast.codSettled");
+        setSuccessMessage(successText);
+        toast.success(successText);
+        setOrderReviewSheet(null);
+        router.refresh();
+        return;
+      }
+
+      if (!Number.isFinite(codFee) || codFee < 0) {
+        const message = t(uiLocale, "orders.management.review.codReturn.error.invalidFee");
+        setErrorMessage(message);
+        toast.error(message);
+        return;
+      }
+
+      const response = await authFetch(`/api/orders/${orderReviewSheet.orderId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "mark_cod_returned",
+          codFee: Math.trunc(codFee),
+          codReturnNote: orderReviewSheet.codReturnNote.trim(),
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as { message?: string } | null;
+      if (!response.ok) {
+        const message = data?.message ?? t(uiLocale, "common.error.saveFailed");
+        setErrorMessage(message);
+        toast.error(message);
+        return;
+      }
+
+      const successText = t(uiLocale, "orders.detail.toast.codReturned");
+      setSuccessMessage(successText);
+      toast.success(successText);
+      setOrderReviewSheet(null);
+      router.refresh();
+    } catch {
+      const message =
+        orderReviewSheet.kind === "confirm-paid"
+          ? t(uiLocale, "common.error.saveFailed")
+          : orderReviewSheet.kind === "cod-reconcile"
+            ? t(uiLocale, "orders.codReconcile.error.settleFailed")
+            : t(uiLocale, "common.error.saveFailed");
+      setErrorMessage(message);
+      toast.error(message);
+    } finally {
+      setQuickActionLoadingKey(null);
+    }
+  }, [buildOrderQuickActionLoadingKey, orderReviewSheet, router, uiLocale]);
+  const handleOrderQuickAction = useCallback(
+    (
+      order: Pick<
+        OrderListItem,
+        | "id"
+        | "orderNo"
+        | "customerName"
+        | "contactDisplayName"
+        | "paymentCurrency"
+        | "total"
+        | "shippingCost"
+        | "codFee"
+        | "codReturnNote"
+      >,
+      quickAction: OrderListQuickAction | null,
+    ) => {
+      if (!quickAction) {
+        return;
+      }
+
+      if (quickAction.type === "detail") {
+        router.push(`/orders/${order.id}`);
+        return;
+      }
+
+      if (quickAction.type === "review") {
+        openOrderReviewSheet(order, quickAction);
+        return;
+      }
+
+      if (quickAction.requiresConfirm) {
+        setQuickActionConfirm({
+          orderId: order.id,
+          orderNo: order.orderNo,
+          config: quickAction,
+        });
+        return;
+      }
+
+      void runOrderQuickAction(order, quickAction);
+    },
+    [openOrderReviewSheet, router, runOrderQuickAction],
+  );
+  const runBulkOrderAction = useCallback(
+    async (group: OrderBulkActionGroup) => {
+      setBulkActionLoadingKey(group.key);
+      setBulkActionConfirm(null);
+      setErrorMessage(null);
+      setSuccessMessage(null);
+
+      const succeededOrderIds: string[] = [];
+      const failedOrderNos: string[] = [];
+
+      for (const order of group.orders) {
+        try {
+          const response = await authFetch(`/api/orders/${order.id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              action: group.requestAction,
+            }),
+          });
+
+          if (!response.ok) {
+            failedOrderNos.push(order.orderNo);
+            continue;
+          }
+
+          succeededOrderIds.push(order.id);
+        } catch {
+          failedOrderNos.push(order.orderNo);
+        }
+      }
+
+      if (succeededOrderIds.length > 0) {
+        setSelectedOrderIds((current) => current.filter((id) => !succeededOrderIds.includes(id)));
+      }
+
+      if (succeededOrderIds.length === group.orders.length) {
+        const successText = `${t(uiLocale, "orders.management.bulk.result.successPrefix")} ${succeededOrderIds.length.toLocaleString(numberLocale)} ${t(uiLocale, "orders.management.bulk.result.successSuffix")}`;
+        setSuccessMessage(successText);
+        toast.success(successText);
+      } else {
+        const errorText = `${t(uiLocale, "orders.management.bulk.result.partialPrefix")} ${succeededOrderIds.length.toLocaleString(numberLocale)} ${t(uiLocale, "orders.management.bulk.result.partialMiddle")} ${group.orders.length.toLocaleString(numberLocale)} ${t(uiLocale, "orders.management.bulk.result.partialSuffix")}`;
+        const failedPreview = failedOrderNos.slice(0, 3).join(", ");
+        const detail =
+          failedPreview.length > 0
+            ? `${errorText} (${failedPreview}${failedOrderNos.length > 3 ? "..." : ""})`
+            : errorText;
+        setErrorMessage(detail);
+        toast.error(detail);
+      }
+
+      router.refresh();
+      setBulkActionLoadingKey(null);
+    },
+    [numberLocale, router, uiLocale],
+  );
   const hasCatalogProducts = catalog.products.length > 0;
   const getProductUnitPrice = useCallback(
     (productId: string, unitId: string) => {
@@ -1249,6 +2039,38 @@ export function OrdersManagement(props: OrdersManagementProps) {
   const tableColumns = useMemo<ColumnDef<OrderListItem>[]>(
     () => [
       {
+        id: "select",
+        header: () => (
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-slate-300 text-blue-600"
+            checked={areAllVisibleOrdersSelected}
+            disabled={
+              quickActionLoadingKey !== null ||
+              bulkActionLoadingKey !== null ||
+              bulkPrintLoadingKind !== null
+            }
+            aria-label={t(uiLocale, "orders.management.bulk.selectAllVisible")}
+            onChange={() => toggleSelectAllVisibleOrders()}
+          />
+        ),
+        cell: ({ row }) => (
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-slate-300 text-blue-600"
+            checked={selectedOrderIdSet.has(row.original.id)}
+            disabled={
+              quickActionLoadingKey !== null ||
+              bulkActionLoadingKey !== null ||
+              bulkPrintLoadingKind !== null
+            }
+            aria-label={`${t(uiLocale, "orders.management.bulk.selectOrder")} ${row.original.orderNo}`}
+            onChange={() => toggleOrderSelection(row.original.id)}
+            onClick={(event) => event.stopPropagation()}
+          />
+        ),
+      },
+      {
         accessorKey: "orderNo",
         header: t(uiLocale, "orders.table.header.orderNo"),
       },
@@ -1287,8 +2109,139 @@ export function OrdersManagement(props: OrdersManagementProps) {
         header: t(uiLocale, "orders.table.header.total"),
         cell: ({ row }) => `${row.original.total.toLocaleString(numberLocale)} ${catalog.storeCurrency}`,
       },
+      {
+        id: "nextAction",
+        header: t(uiLocale, "orders.table.header.nextAction"),
+        cell: ({ row }) => {
+          const quickAction = getOrderListQuickAction(row.original, orderQuickActionPermissions);
+          const secondaryQuickAction = getOrderListSecondaryQuickAction(
+            row.original,
+            orderQuickActionPermissions,
+          );
+          if (!quickAction) {
+            return (
+              <div className="space-y-1">
+                <span className="text-xs text-slate-400">
+                  {t(uiLocale, "orders.management.quickAction.none")}
+                </span>
+                {secondaryQuickAction ? (
+                  <p className="text-[11px] text-slate-500">{t(uiLocale, secondaryQuickAction.labelKey)}</p>
+                ) : null}
+              </div>
+            );
+          }
+
+          return (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-slate-700">
+                {t(uiLocale, quickAction.labelKey)}
+              </p>
+              {"reasonKey" in quickAction && quickAction.reasonKey ? (
+                <p className="text-[11px] text-slate-500">
+                  {t(uiLocale, quickAction.reasonKey)}
+                </p>
+              ) : null}
+            </div>
+          );
+        },
+      },
+      {
+        id: "actions",
+        header: t(uiLocale, "orders.table.header.actions"),
+        cell: ({ row }) => {
+          const quickAction = getOrderListQuickAction(row.original, orderQuickActionPermissions);
+          const secondaryQuickAction = getOrderListSecondaryQuickAction(
+            row.original,
+            orderQuickActionPermissions,
+          );
+          const loadingKey = quickAction
+            ? buildOrderQuickActionLoadingKey(row.original.id, quickAction.key)
+            : null;
+          const isBusy = loadingKey !== null && quickActionLoadingKey === loadingKey;
+          const secondaryLoadingKey = secondaryQuickAction
+            ? buildOrderQuickActionLoadingKey(row.original.id, secondaryQuickAction.key)
+            : null;
+          const isSecondaryBusy =
+            secondaryLoadingKey !== null && quickActionLoadingKey === secondaryLoadingKey;
+
+          return (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {quickAction ? (
+                <Button
+                  type="button"
+                  variant={quickAction.type === "patch" ? "default" : "outline"}
+                  className="h-8 px-2 text-xs"
+                  disabled={
+                    loading ||
+                    quickActionLoadingKey !== null ||
+                    bulkActionLoadingKey !== null ||
+                    bulkPrintLoadingKind !== null
+                  }
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleOrderQuickAction(row.original, quickAction);
+                  }}
+                >
+                  {isBusy
+                    ? t(uiLocale, "common.action.saving")
+                    : quickAction.type === "detail"
+                      ? t(uiLocale, "orders.management.action.viewDetails")
+                      : t(uiLocale, quickAction.labelKey)}
+                </Button>
+              ) : null}
+              {secondaryQuickAction ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 border-orange-300 px-2 text-xs text-orange-700 hover:bg-orange-50"
+                  disabled={
+                    loading ||
+                    quickActionLoadingKey !== null ||
+                    bulkActionLoadingKey !== null ||
+                    bulkPrintLoadingKind !== null
+                  }
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleOrderQuickAction(row.original, secondaryQuickAction);
+                  }}
+                >
+                  {isSecondaryBusy ? t(uiLocale, "common.action.saving") : t(uiLocale, secondaryQuickAction.labelKey)}
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-8 px-2 text-xs"
+                disabled={bulkActionLoadingKey !== null || bulkPrintLoadingKind !== null}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  router.push(`/orders/${row.original.id}`);
+                }}
+              >
+                {t(uiLocale, "orders.management.action.open")}
+              </Button>
+            </div>
+          );
+        },
+      },
     ],
-    [catalog.storeCurrency, numberLocale, uiLocale],
+    [
+      buildOrderQuickActionLoadingKey,
+      bulkActionLoadingKey,
+      bulkPrintLoadingKind,
+      catalog.storeCurrency,
+      handleOrderQuickAction,
+      loading,
+      numberLocale,
+      orderQuickActionPermissions,
+      quickActionLoadingKey,
+      router,
+      selectedOrderIdSet,
+      toggleOrderSelection,
+      toggleSelectAllVisibleOrders,
+      areAllVisibleOrdersSelected,
+      uiLocale,
+    ],
   );
 
   const ordersTable = useReactTable({
@@ -1553,6 +2506,63 @@ export function OrdersManagement(props: OrdersManagementProps) {
     }
     return data.order;
   }, [uiLocale]);
+
+  const mergePrintDocuments = useCallback(
+    (documents: string[], kind: BulkPrintKind) => {
+      if (documents.length <= 0) {
+        throw new Error(
+          kind === "receipt"
+            ? t(uiLocale, "orders.management.bulk.print.error.noReceipts")
+            : t(uiLocale, "orders.management.bulk.print.error.noLabels"),
+        );
+      }
+
+      const parsedDocuments = documents.map((documentHtml) =>
+        new DOMParser().parseFromString(documentHtml, "text/html"),
+      );
+      const styles = parsedDocuments
+        .flatMap((documentNode) =>
+          Array.from(documentNode.querySelectorAll("style")).map(
+            (styleNode) => styleNode.textContent ?? "",
+          ),
+        )
+        .filter((styleText) => styleText.trim().length > 0);
+      const bodyMarkup = parsedDocuments
+        .map((documentNode, index) => {
+          const innerMarkup = documentNode.body?.innerHTML?.trim() ?? "";
+          return `<section class="bulk-print-batch-item" data-batch-index="${index}">${innerMarkup}</section>`;
+        })
+        .join("");
+
+      return `<!doctype html>
+<html lang="${escapeHtml(uiLocale)}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>${escapeHtml(
+      kind === "receipt"
+        ? t(uiLocale, "orders.management.bulk.print.receipts")
+        : t(uiLocale, "orders.management.bulk.print.labels"),
+    )}</title>
+    <style>
+      ${styles.join("\n")}
+      .bulk-print-batch-item {
+        page-break-after: always;
+        break-after: page;
+      }
+      .bulk-print-batch-item:last-child {
+        page-break-after: auto;
+        break-after: auto;
+      }
+    </style>
+  </head>
+  <body>
+    ${bodyMarkup}
+  </body>
+</html>`;
+    },
+    [uiLocale],
+  );
 
   const buildReceiptPrintHtml = useCallback((order: ReceiptPreviewOrder) => {
     const receiptDateText = new Date(order.createdAt).toLocaleString(numberLocale);
@@ -1924,6 +2934,91 @@ export function OrdersManagement(props: OrdersManagementProps) {
       buildShippingLabelPrintHtml,
       printDocumentViaWindow,
       receiptPreviewOrder,
+      uiLocale,
+    ],
+  );
+
+  const runBulkPrint = useCallback(
+    async (kind: BulkPrintKind) => {
+      const sourceOrders =
+        kind === "receipt" ? selectedReceiptPrintOrders : selectedLabelPrintOrders;
+      if (sourceOrders.length <= 0) {
+        const message =
+          kind === "receipt"
+            ? t(uiLocale, "orders.management.bulk.print.error.noReceipts")
+            : t(uiLocale, "orders.management.bulk.print.error.noLabels");
+        setErrorMessage(message);
+        toast.error(message);
+        return;
+      }
+
+      setBulkPrintLoadingKind(kind);
+      setErrorMessage(null);
+      setSuccessMessage(null);
+
+      try {
+        const previewOrders = await Promise.all(
+          sourceOrders.map((order) => fetchOrderReceiptPreview(order.id)),
+        );
+        const printableOrders =
+          kind === "receipt"
+            ? previewOrders
+            : previewOrders.filter(
+                (order) =>
+                  Boolean(
+                    order.customerAddress ||
+                      order.shippingProvider ||
+                      order.shippingCarrier ||
+                      order.trackingNo,
+                  ),
+              );
+
+        if (printableOrders.length <= 0) {
+          throw new Error(t(uiLocale, "orders.management.bulk.print.error.noPrintableLabels"));
+        }
+
+        const mergedHtml = mergePrintDocuments(
+          printableOrders.map((order) =>
+            kind === "receipt"
+              ? buildReceiptPrintHtml(order)
+              : buildShippingLabelPrintHtml(order),
+          ),
+          kind,
+        );
+
+        if (kind === "receipt") {
+          setReceiptPrintLoading(true);
+        } else {
+          setShippingLabelPrintLoading(true);
+        }
+
+        printDocumentViaWindow(mergedHtml, kind);
+      } catch (error) {
+        const fallbackMessage =
+          kind === "receipt"
+            ? t(uiLocale, "orders.management.bulk.print.error.receiptFailed")
+            : t(uiLocale, "orders.management.bulk.print.error.labelFailed");
+        const message =
+          error instanceof Error && error.message ? error.message : fallbackMessage;
+        setErrorMessage(message);
+        toast.error(message);
+        if (kind === "receipt") {
+          setReceiptPrintLoading(false);
+        } else {
+          setShippingLabelPrintLoading(false);
+        }
+      } finally {
+        setBulkPrintLoadingKind(null);
+      }
+    },
+    [
+      buildReceiptPrintHtml,
+      buildShippingLabelPrintHtml,
+      fetchOrderReceiptPreview,
+      mergePrintDocuments,
+      printDocumentViaWindow,
+      selectedLabelPrintOrders,
+      selectedReceiptPrintOrders,
       uiLocale,
     ],
   );
@@ -4088,8 +5183,53 @@ export function OrdersManagement(props: OrdersManagementProps) {
         <>
           <article className="space-y-3 rounded-xl border bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold">{t(uiLocale, "orders.management.listTitle")}</h2>
+              <div className="space-y-1">
+                <h2 className="text-sm font-semibold">{t(uiLocale, "orders.management.listTitle")}</h2>
+                <p className="text-xs text-slate-500">
+                  {t(uiLocale, "orders.management.queueDescription")}
+                </p>
+              </div>
               <div className="flex items-center gap-2">
+                {visibleOrders.length > 0 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 px-2 text-xs sm:px-3 sm:text-sm"
+                    disabled={
+                      quickActionLoadingKey !== null ||
+                      bulkActionLoadingKey !== null ||
+                      bulkPrintLoadingKind !== null
+                    }
+                    aria-label={
+                      areAllVisibleOrdersSelected
+                        ? t(uiLocale, "orders.management.bulk.clearSelection")
+                        : t(uiLocale, "orders.management.bulk.selectAllVisible")
+                    }
+                    title={
+                      areAllVisibleOrdersSelected
+                        ? t(uiLocale, "orders.management.bulk.clearSelection")
+                        : t(uiLocale, "orders.management.bulk.selectAllVisible")
+                    }
+                    onClick={() => {
+                      if (areAllVisibleOrdersSelected) {
+                        clearSelectedOrders();
+                        return;
+                      }
+                      toggleSelectAllVisibleOrders();
+                    }}
+                  >
+                    {areAllVisibleOrdersSelected ? (
+                      <X className="h-4 w-4" aria-hidden="true" />
+                    ) : (
+                      <CheckCheck className="h-4 w-4" aria-hidden="true" />
+                    )}
+                    <span className="hidden sm:inline">
+                      {areAllVisibleOrdersSelected
+                        ? t(uiLocale, "orders.management.bulk.clearSelectionShort")
+                        : t(uiLocale, "orders.management.bulk.selectAllVisibleShort")}
+                    </span>
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   className="h-9 px-3 text-xs sm:text-sm"
@@ -4101,41 +5241,86 @@ export function OrdersManagement(props: OrdersManagementProps) {
               </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-2">
-              {tabOptions.map((tab) => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  onClick={() => router.push(buildOrdersUrl(tab.key, 1))}
-                  className={`rounded-lg px-2 py-2 text-xs ${
-                    activeTab === tab.key ? "bg-blue-600 text-white" : "border bg-white text-slate-600"
-                  }`}
-                >
-                  {t(uiLocale, tab.labelKey)}
-                </button>
-              ))}
+            <div className="-mx-1 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex min-w-max gap-2 px-1">
+                {tabOptions.map((tab) => {
+                  const count = ordersPage?.queueCounts[tab.key] ?? 0;
+                  const isActive = activeTab === tab.key;
+
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => router.push(buildOrdersUrl(tab.key, 1))}
+                      className={`inline-flex min-w-[8.5rem] items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                        isActive
+                          ? "border-blue-600 bg-blue-600 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50"
+                      }`}
+                    >
+                      <span className="font-medium">{t(uiLocale, tab.labelKey)}</span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] ${
+                          isActive ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"
+                        }`}
+                      >
+                        {count.toLocaleString(numberLocale)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </article>
 
           <section className="space-y-2">
             {visibleOrders.length === 0 ? (
               <article className="rounded-xl border bg-white p-4 text-sm text-muted-foreground shadow-sm">
-                {t(uiLocale, "orders.page.emptyTab")}
+                <p className="font-medium text-slate-700">{t(uiLocale, activeTabOption.labelKey)}</p>
+                <p className="mt-1">{t(uiLocale, "orders.page.emptyTab")}</p>
               </article>
             ) : (
               <>
                 <div className="space-y-2 md:hidden">
                   {visibleOrders.map((order) => {
                     const badges = buildOrderStatusBadges(uiLocale, order);
+                    const quickAction = getOrderListQuickAction(order, orderQuickActionPermissions);
+                    const secondaryQuickAction = getOrderListSecondaryQuickAction(
+                      order,
+                      orderQuickActionPermissions,
+                    );
+                    const quickActionLoading =
+                      quickActionLoadingKey !== null &&
+                      quickAction !== null &&
+                      quickActionLoadingKey ===
+                        buildOrderQuickActionLoadingKey(order.id, quickAction.key);
+                    const secondaryQuickActionLoading =
+                      quickActionLoadingKey !== null &&
+                      secondaryQuickAction !== null &&
+                      quickActionLoadingKey ===
+                        buildOrderQuickActionLoadingKey(order.id, secondaryQuickAction.key);
                     return (
-                      <Link
+                      <article
                         key={order.id}
-                        href={`/orders/${order.id}`}
                         className="block rounded-xl border bg-white p-4 shadow-sm"
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-xs text-muted-foreground">{order.orderNo}</p>
+                          <div className="min-w-0 flex-1">
+                            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                                checked={selectedOrderIdSet.has(order.id)}
+                                disabled={
+                                  quickActionLoadingKey !== null ||
+                                  bulkActionLoadingKey !== null ||
+                                  bulkPrintLoadingKind !== null
+                                }
+                                onChange={() => toggleOrderSelection(order.id)}
+                                aria-label={`${t(uiLocale, "orders.management.bulk.selectOrder")} ${order.orderNo}`}
+                              />
+                              <span>{order.orderNo}</span>
+                            </label>
                             <h3 className="text-sm font-semibold">
                               {order.customerName ||
                                 order.contactDisplayName ||
@@ -4160,7 +5345,74 @@ export function OrdersManagement(props: OrdersManagementProps) {
                         <p className="mt-2 text-sm font-medium">
                           {order.total.toLocaleString(numberLocale)} {catalog.storeCurrency}
                         </p>
-                      </Link>
+                        <div className="mt-3 space-y-2">
+                          <div className="rounded-lg bg-slate-50 px-3 py-2">
+                            <p className="text-[11px] uppercase tracking-wide text-slate-500">
+                              {t(uiLocale, "orders.management.quickAction.nextStepLabel")}
+                            </p>
+                            <p className="mt-1 text-sm font-medium text-slate-800">
+                              {quickAction
+                                ? t(uiLocale, quickAction.labelKey)
+                                : t(uiLocale, "orders.management.quickAction.none")}
+                            </p>
+                            {quickAction && "reasonKey" in quickAction && quickAction.reasonKey ? (
+                              <p className="mt-1 text-xs text-slate-500">
+                                {t(uiLocale, quickAction.reasonKey)}
+                              </p>
+                            ) : null}
+                          </div>
+                          <div className={`grid gap-2 ${secondaryQuickAction ? "grid-cols-2" : "grid-cols-2"}`}>
+                            <Button
+                              type="button"
+                              variant={quickAction?.type === "patch" ? "default" : "outline"}
+                              className={`h-9 text-xs ${secondaryQuickAction ? "col-span-2" : ""}`}
+                              disabled={
+                                !quickAction ||
+                                loading ||
+                                quickActionLoadingKey !== null ||
+                                bulkActionLoadingKey !== null ||
+                                bulkPrintLoadingKind !== null
+                              }
+                              onClick={() => handleOrderQuickAction(order, quickAction)}
+                            >
+                              {quickActionLoading
+                                ? t(uiLocale, "common.action.saving")
+                                : quickAction?.type === "detail"
+                                  ? t(uiLocale, "orders.management.action.viewDetails")
+                                  : quickAction
+                                    ? t(uiLocale, quickAction.labelKey)
+                                    : t(uiLocale, "orders.management.quickAction.none")}
+                            </Button>
+                            {secondaryQuickAction ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-9 border-orange-300 px-2 text-xs text-orange-700 hover:bg-orange-50"
+                                disabled={
+                                  loading ||
+                                  quickActionLoadingKey !== null ||
+                                  bulkActionLoadingKey !== null ||
+                                  bulkPrintLoadingKind !== null
+                                }
+                                onClick={() => handleOrderQuickAction(order, secondaryQuickAction)}
+                              >
+                                {secondaryQuickActionLoading
+                                  ? t(uiLocale, "common.action.saving")
+                                  : t(uiLocale, secondaryQuickAction.labelKey)}
+                              </Button>
+                            ) : null}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              className="h-9 text-xs"
+                              disabled={bulkActionLoadingKey !== null || bulkPrintLoadingKind !== null}
+                              onClick={() => router.push(`/orders/${order.id}`)}
+                            >
+                              {t(uiLocale, "orders.management.action.open")}
+                            </Button>
+                          </div>
+                        </div>
+                      </article>
                     );
                   })}
                 </div>
@@ -4910,6 +6162,532 @@ export function OrdersManagement(props: OrdersManagementProps) {
             >
               {t(uiLocale, "orders.create.success.action.closeWindow")}
             </button>
+          </div>
+        </SlideUpSheet>
+      ) : null}
+
+      {!isCreateOnlyMode && selectedOrderIds.length > 0 ? (
+        <div className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-40 md:left-1/2 md:w-[min(56rem,calc(100vw-2rem))] md:-translate-x-1/2">
+          <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-medium text-slate-900">
+                {t(uiLocale, "orders.management.bulk.selectedPrefix")}{" "}
+                {selectedOrderIds.length.toLocaleString(numberLocale)}{" "}
+                {t(uiLocale, "orders.management.bulk.selectedSuffix")}
+              </p>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-8 px-2 text-xs"
+                disabled={bulkActionLoadingKey !== null || bulkPrintLoadingKind !== null}
+                onClick={clearSelectedOrders}
+              >
+                {t(uiLocale, "orders.management.bulk.clearSelection")}
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap gap-2 text-xs text-slate-600">
+              <span className="rounded-full bg-slate-100 px-2.5 py-1">
+                {t(uiLocale, "orders.management.bulk.summary.totalPrefix")}{" "}
+                {selectedOrdersTotal.toLocaleString(numberLocale)} {catalog.storeCurrency}
+              </span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1">
+                {t(uiLocale, "orders.management.bulk.summary.receiptsPrefix")}{" "}
+                {selectedReceiptPrintOrders.length.toLocaleString(numberLocale)}
+              </span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1">
+                {t(uiLocale, "orders.management.bulk.summary.labelsPrefix")}{" "}
+                {selectedLabelPrintOrders.length.toLocaleString(numberLocale)}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 px-3 text-xs"
+                disabled={
+                  selectedReceiptPrintOrders.length <= 0 ||
+                  quickActionLoadingKey !== null ||
+                  bulkActionLoadingKey !== null ||
+                  bulkPrintLoadingKind !== null
+                }
+                onClick={() => void runBulkPrint("receipt")}
+              >
+                {bulkPrintLoadingKind === "receipt" || receiptPrintLoading
+                  ? t(uiLocale, "orders.detail.actions.print.loading")
+                  : `${t(uiLocale, "orders.management.bulk.print.receipts")} (${selectedReceiptPrintOrders.length.toLocaleString(numberLocale)})`}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 px-3 text-xs"
+                disabled={
+                  selectedLabelPrintOrders.length <= 0 ||
+                  quickActionLoadingKey !== null ||
+                  bulkActionLoadingKey !== null ||
+                  bulkPrintLoadingKind !== null
+                }
+                onClick={() => void runBulkPrint("label")}
+              >
+                {bulkPrintLoadingKind === "label" || shippingLabelPrintLoading
+                  ? t(uiLocale, "orders.detail.actions.print.loading")
+                  : `${t(uiLocale, "orders.management.bulk.print.labels")} (${selectedLabelPrintOrders.length.toLocaleString(numberLocale)})`}
+              </Button>
+            </div>
+
+            {selectedQuickActionGroups.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {selectedQuickActionGroups.map((group) => (
+                  <Button
+                    key={group.key}
+                    type="button"
+                    variant="outline"
+                    className="h-9 px-3 text-xs"
+                    disabled={
+                      quickActionLoadingKey !== null ||
+                      bulkActionLoadingKey !== null ||
+                      bulkPrintLoadingKind !== null
+                    }
+                    onClick={() => setBulkActionConfirm(group)}
+                  >
+                    {bulkActionLoadingKey === group.key
+                      ? t(uiLocale, "common.action.saving")
+                      : `${t(uiLocale, group.buttonLabelKey)} (${group.orders.length.toLocaleString(numberLocale)})`}
+                  </Button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">
+                {t(uiLocale, "orders.management.bulk.noneEligible")}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {orderReviewSheet ? (
+        <SlideUpSheet
+          isOpen
+          onClose={() => {
+            if (quickActionLoadingKey === null) {
+              setOrderReviewSheet(null);
+            }
+          }}
+          title={
+            orderReviewSheet.kind === "cod-reconcile"
+              ? t(uiLocale, "orders.management.review.cod.title")
+              : orderReviewSheet.kind === "cod-return"
+                ? t(uiLocale, "orders.management.review.codReturn.title")
+                : t(uiLocale, "orders.management.review.confirmPaid.title")
+          }
+          description={
+            orderReviewSheet.kind === "cod-reconcile"
+              ? t(uiLocale, "orders.management.review.cod.description")
+              : orderReviewSheet.kind === "cod-return"
+                ? t(uiLocale, "orders.management.review.codReturn.description")
+                : t(uiLocale, "orders.management.review.confirmPaid.description")
+          }
+          panelMaxWidthClass="sm:max-w-lg"
+          disabled={quickActionLoadingKey !== null}
+          footer={
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-10 w-full sm:w-auto"
+                disabled={quickActionLoadingKey !== null}
+                onClick={() => router.push(`/orders/${orderReviewSheet.orderId}`)}
+              >
+                {t(uiLocale, "orders.management.action.viewDetails")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 w-full sm:w-auto"
+                disabled={quickActionLoadingKey !== null}
+                onClick={() => setOrderReviewSheet(null)}
+              >
+                {t(uiLocale, "common.action.cancel")}
+              </Button>
+              <Button
+                type="button"
+                className="h-10 w-full sm:w-auto"
+                disabled={
+                  quickActionLoadingKey !== null ||
+                  (orderReviewSheet.kind === "confirm-paid" &&
+                    orderReviewSheet.paymentMethod === "LAO_QR" &&
+                    !orderReviewSheet.paymentAccountId.trim()) ||
+                  (orderReviewSheet.kind === "cod-reconcile" &&
+                    (!Number.isFinite(reviewCodAmountNumber) ||
+                      reviewCodAmountNumber === null ||
+                      reviewCodAmountNumber < 0 ||
+                      !Number.isFinite(reviewCodFeeNumber) ||
+                      reviewCodFeeNumber === null ||
+                      reviewCodFeeNumber < 0)) ||
+                  (orderReviewSheet.kind === "cod-return" &&
+                    (!Number.isFinite(reviewCodFeeNumber) ||
+                      reviewCodFeeNumber === null ||
+                      reviewCodFeeNumber < 0))
+                }
+                onClick={() => void runOrderReviewAction()}
+              >
+                {quickActionLoadingKey === orderReviewLoadingKey
+                  ? t(uiLocale, "common.action.saving")
+                  : t(uiLocale, orderReviewSheet.actionLabelKey)}
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="font-medium text-slate-900">{orderReviewSheet.orderNo}</p>
+                  <p className="text-xs text-slate-500">{orderReviewSheet.customerLabel}</p>
+                </div>
+                <p className="text-sm font-semibold text-slate-900">
+                  {orderReviewSheet.total.toLocaleString(numberLocale)}{" "}
+                  {currencyLabel(orderReviewSheet.paymentCurrency)}
+                </p>
+              </div>
+            </div>
+
+            {orderReviewSheet.kind === "confirm-paid" ? (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-slate-900">
+                    {t(uiLocale, "orders.management.review.confirmPaid.paymentMethodLabel")}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(["CASH", "LAO_QR"] as const).map((method) => (
+                      <button
+                        key={method}
+                        type="button"
+                        className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+                          orderReviewSheet.paymentMethod === method
+                            ? "border-blue-600 bg-blue-50 text-blue-700"
+                            : "border-slate-200 bg-white text-slate-700"
+                        }`}
+                        disabled={quickActionLoadingKey !== null}
+                        onClick={() =>
+                          setOrderReviewSheet((current) =>
+                            current && current.kind === "confirm-paid"
+                              ? {
+                                  ...current,
+                                  paymentMethod: method,
+                                  paymentAccountId:
+                                    method === "LAO_QR"
+                                      ? current.paymentAccountId || activeQrPaymentAccounts[0]?.id || ""
+                                      : "",
+                                }
+                              : current,
+                          )
+                        }
+                      >
+                        {t(uiLocale, paymentMethodLabelKey[method])}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {orderReviewSheet.paymentMethod === "LAO_QR" ? (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-900" htmlFor="order-review-qr-account">
+                      {t(uiLocale, "orders.management.review.confirmPaid.paymentAccountLabel")}
+                    </label>
+                    <select
+                      id="order-review-qr-account"
+                      className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
+                      value={orderReviewSheet.paymentAccountId}
+                      disabled={quickActionLoadingKey !== null || activeQrPaymentAccounts.length <= 0}
+                      onChange={(event) =>
+                        setOrderReviewSheet((current) =>
+                          current && current.kind === "confirm-paid"
+                            ? {
+                                ...current,
+                                paymentAccountId: event.target.value,
+                              }
+                            : current,
+                        )
+                      }
+                    >
+                      <option value="">{t(uiLocale, "orders.management.review.confirmPaid.paymentAccountPlaceholder")}</option>
+                      {activeQrPaymentAccounts.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.displayName}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedReviewQrAccount ? (
+                      <p className="text-xs text-slate-500">
+                        {selectedReviewQrAccount.bankName?.trim() || selectedReviewQrAccount.accountName}
+                      </p>
+                    ) : null}
+                    {activeQrPaymentAccounts.length <= 0 ? (
+                      <p className="text-xs text-amber-700">
+                        {t(uiLocale, "orders.management.review.confirmPaid.error.noQrAccounts")}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : orderReviewSheet.kind === "cod-reconcile" ? (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                  {t(uiLocale, "orders.management.review.cod.hint")}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1">
+                    <span className="text-sm font-medium text-slate-900">
+                      {t(uiLocale, "orders.management.review.cod.amountLabel")}
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      inputMode="numeric"
+                      className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
+                      value={orderReviewSheet.codAmount}
+                      disabled={quickActionLoadingKey !== null}
+                      onChange={(event) =>
+                        setOrderReviewSheet((current) =>
+                          current && current.kind === "cod-reconcile"
+                            ? {
+                                ...current,
+                                codAmount: event.target.value,
+                              }
+                            : current,
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-sm font-medium text-slate-900">
+                      {t(uiLocale, "orders.management.review.cod.feeLabel")}
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      inputMode="numeric"
+                      className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
+                      value={orderReviewSheet.codFee}
+                      disabled={quickActionLoadingKey !== null}
+                      onChange={(event) =>
+                        setOrderReviewSheet((current) =>
+                          current && current.kind === "cod-reconcile"
+                            ? {
+                                ...current,
+                                codFee: event.target.value,
+                              }
+                            : current,
+                        )
+                      }
+                    />
+                  </label>
+                </div>
+                <div className="flex flex-wrap gap-2 text-xs text-slate-600">
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1">
+                    {t(uiLocale, "orders.management.review.cod.expectedLabel")}{" "}
+                    {orderReviewSheet.total.toLocaleString(numberLocale)}
+                  </span>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1">
+                    {t(uiLocale, "orders.management.review.cod.diffLabel")}{" "}
+                    {Number.isFinite(reviewCodAmountNumber)
+                      ? (reviewCodAmountNumber! - orderReviewSheet.total).toLocaleString(numberLocale)
+                      : "-"}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-orange-200 bg-orange-50 p-3 text-xs text-orange-800">
+                  {t(uiLocale, "orders.management.review.codReturn.hint")}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <span className="text-sm font-medium text-slate-900">
+                      {t(uiLocale, "orders.management.review.codReturn.outboundShippingLabel")}
+                    </span>
+                    <div className="h-10 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                      {orderReviewSheet.shippingCost.toLocaleString(numberLocale)}{" "}
+                      {currencyLabel(orderReviewSheet.paymentCurrency)}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-sm font-medium text-slate-900">
+                      {t(uiLocale, "orders.management.review.codReturn.accumulatedFeeLabel")}
+                    </span>
+                    <div className="h-10 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                      {orderReviewSheet.codFeeAccumulated.toLocaleString(numberLocale)}{" "}
+                      {currencyLabel(orderReviewSheet.paymentCurrency)}
+                    </div>
+                  </div>
+                  <label className="space-y-1">
+                    <span className="text-sm font-medium text-slate-900">
+                      {t(uiLocale, "orders.management.review.codReturn.feeLabel")}
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      inputMode="numeric"
+                      className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
+                      value={orderReviewSheet.codFee}
+                      disabled={quickActionLoadingKey !== null}
+                      onChange={(event) =>
+                        setOrderReviewSheet((current) =>
+                          current && current.kind === "cod-return"
+                            ? {
+                                ...current,
+                                codFee: event.target.value,
+                              }
+                            : current,
+                        )
+                      }
+                    />
+                  </label>
+                  <div className="space-y-1">
+                    <span className="text-sm font-medium text-slate-900">
+                      {t(uiLocale, "orders.management.review.codReturn.totalShippingLabel")}
+                    </span>
+                    <div className="h-10 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                      {(
+                        orderReviewSheet.shippingCost +
+                        (Number.isFinite(reviewCodFeeNumber) && reviewCodFeeNumber !== null
+                          ? Math.max(0, reviewCodFeeNumber)
+                          : 0)
+                      ).toLocaleString(numberLocale)}{" "}
+                      {currencyLabel(orderReviewSheet.paymentCurrency)}
+                    </div>
+                  </div>
+                </div>
+                <label className="space-y-1">
+                  <span className="text-sm font-medium text-slate-900">
+                    {t(uiLocale, "orders.management.review.codReturn.noteLabel")}
+                  </span>
+                  <textarea
+                    className="min-h-24 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-primary focus:ring-2"
+                    value={orderReviewSheet.codReturnNote}
+                    disabled={quickActionLoadingKey !== null}
+                    placeholder={t(uiLocale, "orders.management.review.codReturn.notePlaceholder")}
+                    onChange={(event) =>
+                      setOrderReviewSheet((current) =>
+                        current && current.kind === "cod-return"
+                          ? {
+                              ...current,
+                              codReturnNote: event.target.value,
+                            }
+                          : current,
+                      )
+                    }
+                  />
+                </label>
+              </div>
+            )}
+          </div>
+        </SlideUpSheet>
+      ) : null}
+
+      {bulkActionConfirm ? (
+        <SlideUpSheet
+          isOpen
+          onClose={() => {
+            if (bulkActionLoadingKey === null) {
+              setBulkActionConfirm(null);
+            }
+          }}
+          title={t(uiLocale, "orders.management.bulk.confirmTitle")}
+          description={t(uiLocale, "orders.management.bulk.confirmDescription")}
+          panelMaxWidthClass="sm:max-w-md"
+          disabled={bulkActionLoadingKey !== null}
+          footer={
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 w-full sm:w-auto"
+                disabled={bulkActionLoadingKey !== null}
+                onClick={() => setBulkActionConfirm(null)}
+              >
+                {t(uiLocale, "common.action.cancel")}
+              </Button>
+              <Button
+                type="button"
+                className="h-10 w-full sm:w-auto"
+                disabled={bulkActionLoadingKey !== null}
+                onClick={() => void runBulkOrderAction(bulkActionConfirm)}
+              >
+                {bulkActionLoadingKey === bulkActionConfirm.key
+                  ? t(uiLocale, "common.action.saving")
+                  : `${t(uiLocale, bulkActionConfirm.buttonLabelKey)} (${bulkActionConfirm.orders.length.toLocaleString(numberLocale)})`}
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-2 text-sm text-slate-600">
+            <p className="font-medium text-slate-900">
+              {bulkActionConfirm.orders.length.toLocaleString(numberLocale)}{" "}
+              {t(uiLocale, "orders.management.bulk.selectedSuffix")}
+            </p>
+            <p>{t(uiLocale, "orders.management.bulk.confirmHint")}</p>
+          </div>
+        </SlideUpSheet>
+      ) : null}
+
+      {quickActionConfirm ? (
+        <SlideUpSheet
+          isOpen
+          onClose={() => {
+            if (quickActionLoadingKey === null) {
+              setQuickActionConfirm(null);
+            }
+          }}
+          title={t(
+            uiLocale,
+            quickActionConfirm.config.confirmTitleKey ?? "orders.management.quickAction.confirmTitle",
+          )}
+          description={t(
+            uiLocale,
+            quickActionConfirm.config.confirmDescriptionKey ??
+              "orders.management.quickAction.confirmDescription",
+          )}
+          panelMaxWidthClass="sm:max-w-md"
+          disabled={quickActionLoadingKey !== null}
+          footer={
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 w-full sm:w-auto"
+                disabled={quickActionLoadingKey !== null}
+                onClick={() => setQuickActionConfirm(null)}
+              >
+                {t(uiLocale, "common.action.cancel")}
+              </Button>
+              <Button
+                type="button"
+                className="h-10 w-full sm:w-auto"
+                disabled={quickActionLoadingKey !== null}
+                onClick={() =>
+                  void runOrderQuickAction(
+                    { id: quickActionConfirm.orderId, orderNo: quickActionConfirm.orderNo },
+                    quickActionConfirm.config,
+                  )
+                }
+              >
+                {quickActionLoadingKey ===
+                buildOrderQuickActionLoadingKey(
+                  quickActionConfirm.orderId,
+                  quickActionConfirm.config.key,
+                )
+                  ? t(uiLocale, "common.action.saving")
+                  : t(uiLocale, quickActionConfirm.config.labelKey)}
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-2 text-sm text-slate-600">
+            <p className="font-medium text-slate-900">{quickActionConfirm.orderNo}</p>
+            <p>{t(uiLocale, "orders.management.quickAction.confirmOrderHint")}</p>
           </div>
         </SlideUpSheet>
       ) : null}

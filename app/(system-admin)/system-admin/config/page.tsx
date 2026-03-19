@@ -1,40 +1,47 @@
 import Link from "next/link";
 import { Settings2, ShieldCheck, Store, Users } from "lucide-react";
 
+import { getSession } from "@/lib/auth/session";
+import { DEFAULT_UI_LOCALE } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
+
 const menus = [
   {
     href: "/system-admin/config/clients",
-    title: "Manage Client",
-    description: "จัดการบัญชี SUPERADMIN และโควตาร้าน/สาขา",
+    titleKey: "systemAdmin.configCenter.menu.clients.title",
+    descriptionKey: "systemAdmin.configCenter.menu.clients.description",
     icon: Users,
   },
   {
     href: "/system-admin/config/system",
-    title: "System Config",
-    description: "ตั้งค่า Global Policy เช่นโควตาสาขาเริ่มต้น",
+    titleKey: "systemAdmin.configCenter.menu.system.title",
+    descriptionKey: "systemAdmin.configCenter.menu.system.description",
     icon: Settings2,
   },
   {
     href: "/system-admin/config/stores-users",
-    title: "Store & User Config",
-    description: "ตั้งค่าร้านทั้งหมดและผู้ใช้ทั้งหมดโดย SYSTEM_ADMIN",
+    titleKey: "systemAdmin.configCenter.menu.storesUsers.title",
+    descriptionKey: "systemAdmin.configCenter.menu.storesUsers.description",
     icon: Store,
   },
   {
     href: "/system-admin/config/security",
-    title: "Security",
-    description: "ดูแนวทางความปลอดภัยและนโยบายการเข้าถึง",
+    titleKey: "systemAdmin.configCenter.menu.security.title",
+    descriptionKey: "systemAdmin.configCenter.menu.security.description",
     icon: ShieldCheck,
   },
-];
+] as const;
 
-export default function SystemAdminConfigPage() {
+export default async function SystemAdminConfigPage() {
+  const session = await getSession();
+  const uiLocale = session?.uiLocale ?? DEFAULT_UI_LOCALE;
+
   return (
     <section className="space-y-4">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold">Config Center</h1>
+        <h1 className="text-xl font-semibold">{t(uiLocale, "systemAdmin.configCenter.title")}</h1>
         <p className="text-sm text-muted-foreground">
-          รวมเมนูตั้งค่าหลักสำหรับผู้ดูแลระบบ POS ทั้งระบบ
+          {t(uiLocale, "systemAdmin.configCenter.subtitle")}
         </p>
       </header>
 
@@ -50,8 +57,8 @@ export default function SystemAdminConfigPage() {
               className="rounded-xl border bg-white p-4 transition hover:border-blue-300 hover:bg-blue-50/40"
             >
               <Icon className="h-5 w-5 text-blue-700" />
-              <h2 className="mt-3 text-sm font-semibold">{menu.title}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">{menu.description}</p>
+              <h2 className="mt-3 text-sm font-semibold">{t(uiLocale, menu.titleKey)}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{t(uiLocale, menu.descriptionKey)}</p>
             </Link>
           );
         })}

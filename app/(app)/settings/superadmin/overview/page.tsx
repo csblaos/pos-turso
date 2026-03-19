@@ -7,6 +7,8 @@ import { getSession } from "@/lib/auth/session";
 import { listActiveMemberships } from "@/lib/auth/session-db";
 import { db } from "@/lib/db/client";
 import { fbConnections, orders, storeBranches, storeMembers, waConnections } from "@/lib/db/schema";
+import { uiLocaleToDateLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
 
 const paidStatuses: Array<"PAID" | "PACKED" | "SHIPPED"> = ["PAID", "PACKED", "SHIPPED"];
 
@@ -17,6 +19,8 @@ export default async function SettingsSuperadminOverviewPage() {
   if (!session) {
     redirect("/login");
   }
+  const uiLocale = session.uiLocale;
+  const numberLocale = uiLocaleToDateLocale(uiLocale);
 
   const memberships = await listActiveMemberships(session.userId);
   if (memberships.length === 0) {
@@ -111,46 +115,54 @@ export default async function SettingsSuperadminOverviewPage() {
   return (
     <section className="space-y-5">
       <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">ภาพรวมข้ามร้าน</h1>
-        <p className="text-sm text-slate-500">สรุปสถานะหลักของร้านทั้งหมดที่คุณดูแลในหน้าเดียว</p>
+        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
+          {t(uiLocale, "superadmin.overview.title")}
+        </h1>
+        <p className="text-sm text-slate-500">{t(uiLocale, "superadmin.overview.subtitle")}</p>
       </header>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-500">ร้านทั้งหมด</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-900">{totalStores.toLocaleString("th-TH")}</p>
+          <p className="text-xs text-slate-500">{t(uiLocale, "superadmin.overview.card.totalStores")}</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{totalStores.toLocaleString(numberLocale)}</p>
         </article>
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-500">สาขาทั้งหมด</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-900">{totalBranches.toLocaleString("th-TH")}</p>
+          <p className="text-xs text-slate-500">{t(uiLocale, "superadmin.overview.card.totalBranches")}</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{totalBranches.toLocaleString(numberLocale)}</p>
         </article>
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-500">สมาชิก ACTIVE</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-900">{totalActiveMembers.toLocaleString("th-TH")}</p>
+          <p className="text-xs text-slate-500">{t(uiLocale, "superadmin.overview.card.activeMembers")}</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{totalActiveMembers.toLocaleString(numberLocale)}</p>
         </article>
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-500">ออเดอร์วันนี้</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-900">{todayOrders.toLocaleString("th-TH")}</p>
+          <p className="text-xs text-slate-500">{t(uiLocale, "superadmin.overview.card.todayOrders")}</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{todayOrders.toLocaleString(numberLocale)}</p>
         </article>
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-500">ยอดขายวันนี้ (รวม)</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-900">{todaySales.toLocaleString("th-TH")}</p>
+          <p className="text-xs text-slate-500">{t(uiLocale, "superadmin.overview.card.todaySales")}</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{todaySales.toLocaleString(numberLocale)}</p>
         </article>
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-500">ร้านที่เชื่อมต่อ FB / WA</p>
+          <p className="text-xs text-slate-500">{t(uiLocale, "superadmin.overview.card.connectedChannels")}</p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">
-            {connectedFbStoreCount.toLocaleString("th-TH")} / {connectedWaStoreCount.toLocaleString("th-TH")}
+            {connectedFbStoreCount.toLocaleString(numberLocale)} / {connectedWaStoreCount.toLocaleString(numberLocale)}
           </p>
         </article>
       </div>
 
       <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
-          <p className="text-sm font-semibold text-slate-900">Top ร้านตามจำนวนสมาชิก ACTIVE</p>
-          <p className="mt-0.5 text-xs text-slate-500">ใช้ดูร้านที่มีการใช้งานทีมสูงสุดก่อน</p>
+          <p className="text-sm font-semibold text-slate-900">
+            {t(uiLocale, "superadmin.overview.topStores.title")}
+          </p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {t(uiLocale, "superadmin.overview.topStores.subtitle")}
+          </p>
         </div>
         {topStoresByMembers.length === 0 ? (
-          <p className="px-4 py-4 text-sm text-slate-500">ยังไม่มีข้อมูลร้าน</p>
+          <p className="px-4 py-4 text-sm text-slate-500">
+            {t(uiLocale, "superadmin.overview.topStores.empty")}
+          </p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {topStoresByMembers.map((store) => (
@@ -161,7 +173,12 @@ export default async function SettingsSuperadminOverviewPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-slate-900">{store.storeName}</p>
                   <p className="mt-0.5 truncate text-xs text-slate-500">
-                    สมาชิก ACTIVE {store.activeMembers.toLocaleString("th-TH")} คน • สาขา {store.branchCount.toLocaleString("th-TH")} แห่ง
+                    {t(uiLocale, "superadmin.overview.topStores.membersPrefix")}{" "}
+                    {store.activeMembers.toLocaleString(numberLocale)}{" "}
+                    {t(uiLocale, "superadmin.overview.topStores.membersSuffix")} •{" "}
+                    {t(uiLocale, "superadmin.overview.topStores.branchesPrefix")}{" "}
+                    {store.branchCount.toLocaleString(numberLocale)}{" "}
+                    {t(uiLocale, "superadmin.overview.topStores.branchesSuffix")}
                   </p>
                 </div>
               </li>
@@ -171,7 +188,9 @@ export default async function SettingsSuperadminOverviewPage() {
       </article>
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">ไปหน้าที่เกี่ยวข้อง</p>
+        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          {t(uiLocale, "superadmin.nav.section")}
+        </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <Link
             href="/settings/superadmin/integrations"
@@ -181,8 +200,12 @@ export default async function SettingsSuperadminOverviewPage() {
               <PlugZap className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">ดูการเชื่อมต่อช่องทาง</span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">เช็กสถานะ FB/WA ของทุกร้าน</span>
+              <span className="block truncate text-sm font-medium text-slate-900">
+                {t(uiLocale, "settings.superadminHome.quickActions.integrations.title")}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-slate-500">
+                {t(uiLocale, "settings.superadminHome.quickActions.integrations.description")}
+              </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
           </Link>
@@ -195,8 +218,12 @@ export default async function SettingsSuperadminOverviewPage() {
               <BarChart3 className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">กลับ Superadmin Center</span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">เลือกเมนูจัดการอื่น ๆ</span>
+              <span className="block truncate text-sm font-medium text-slate-900">
+                {t(uiLocale, "superadmin.nav.backToCenter.title")}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-slate-500">
+                {t(uiLocale, "superadmin.nav.backToCenter.description")}
+              </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
           </Link>
@@ -210,10 +237,10 @@ export default async function SettingsSuperadminOverviewPage() {
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium text-slate-900">
-                กลับหน้าเลือกร้าน / เปลี่ยนสาขา
+                {t(uiLocale, "superadmin.nav.exitMode.title")}
               </span>
               <span className="mt-0.5 block truncate text-xs text-slate-500">
-                ออกจากโหมดผู้ดูแลกลับหน้าใช้งานรายวัน
+                {t(uiLocale, "superadmin.nav.exitMode.description")}
               </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />

@@ -21,6 +21,12 @@ import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch, setClientAuthToken } from "@/lib/auth/client-token";
 import {
+  DEFAULT_UI_LOCALE,
+  type UiLocale,
+  uiLocaleToDateLocale,
+} from "@/lib/i18n/locales";
+import { t, type MessageKey } from "@/lib/i18n/messages";
+import {
   formatLaosAddress,
   getDistrictsByProvinceId,
   laosProvinces,
@@ -80,6 +86,7 @@ type StoresManagementProps = {
   memberships: StoreMembershipItem[];
   activeStoreId: string;
   activeBranchId: string | null;
+  uiLocale?: UiLocale;
   isSuperadmin: boolean;
   canCreateStore: boolean;
   createStoreBlockedReason: string | null;
@@ -90,39 +97,39 @@ type StoresManagementProps = {
 const storeTypeOptions = [
   {
     value: "ONLINE_RETAIL",
-    title: "Online POS",
+    titleKey: "onboarding.storeType.online.title",
     icon: ShoppingBag,
     iconColorClassName: "text-sky-700",
     iconBgClassName: "bg-sky-100 ring-sky-200",
   },
   {
     value: "RESTAURANT",
-    title: "Restaurant POS",
+    titleKey: "onboarding.storeType.restaurant.title",
     icon: UtensilsCrossed,
     iconColorClassName: "text-amber-700",
     iconBgClassName: "bg-amber-100 ring-amber-200",
   },
   {
     value: "CAFE",
-    title: "Cafe POS",
+    titleKey: "onboarding.storeType.cafe.title",
     icon: Coffee,
     iconColorClassName: "text-emerald-700",
     iconBgClassName: "bg-emerald-100 ring-emerald-200",
   },
   {
     value: "OTHER",
-    title: "Other POS",
+    titleKey: "onboarding.storeType.other.title",
     icon: Grid3X3,
     iconColorClassName: "text-violet-700",
     iconBgClassName: "bg-violet-100 ring-violet-200",
   },
 ] as const;
 
-const storeTypeLabels: Record<StoreMembershipItem["storeType"], string> = {
-  ONLINE_RETAIL: "Online POS",
-  RESTAURANT: "Restaurant POS",
-  CAFE: "Cafe POS",
-  OTHER: "Other POS",
+const storeTypeLabelKeys: Record<StoreMembershipItem["storeType"], MessageKey> = {
+  ONLINE_RETAIL: "onboarding.storeType.online.title",
+  RESTAURANT: "onboarding.storeType.restaurant.title",
+  CAFE: "onboarding.storeType.cafe.title",
+  OTHER: "onboarding.storeType.other.title",
 };
 
 const branchSharingDefaultsByMode: Record<BranchSharingMode, BranchSharingConfig> = {
@@ -154,102 +161,114 @@ const branchSharingDefaultsByMode: Record<BranchSharingMode, BranchSharingConfig
 
 const branchSharingModeOptions: Array<{
   value: BranchSharingMode;
-  label: string;
-  description: string;
+  labelKey: MessageKey;
+  descriptionKey: MessageKey;
   recommended?: boolean;
 }> = [
   {
     value: "BALANCED",
-    label: "Balanced",
-    description: "แชร์ข้อมูลหลักจาก Main Branch แต่แยกสต็อกตามสาขา",
+    labelKey: "storesManagement.branchMode.BALANCED.label",
+    descriptionKey: "storesManagement.branchMode.BALANCED.description",
     recommended: true,
   },
   {
     value: "FULL_SYNC",
-    label: "Full Sync",
-    description: "แชร์ข้อมูลทั้งหมดรวมถึงสต็อกกับ Main Branch",
+    labelKey: "storesManagement.branchMode.FULL_SYNC.label",
+    descriptionKey: "storesManagement.branchMode.FULL_SYNC.description",
   },
   {
     value: "INDEPENDENT",
-    label: "Independent",
-    description: "สาขาแยกข้อมูลเองเกือบทั้งหมด",
+    labelKey: "storesManagement.branchMode.INDEPENDENT.label",
+    descriptionKey: "storesManagement.branchMode.INDEPENDENT.description",
   },
 ];
 
 const branchSharingToggleOptions: Array<{
   key: keyof BranchSharingConfig;
-  label: string;
-  description: string;
+  labelKey: MessageKey;
+  descriptionKey: MessageKey;
 }> = [
   {
     key: "shareCatalog",
-    label: "สินค้าและหน่วยนับ",
-    description: "Products, category, units",
+    labelKey: "storesManagement.shareToggle.shareCatalog.label",
+    descriptionKey: "storesManagement.shareToggle.shareCatalog.description",
   },
   {
     key: "sharePricing",
-    label: "ราคา",
-    description: "ราคาและโครงสร้างราคา",
+    labelKey: "storesManagement.shareToggle.sharePricing.label",
+    descriptionKey: "storesManagement.shareToggle.sharePricing.description",
   },
   {
     key: "sharePromotions",
-    label: "โปรโมชัน",
-    description: "ชุดโปรโมชันกลาง",
+    labelKey: "storesManagement.shareToggle.sharePromotions.label",
+    descriptionKey: "storesManagement.shareToggle.sharePromotions.description",
   },
   {
     key: "shareCustomers",
-    label: "ฐานลูกค้า",
-    description: "รายชื่อและข้อมูลลูกค้า",
+    labelKey: "storesManagement.shareToggle.shareCustomers.label",
+    descriptionKey: "storesManagement.shareToggle.shareCustomers.description",
   },
   {
     key: "shareStaffRoles",
-    label: "บทบาทมาตรฐาน",
-    description: "Role templates และสิทธิ์พื้นฐาน",
+    labelKey: "storesManagement.shareToggle.shareStaffRoles.label",
+    descriptionKey: "storesManagement.shareToggle.shareStaffRoles.description",
   },
   {
     key: "shareInventory",
-    label: "สต็อกรวม",
-    description: "คงเหลือรวมร่วมกับ Main Branch",
+    labelKey: "storesManagement.shareToggle.shareInventory.label",
+    descriptionKey: "storesManagement.shareToggle.shareInventory.description",
   },
 ];
 
 const branchCreateSteps: Array<{
   id: BranchCreateStep;
-  title: string;
-  description: string;
+  titleKey: MessageKey;
+  descriptionKey: MessageKey;
 }> = [
   {
     id: 1,
-    title: "ข้อมูลสาขา",
-    description: "กรอกชื่อ รหัส และที่อยู่",
+    titleKey: "storesManagement.branchWizard.step.branchInfo.title",
+    descriptionKey: "storesManagement.branchWizard.step.branchInfo.description",
   },
   {
     id: 2,
-    title: "รูปแบบสาขา",
-    description: "เลือกโหมดแชร์และสาขาต้นทาง",
+    titleKey: "storesManagement.branchWizard.step.branchMode.title",
+    descriptionKey: "storesManagement.branchWizard.step.branchMode.description",
   },
   {
     id: 3,
-    title: "ตรวจสอบและสร้าง",
-    description: "ตรวจทานข้อมูลก่อนสร้าง",
+    titleKey: "storesManagement.branchWizard.step.review.title",
+    descriptionKey: "storesManagement.branchWizard.step.review.description",
   },
 ];
 
-const describeSharingConfig = (config: BranchSharingConfig | null) => {
+const branchSharingModeLabelKeys: Record<BranchItem["sharingMode"], MessageKey> = {
+  MAIN: "storesManagement.branchList.mode.main",
+  BALANCED: "storesManagement.branchMode.BALANCED.label",
+  FULL_SYNC: "storesManagement.branchMode.FULL_SYNC.label",
+  INDEPENDENT: "storesManagement.branchMode.INDEPENDENT.label",
+};
+
+const describeSharingConfig = (uiLocale: UiLocale, config: BranchSharingConfig | null) => {
   if (!config) {
-    return "สาขาหลัก";
+    return t(uiLocale, "storesManagement.sharing.mainBranch");
   }
 
   const shared = branchSharingToggleOptions
     .filter((item) => config[item.key])
-    .map((item) => item.label);
+    .map((item) => t(uiLocale, item.labelKey));
   const isolated = branchSharingToggleOptions
     .filter((item) => !config[item.key])
-    .map((item) => item.label);
+    .map((item) => t(uiLocale, item.labelKey));
 
-  const sharedLabel = shared.length > 0 ? `แชร์: ${shared.join(", ")}` : "แชร์: ไม่แชร์ข้อมูลร่วม";
+  const sharedLabel =
+    shared.length > 0
+      ? `${t(uiLocale, "storesManagement.sharing.sharedPrefix")} ${shared.join(", ")}`
+      : `${t(uiLocale, "storesManagement.sharing.sharedPrefix")} ${t(uiLocale, "storesManagement.sharing.sharedEmpty")}`;
   const isolatedLabel =
-    isolated.length > 0 ? `แยก: ${isolated.join(", ")}` : "แยก: ไม่มี (แชร์ทั้งหมด)";
+    isolated.length > 0
+      ? `${t(uiLocale, "storesManagement.sharing.isolatedPrefix")} ${isolated.join(", ")}`
+      : `${t(uiLocale, "storesManagement.sharing.isolatedPrefix")} ${t(uiLocale, "storesManagement.sharing.isolatedEmpty")}`;
 
   return `${sharedLabel} · ${isolatedLabel}`;
 };
@@ -258,6 +277,7 @@ export function StoresManagement({
   memberships,
   activeStoreId,
   activeBranchId,
+  uiLocale = DEFAULT_UI_LOCALE,
   isSuperadmin,
   canCreateStore,
   createStoreBlockedReason,
@@ -265,6 +285,8 @@ export function StoresManagement({
   mode = "all",
 }: StoresManagementProps) {
   const router = useRouter();
+  const numberLocale = uiLocaleToDateLocale(uiLocale);
+  const formatNumber = (value: number) => value.toLocaleString(numberLocale);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -317,8 +339,8 @@ export function StoresManagement({
     [branches],
   );
   const branchSharingSummary = useMemo(
-    () => describeSharingConfig(branchSharingConfig),
-    [branchSharingConfig],
+    () => describeSharingConfig(uiLocale, branchSharingConfig),
+    [branchSharingConfig, uiLocale],
   );
   const canCreateBranch = Boolean(
     branchPolicy?.isStoreOwner && branchPolicy?.effectiveCanCreateBranches,
@@ -333,15 +355,15 @@ export function StoresManagement({
     () =>
       branchSharingToggleOptions
         .filter((item) => branchSharingConfig[item.key])
-        .map((item) => item.label),
-    [branchSharingConfig],
+        .map((item) => t(uiLocale, item.labelKey)),
+    [branchSharingConfig, uiLocale],
   );
   const isolatedBranchSharingLabels = useMemo(
     () =>
       branchSharingToggleOptions
         .filter((item) => !branchSharingConfig[item.key])
-        .map((item) => item.label),
-    [branchSharingConfig],
+        .map((item) => t(uiLocale, item.labelKey)),
+    [branchSharingConfig, uiLocale],
   );
   const normalizedBranchName = branchName.trim();
   const normalizedBranchCode = branchCode.trim().toUpperCase();
@@ -390,7 +412,7 @@ export function StoresManagement({
       | null;
 
     if (!response.ok) {
-      setErrorMessage(data?.message ?? "สลับร้านไม่สำเร็จ");
+      setErrorMessage(data?.message ?? t(uiLocale, "storesManagement.feedback.switchStore.error"));
       setLoadingKey(null);
       return;
     }
@@ -399,7 +421,9 @@ export function StoresManagement({
       setClientAuthToken(data.token);
     }
 
-    setSuccessMessage(`เปลี่ยนร้านเป็น ${data?.activeStoreName ?? "ร้านที่เลือก"} แล้ว`);
+    setSuccessMessage(
+      `${t(uiLocale, "storesManagement.feedback.switchStore.successPrefix")} ${data?.activeStoreName ?? t(uiLocale, "storesManagement.feedback.switchStore.selectedStore")} ${t(uiLocale, "storesManagement.feedback.switchStore.successSuffix")}`,
+    );
     setLoadingKey(null);
     router.replace(data?.next ?? "/dashboard");
     router.refresh();
@@ -427,7 +451,7 @@ export function StoresManagement({
       | null;
 
     if (!response.ok) {
-      setErrorMessage(data?.message ?? "เปลี่ยนสาขาไม่สำเร็จ");
+      setErrorMessage(data?.message ?? t(uiLocale, "storesManagement.feedback.switchBranch.error"));
       setLoadingKey(null);
       return;
     }
@@ -436,7 +460,9 @@ export function StoresManagement({
       setClientAuthToken(data.token);
     }
 
-    setSuccessMessage(`เปลี่ยนสาขาเป็น ${data?.activeBranchName ?? "สาขาที่เลือก"} แล้ว`);
+    setSuccessMessage(
+      `${t(uiLocale, "storesManagement.feedback.switchBranch.successPrefix")} ${data?.activeBranchName ?? t(uiLocale, "storesManagement.feedback.switchBranch.selectedBranch")} ${t(uiLocale, "storesManagement.feedback.switchBranch.successSuffix")}`,
+    );
     setLoadingKey(null);
     router.replace(data?.next ?? "/dashboard");
     router.refresh();
@@ -444,46 +470,48 @@ export function StoresManagement({
 
   const createStore = async () => {
     if (!isSuperadmin) {
-      setErrorMessage("เฉพาะบัญชี SUPERADMIN เท่านั้น");
+      setErrorMessage(t(uiLocale, "storesManagement.feedback.createStore.superadminOnly"));
       return;
     }
 
     if (!canCreateStore) {
-      setErrorMessage(createStoreBlockedReason ?? "บัญชีนี้ยังไม่สามารถสร้างร้านเพิ่มได้");
+      setErrorMessage(
+        createStoreBlockedReason ?? t(uiLocale, "storesManagement.feedback.createStore.blocked"),
+      );
       return;
     }
 
     if (!storeName.trim()) {
-      setErrorMessage("กรุณากรอกชื่อร้าน");
+      setErrorMessage(t(uiLocale, "storesManagement.feedback.createStore.storeNameRequired"));
       return;
     }
     if (!provinceId) {
-      setErrorMessage("กรุณาเลือก Province");
+      setErrorMessage(t(uiLocale, "storesManagement.feedback.createStore.provinceRequired"));
       return;
     }
     if (!districtId) {
-      setErrorMessage("กรุณาเลือก District");
+      setErrorMessage(t(uiLocale, "storesManagement.feedback.createStore.districtRequired"));
       return;
     }
     if (!village.trim()) {
-      setErrorMessage("กรุณากรอก Village");
+      setErrorMessage(t(uiLocale, "storesManagement.feedback.createStore.villageRequired"));
       return;
     }
     if (!formattedAddress) {
-      setErrorMessage("ข้อมูลที่อยู่ร้านไม่ครบ");
+      setErrorMessage(t(uiLocale, "storesManagement.feedback.createStore.addressIncomplete"));
       return;
     }
     const finalAddress = formattedAddress;
     if (finalAddress.length > 300) {
-      setErrorMessage("ข้อมูลที่อยู่ร้านยาวเกินกำหนด");
+      setErrorMessage(t(uiLocale, "storesManagement.feedback.createStore.addressTooLong"));
       return;
     }
     if (!storePhoneNumber.trim()) {
-      setErrorMessage("กรุณากรอกเบอร์โทรร้าน");
+      setErrorMessage(t(uiLocale, "storesManagement.feedback.createStore.phoneRequired"));
       return;
     }
     if (!/^[0-9+\-\s()]{6,20}$/.test(storePhoneNumber.trim())) {
-      setErrorMessage("รูปแบบเบอร์โทรไม่ถูกต้อง");
+      setErrorMessage(t(uiLocale, "storesManagement.feedback.createStore.phoneInvalid"));
       return;
     }
 
@@ -510,7 +538,7 @@ export function StoresManagement({
       | null;
 
     if (!response.ok) {
-      setErrorMessage(data?.message ?? "สร้างร้านไม่สำเร็จ");
+      setErrorMessage(data?.message ?? t(uiLocale, "storesManagement.feedback.createStore.error"));
       setLoadingKey(null);
       return;
     }
@@ -520,41 +548,41 @@ export function StoresManagement({
     }
 
     setLoadingKey(null);
-    setSuccessMessage("สร้างร้านใหม่เรียบร้อยแล้ว");
+    setSuccessMessage(t(uiLocale, "storesManagement.feedback.createStore.success"));
     router.replace(data?.next ?? "/dashboard");
     router.refresh();
   };
 
-  const loadBranches = async () => {
-    setLoadingKey("load-branches");
-    const response = await authFetch("/api/stores/branches", {
-      method: "GET",
-      cache: "no-store",
-    });
-
-    const data = (await response.json().catch(() => null)) as
-        | {
-            message?: string;
-            branches?: BranchItem[];
-            policy?: BranchPolicySummary;
-            branchAccessMode?: "ALL" | "SELECTED";
-          }
-        | null;
-
-    if (!response.ok) {
-      setErrorMessage(data?.message ?? "โหลดข้อมูลสาขาไม่สำเร็จ");
-      setLoadingKey(null);
-      return;
-    }
-
-    setBranches(data?.branches ?? []);
-    setBranchPolicy(data?.policy ?? null);
-    setLoadingKey(null);
-  };
-
   useEffect(() => {
+    const loadBranches = async () => {
+      setLoadingKey("load-branches");
+      const response = await authFetch("/api/stores/branches", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      const data = (await response.json().catch(() => null)) as
+          | {
+              message?: string;
+              branches?: BranchItem[];
+              policy?: BranchPolicySummary;
+              branchAccessMode?: "ALL" | "SELECTED";
+            }
+          | null;
+
+      if (!response.ok) {
+        setErrorMessage(data?.message ?? t(uiLocale, "storesManagement.feedback.loadBranches.error"));
+        setLoadingKey(null);
+        return;
+      }
+
+      setBranches(data?.branches ?? []);
+      setBranchPolicy(data?.policy ?? null);
+      setLoadingKey(null);
+    };
+
     void loadBranches();
-  }, [activeStoreId, isSuperadmin]);
+  }, [activeStoreId, isSuperadmin, uiLocale]);
 
   useEffect(() => {
     if (branchSharingMode === "INDEPENDENT") {
@@ -604,21 +632,21 @@ export function StoresManagement({
     const normalizedAddress = branchAddress.trim();
 
     if (!normalizedName) {
-      errors.name = "กรุณากรอกชื่อสาขา";
+      errors.name = t(uiLocale, "storesManagement.feedback.branch.nameRequired");
     } else if (normalizedName.length < 2 || normalizedName.length > 120) {
-      errors.name = "ชื่อสาขาต้องมี 2-120 ตัวอักษร";
+      errors.name = t(uiLocale, "storesManagement.feedback.branch.nameLength");
     } else if (isDuplicateBranchName) {
-      errors.name = "ชื่อสาขานี้มีอยู่แล้ว";
+      errors.name = t(uiLocale, "storesManagement.feedback.branch.nameDuplicate");
     }
 
     if (normalizedCode.length > 40) {
-      errors.code = "รหัสสาขาต้องไม่เกิน 40 ตัวอักษร";
+      errors.code = t(uiLocale, "storesManagement.feedback.branch.codeLength");
     } else if (normalizedCode && isDuplicateBranchCode) {
-      errors.code = "รหัสสาขานี้ถูกใช้งานแล้ว";
+      errors.code = t(uiLocale, "storesManagement.feedback.branch.codeDuplicate");
     }
 
     if (normalizedAddress.length > 240) {
-      errors.address = "ที่อยู่สาขาต้องไม่เกิน 240 ตัวอักษร";
+      errors.address = t(uiLocale, "storesManagement.feedback.branch.addressLength");
     }
 
     return errors;
@@ -628,7 +656,7 @@ export function StoresManagement({
     const errors: BranchFieldErrors = {};
 
     if (branchSharingMode !== "INDEPENDENT" && !branchSourceBranchId) {
-      errors.sourceBranchId = "กรุณาเลือกสาขาต้นทาง (แนะนำ: MAIN)";
+      errors.sourceBranchId = t(uiLocale, "storesManagement.feedback.branch.sourceRequired");
     }
 
     return errors;
@@ -661,7 +689,7 @@ export function StoresManagement({
     const errors = getBranchFormErrorsByStep(branchCreateStep);
     if (hasBranchFormErrors(errors)) {
       setBranchFieldErrors((current) => ({ ...current, ...errors }));
-      setErrorMessage("กรุณาตรวจสอบข้อมูลในขั้นตอนนี้");
+      setErrorMessage(t(uiLocale, "storesManagement.feedback.branch.stepInvalid"));
       return;
     }
 
@@ -688,14 +716,14 @@ export function StoresManagement({
 
   const createBranch = async () => {
     if (!canCreateBranch) {
-      setErrorMessage("บัญชีนี้ยังไม่ได้รับสิทธิ์สร้างสาขา");
+      setErrorMessage(t(uiLocale, "storesManagement.feedback.branch.permissionDenied"));
       return;
     }
 
     const errors = getBranchFormErrorsByStep(3);
     if (hasBranchFormErrors(errors)) {
       setBranchFieldErrors(errors);
-      setErrorMessage("กรุณาตรวจสอบข้อมูลสาขาให้ครบถ้วน");
+      setErrorMessage(t(uiLocale, "storesManagement.feedback.branch.incomplete"));
       setBranchCreateStep(
         errors.name || errors.code || errors.address ? 1 : 2,
       );
@@ -733,7 +761,7 @@ export function StoresManagement({
       | null;
 
     if (!response.ok) {
-      setErrorMessage(data?.message ?? "สร้างสาขาไม่สำเร็จ");
+      setErrorMessage(data?.message ?? t(uiLocale, "storesManagement.feedback.branch.createError"));
       setLoadingKey(null);
       return;
     }
@@ -760,7 +788,7 @@ export function StoresManagement({
     setBranchFieldErrors({});
     setIsBranchAdvancedOpen(false);
     setIsCreateBranchSheetOpen(false);
-    setSuccessMessage("สร้างสาขาเรียบร้อยแล้ว");
+    setSuccessMessage(t(uiLocale, "storesManagement.feedback.branch.createSuccess"));
     setLoadingKey(null);
 
     if (switchToCreatedBranch && createdBranch?.id) {
@@ -810,13 +838,15 @@ export function StoresManagement({
     <section className="space-y-5">
       <div className="space-y-2">
         <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          สรุปร้านปัจจุบัน
+          {t(uiLocale, "storesManagement.currentStore.section")}
         </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="px-4 py-3">
             <p className="text-sm font-semibold text-slate-900">{activeStore?.storeName ?? "-"}</p>
             <p className="mt-0.5 text-xs text-slate-500">
-              บทบาท {activeStore?.roleName ?? "-"} · เข้าถึงทั้งหมด {memberships.length.toLocaleString("th-TH")} ร้าน
+              {t(uiLocale, "storesManagement.currentStore.rolePrefix")} {activeStore?.roleName ?? "-"} ·{" "}
+              {t(uiLocale, "storesManagement.currentStore.accessPrefix")} {formatNumber(memberships.length)}{" "}
+              {t(uiLocale, "storesManagement.currentStore.accessSuffix")}
             </p>
           </div>
         </div>
@@ -825,11 +855,14 @@ export function StoresManagement({
       {showSwitchPanels ? (
       <div className="space-y-2">
         <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          เลือกร้าน / เปลี่ยนร้าน
+          {t(uiLocale, "storesManagement.switchStore.section")}
         </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 px-4 py-3">
-            <p className="text-xs text-slate-500">แสดง {memberships.length.toLocaleString("th-TH")} ร้าน</p>
+            <p className="text-xs text-slate-500">
+              {t(uiLocale, "storesManagement.switchStore.countPrefix")} {formatNumber(memberships.length)}{" "}
+              {t(uiLocale, "storesManagement.switchStore.countSuffix")}
+            </p>
           </div>
           <ul className="divide-y divide-slate-100">
             {memberships.map((membership) => {
@@ -843,13 +876,14 @@ export function StoresManagement({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-slate-900">{membership.storeName}</p>
                     <p className="mt-0.5 truncate text-xs text-slate-500">
-                      {storeTypeLabels[membership.storeType]} · บทบาท {membership.roleName}
+                      {t(uiLocale, storeTypeLabelKeys[membership.storeType])} ·{" "}
+                      {t(uiLocale, "storesManagement.currentStore.rolePrefix")} {membership.roleName}
                     </p>
                   </div>
                   {isActive ? (
                     <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
                       <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                      ร้านที่กำลังใช้งาน
+                      {t(uiLocale, "storesManagement.switchStore.activeBadge")}
                     </span>
                   ) : (
                     <Button
@@ -859,7 +893,9 @@ export function StoresManagement({
                       disabled={loadingKey !== null}
                       onClick={() => switchStore(membership.storeId)}
                     >
-                      {loadingKey === `switch-${membership.storeId}` ? "กำลังเปลี่ยน..." : "เลือก"}
+                      {loadingKey === `switch-${membership.storeId}`
+                        ? t(uiLocale, "storesManagement.common.loading")
+                        : t(uiLocale, "storesManagement.common.select")}
                     </Button>
                   )}
                 </li>
@@ -873,18 +909,23 @@ export function StoresManagement({
       {showSwitchPanels ? (
       <div className="space-y-2">
         <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          เลือกสาขา / เปลี่ยนสาขา
+          {t(uiLocale, "storesManagement.switchBranch.section")}
         </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 px-4 py-3">
             <p className="text-xs text-slate-500">
-              แสดง {branches.length.toLocaleString("th-TH")} สาขาในร้านนี้
+              {t(uiLocale, "storesManagement.switchBranch.countPrefix")} {formatNumber(branches.length)}{" "}
+              {t(uiLocale, "storesManagement.switchBranch.countSuffix")}
             </p>
           </div>
           {loadingKey === "load-branches" ? (
-            <p className="px-4 py-4 text-sm text-slate-500">กำลังโหลดข้อมูลสาขา...</p>
+            <p className="px-4 py-4 text-sm text-slate-500">
+              {t(uiLocale, "storesManagement.switchBranch.loading")}
+            </p>
           ) : branches.length === 0 ? (
-            <p className="px-4 py-4 text-sm text-slate-500">ยังไม่มีข้อมูลสาขา</p>
+            <p className="px-4 py-4 text-sm text-slate-500">
+              {t(uiLocale, "storesManagement.switchBranch.empty")}
+            </p>
           ) : (
             <ul className="divide-y divide-slate-100">
               {branches.map((branch) => {
@@ -901,18 +942,18 @@ export function StoresManagement({
                         {branch.name}
                         {branch.code === "MAIN" ? (
                           <span className="ml-1 rounded-full border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] text-slate-600">
-                            MAIN
+                            {t(uiLocale, "storesManagement.branchList.mainBadge")}
                           </span>
                         ) : null}
                       </p>
                       <p className="mt-0.5 truncate text-xs text-slate-500">
-                        {branch.address ?? "ไม่มีที่อยู่สาขา"}
+                        {branch.address ?? t(uiLocale, "storesManagement.switchBranch.noAddress")}
                       </p>
                     </div>
                     {isActiveBranch ? (
                       <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
                         <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                        สาขาที่กำลังใช้งาน
+                        {t(uiLocale, "storesManagement.switchBranch.activeBadge")}
                       </span>
                     ) : (
                       <Button
@@ -924,9 +965,9 @@ export function StoresManagement({
                       >
                         {canAccessBranch
                           ? loadingKey === `switch-branch-${branch.id}`
-                            ? "กำลังเปลี่ยน..."
-                            : "เลือก"
-                          : "ไม่มีสิทธิ์"}
+                            ? t(uiLocale, "storesManagement.common.loading")
+                            : t(uiLocale, "storesManagement.common.select")
+                          : t(uiLocale, "storesManagement.switchBranch.noAccess")}
                       </Button>
                     )}
                   </li>
@@ -940,12 +981,18 @@ export function StoresManagement({
 
       {showStoreCreatePanel ? (
         <div className="space-y-2">
-          <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">สร้างร้านใหม่</p>
+          <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            {t(uiLocale, "storesManagement.createStore.section")}
+          </p>
           <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="space-y-3 px-4 py-3">
               <div>
-                <p className="text-sm font-semibold text-slate-900">สร้างร้านใหม่ (SUPERADMIN)</p>
-                <p className="mt-0.5 text-xs text-slate-500">เปิดฟอร์มแบบแผ่นเลื่อนจากด้านล่างเพื่อสร้างร้านใหม่</p>
+                <p className="text-sm font-semibold text-slate-900">
+                  {t(uiLocale, "storesManagement.createStore.title")}
+                </p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {t(uiLocale, "storesManagement.createStore.subtitle")}
+                </p>
                 {storeQuotaSummary ? <p className="mt-1 text-xs text-slate-500">{storeQuotaSummary}</p> : null}
               </div>
               <Button
@@ -955,7 +1002,7 @@ export function StoresManagement({
                 disabled={loadingKey !== null || !canCreateStore}
               >
                 <Plus className="h-4 w-4" />
-                สร้างร้านใหม่
+                {t(uiLocale, "storesManagement.createStore.action")}
               </Button>
               {!canCreateStore && createStoreBlockedReason ? (
                 <p className="text-sm text-red-600">{createStoreBlockedReason}</p>
@@ -967,28 +1014,42 @@ export function StoresManagement({
 
       {showBranchManagePanel ? (
         <div className="space-y-2">
-          <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">จัดการสาขา</p>
+          <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            {t(uiLocale, "storesManagement.branchManage.section")}
+          </p>
           <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 px-4 py-3">
-              <p className="text-sm font-semibold text-slate-900">จัดการสาขาของร้านปัจจุบัน</p>
-              <p className="mt-0.5 text-xs text-slate-500">ร้าน: {activeStore?.storeName ?? "-"}</p>
-              {branchPolicy ? <p className="mt-1 text-xs text-slate-500">โควตาสาขา: {branchPolicy.summary}</p> : null}
-              <p className="mt-1 text-xs text-slate-500">การตั้งค่าโควตา (override) ปรับได้โดย SYSTEM_ADMIN เท่านั้น</p>
+              <p className="text-sm font-semibold text-slate-900">
+                {t(uiLocale, "storesManagement.branchManage.title")}
+              </p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {t(uiLocale, "storesManagement.branchManage.storePrefix")} {activeStore?.storeName ?? "-"}
+              </p>
+              {branchPolicy ? (
+                <p className="mt-1 text-xs text-slate-500">
+                  {t(uiLocale, "storesManagement.branchManage.quotaPrefix")} {branchPolicy.summary}
+                </p>
+              ) : null}
+              <p className="mt-1 text-xs text-slate-500">
+                {t(uiLocale, "storesManagement.branchManage.overrideHint")}
+              </p>
             </div>
 
             <div className="space-y-4 border-b border-slate-100 px-4 py-3">
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                 <p className="text-xs font-semibold text-slate-700">
-                  Flow แนะนำ: ข้อมูลสาขา → รูปแบบสาขา → ตรวจสอบและสร้าง
+                  {t(uiLocale, "storesManagement.branchManage.flowTitle")}
                 </p>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  เปิดฟอร์มแบบแผ่นเลื่อน (iOS style) เพื่อสร้างสาขาใหม่แบบ 3 ขั้นตอน
+                  {t(uiLocale, "storesManagement.branchManage.flowDescription")}
                 </p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
-                <p className="text-sm font-medium text-slate-900">สร้างสาขาใหม่แบบ 3 ขั้นตอน</p>
+                <p className="text-sm font-medium text-slate-900">
+                  {t(uiLocale, "storesManagement.branchManage.wizardTitle")}
+                </p>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  กรอกข้อมูลง่ายขึ้น พร้อมตรวจชื่อ/รหัสสาขาซ้ำก่อนยืนยัน
+                  {t(uiLocale, "storesManagement.branchManage.wizardDescription")}
                 </p>
                 <Button
                   type="button"
@@ -997,21 +1058,29 @@ export function StoresManagement({
                   disabled={loadingKey !== null || !canCreateBranch}
                 >
                   <Plus className="h-4 w-4" />
-                  เปิดฟอร์มสร้างสาขา
+                  {t(uiLocale, "storesManagement.branchManage.openAction")}
                 </Button>
               </div>
 
               {branchPolicy && !branchPolicy.effectiveCanCreateBranches ? (
-                <p className="text-sm text-red-600">บัญชีนี้ยังไม่ได้รับสิทธิ์สร้างสาขา</p>
+                <p className="text-sm text-red-600">
+                  {t(uiLocale, "storesManagement.feedback.branch.permissionDenied")}
+                </p>
               ) : null}
             </div>
 
             <div className="px-4 py-3">
-              <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-slate-500">รายการสาขา</p>
+              <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
+                {t(uiLocale, "storesManagement.branchManage.listTitle")}
+              </p>
               {loadingKey === "load-branches" ? (
-                <p className="text-sm text-slate-500">กำลังโหลดข้อมูลสาขา...</p>
+                <p className="text-sm text-slate-500">
+                  {t(uiLocale, "storesManagement.branchManage.listLoading")}
+                </p>
               ) : branches.length === 0 ? (
-                <p className="text-sm text-slate-500">ยังไม่มีข้อมูลสาขา</p>
+                <p className="text-sm text-slate-500">
+                  {t(uiLocale, "storesManagement.branchManage.listEmpty")}
+                </p>
               ) : (
                 <ul className="space-y-2">
                   {branches.map((branch) => (
@@ -1030,20 +1099,22 @@ export function StoresManagement({
                             ) : null}
                           </p>
                           <p className="mt-0.5 text-xs text-slate-500">
-                            รหัส: {branch.code ?? "-"} · ที่อยู่: {branch.address ?? "-"}
+                            {t(uiLocale, "storesManagement.branchList.codePrefix")} {branch.code ?? "-"} ·{" "}
+                            {t(uiLocale, "storesManagement.branchList.addressPrefix")} {branch.address ?? "-"}
                           </p>
                           {branch.sharingMode !== "MAIN" ? (
                             <>
                               <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-slate-500">
                                 <Boxes className="h-3.5 w-3.5" />
-                                โหมดแชร์: {branch.sharingMode}
+                                {t(uiLocale, "storesManagement.branchList.modePrefix")}{" "}
+                                {t(uiLocale, branchSharingModeLabelKeys[branch.sharingMode])}
                               </p>
                               <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-slate-500">
                                 <Warehouse className="h-3.5 w-3.5" />
-                                ต้นทาง: {branch.sourceBranchName ?? "-"}
+                                {t(uiLocale, "storesManagement.branchList.sourcePrefix")} {branch.sourceBranchName ?? "-"}
                               </p>
                               <p className="mt-0.5 text-[11px] text-slate-500">
-                                {describeSharingConfig(branch.sharingConfig)}
+                                {describeSharingConfig(uiLocale, branch.sharingConfig)}
                               </p>
                             </>
                           ) : null}
@@ -1062,14 +1133,16 @@ export function StoresManagement({
         <SlideUpSheet
           isOpen={isCreateBranchSheetOpen}
           onClose={closeCreateBranchSheet}
-          title="สร้างสาขาใหม่"
-          description="3 ขั้นตอน: ข้อมูลสาขา, รูปแบบสาขา, ตรวจสอบและสร้าง"
+          title={t(uiLocale, "storesManagement.branchWizard.sheetTitle")}
+          description={t(uiLocale, "storesManagement.branchWizard.sheetDescription")}
           panelMaxWidthClass="min-[1200px]:max-w-2xl"
           disabled={loadingKey === "create-branch"}
           footer={
             <>
               {branchPolicy && !branchPolicy.effectiveCanCreateBranches ? (
-                <p className="mb-2 text-sm text-red-600">บัญชีนี้ยังไม่ได้รับสิทธิ์สร้างสาขา</p>
+                <p className="mb-2 text-sm text-red-600">
+                  {t(uiLocale, "storesManagement.feedback.branch.permissionDenied")}
+                </p>
               ) : null}
               <div className="flex items-center justify-between gap-2">
                 <Button
@@ -1079,7 +1152,9 @@ export function StoresManagement({
                   onClick={branchCreateStep === 1 ? closeCreateBranchSheet : moveBranchStepBackward}
                   disabled={loadingKey !== null}
                 >
-                  {branchCreateStep === 1 ? "ยกเลิก" : "ย้อนกลับ"}
+                  {branchCreateStep === 1
+                    ? t(uiLocale, "storesManagement.common.cancel")
+                    : t(uiLocale, "storesManagement.common.back")}
                 </Button>
                 <Button
                   type="button"
@@ -1089,9 +1164,9 @@ export function StoresManagement({
                 >
                   {branchCreateStep === 3
                     ? loadingKey === "create-branch"
-                      ? "กำลังสร้างสาขา..."
-                      : "สร้างสาขา"
-                    : "ถัดไป"}
+                      ? t(uiLocale, "storesManagement.branchWizard.createLoading")
+                      : t(uiLocale, "storesManagement.branchWizard.createAction")
+                    : t(uiLocale, "storesManagement.common.next")}
                 </Button>
               </div>
             </>
@@ -1132,7 +1207,7 @@ export function StoresManagement({
                                 isActiveStep || isCompletedStep ? "text-slate-900" : "text-slate-500"
                               }`}
                             >
-                              {step.title}
+                              {t(uiLocale, step.titleKey)}
                             </span>
                           </button>
                         </li>
@@ -1142,12 +1217,14 @@ export function StoresManagement({
                 </div>
                 <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                    ขั้นตอน {activeBranchCreateStepMeta.id}
+                    {t(uiLocale, "storesManagement.branchWizard.stepPrefix")} {activeBranchCreateStepMeta.id}
                   </p>
                   <p className="mt-0.5 text-sm font-medium text-slate-900">
-                    {activeBranchCreateStepMeta.title}
+                    {t(uiLocale, activeBranchCreateStepMeta.titleKey)}
                   </p>
-                  <p className="mt-0.5 text-xs text-slate-500">{activeBranchCreateStepMeta.description}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {t(uiLocale, activeBranchCreateStepMeta.descriptionKey)}
+                  </p>
                 </div>
               </div>
             </div>
@@ -1156,7 +1233,7 @@ export function StoresManagement({
               <div className="space-y-3">
                 <div className="space-y-1.5">
                   <label className="text-xs text-slate-500" htmlFor="create-branch-name">
-                    ชื่อสาขา
+                    {t(uiLocale, "storesManagement.branchWizard.field.name.label")}
                   </label>
                   <input
                     id="create-branch-name"
@@ -1166,22 +1243,26 @@ export function StoresManagement({
                       clearBranchFieldError("name");
                     }}
                     className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-                    placeholder="เช่น สาขาเวียงจันทน์"
+                    placeholder={t(uiLocale, "storesManagement.branchWizard.field.name.placeholder")}
                     disabled={loadingKey !== null}
                   />
                   {branchFieldErrors.name ? (
                     <p className="text-xs text-red-600">{branchFieldErrors.name}</p>
                   ) : isDuplicateBranchName ? (
-                    <p className="text-xs text-red-600">ชื่อสาขานี้มีอยู่แล้ว</p>
+                    <p className="text-xs text-red-600">
+                      {t(uiLocale, "storesManagement.feedback.branch.nameDuplicate")}
+                    </p>
                   ) : (
-                    <p className="text-xs text-slate-500">กำหนดได้ 2-120 ตัวอักษร</p>
+                    <p className="text-xs text-slate-500">
+                      {t(uiLocale, "storesManagement.branchWizard.field.name.hint")}
+                    </p>
                   )}
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <label className="text-xs text-slate-500" htmlFor="create-branch-code">
-                      รหัสสาขา
+                      {t(uiLocale, "storesManagement.branchWizard.field.code.label")}
                     </label>
                     <input
                       id="create-branch-code"
@@ -1191,21 +1272,25 @@ export function StoresManagement({
                         clearBranchFieldError("code");
                       }}
                       className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-                      placeholder="ไม่บังคับ"
+                      placeholder={t(uiLocale, "storesManagement.branchWizard.field.code.placeholder")}
                       disabled={loadingKey !== null}
                     />
                     {branchFieldErrors.code ? (
                       <p className="text-xs text-red-600">{branchFieldErrors.code}</p>
                     ) : isDuplicateBranchCode ? (
-                      <p className="text-xs text-red-600">รหัสสาขานี้ถูกใช้งานแล้ว</p>
+                      <p className="text-xs text-red-600">
+                        {t(uiLocale, "storesManagement.feedback.branch.codeDuplicate")}
+                      </p>
                     ) : (
-                      <p className="text-xs text-slate-500">ไม่เกิน 40 ตัวอักษร</p>
+                      <p className="text-xs text-slate-500">
+                        {t(uiLocale, "storesManagement.branchWizard.field.code.hint")}
+                      </p>
                     )}
                   </div>
 
                   <div className="space-y-1.5">
                     <label className="text-xs text-slate-500" htmlFor="create-branch-address">
-                      ที่อยู่สาขา
+                      {t(uiLocale, "storesManagement.branchWizard.field.address.label")}
                     </label>
                     <input
                       id="create-branch-address"
@@ -1215,13 +1300,15 @@ export function StoresManagement({
                         clearBranchFieldError("address");
                       }}
                       className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-                      placeholder="ไม่บังคับ"
+                      placeholder={t(uiLocale, "storesManagement.branchWizard.field.address.placeholder")}
                       disabled={loadingKey !== null}
                     />
                     {branchFieldErrors.address ? (
                       <p className="text-xs text-red-600">{branchFieldErrors.address}</p>
                     ) : (
-                      <p className="text-xs text-slate-500">ไม่เกิน 240 ตัวอักษร</p>
+                      <p className="text-xs text-slate-500">
+                        {t(uiLocale, "storesManagement.branchWizard.field.address.hint")}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -1231,8 +1318,12 @@ export function StoresManagement({
             {branchCreateStep === 2 ? (
               <div className="space-y-3">
                 <div className="space-y-2">
-                  <p className="text-xs text-slate-500">เลือกรูปแบบสาขา</p>
-                  <p className="text-xs text-slate-500">แนะนำให้เริ่มที่ Balanced เพื่อใช้งานได้เร็วและลดความซับซ้อน</p>
+                  <p className="text-xs text-slate-500">
+                    {t(uiLocale, "storesManagement.branchWizard.mode.title")}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {t(uiLocale, "storesManagement.branchWizard.mode.subtitle")}
+                  </p>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     {branchSharingModeOptions.map((option) => {
                       const selected = branchSharingMode === option.value;
@@ -1252,14 +1343,16 @@ export function StoresManagement({
                           disabled={loadingKey !== null}
                         >
                           <p className="text-sm font-semibold text-slate-900">
-                            {option.label}
+                            {t(uiLocale, option.labelKey)}
                             {option.recommended ? (
                               <span className="ml-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
-                                แนะนำ
+                                {t(uiLocale, "storesManagement.branchWizard.mode.recommended")}
                               </span>
                             ) : null}
                           </p>
-                          <p className="mt-0.5 text-[11px] text-slate-500">{option.description}</p>
+                          <p className="mt-0.5 text-[11px] text-slate-500">
+                            {t(uiLocale, option.descriptionKey)}
+                          </p>
                         </button>
                       );
                     })}
@@ -1268,7 +1361,7 @@ export function StoresManagement({
 
                 <div className="space-y-1.5">
                   <label className="text-xs text-slate-500" htmlFor="create-branch-source">
-                    สาขาต้นทางสำหรับคัดลอกการตั้งค่า
+                    {t(uiLocale, "storesManagement.branchWizard.source.label")}
                   </label>
                   <div className="relative">
                     <ArrowRightLeft className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -1282,11 +1375,13 @@ export function StoresManagement({
                       disabled={loadingKey !== null || branchSharingMode === "INDEPENDENT"}
                       className="h-10 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                     >
-                      <option value="">เลือกสาขาต้นทาง</option>
+                      <option value="">{t(uiLocale, "storesManagement.branchWizard.source.placeholder")}</option>
                       {branchSourceOptions.map((branch) => (
                         <option key={branch.id} value={branch.id}>
                           {branch.name}
-                          {branch.code === "MAIN" ? " (MAIN)" : ""}
+                          {branch.code === "MAIN"
+                            ? ` (${t(uiLocale, "storesManagement.branchList.mainBadge")})`
+                            : ""}
                         </option>
                       ))}
                     </select>
@@ -1294,7 +1389,9 @@ export function StoresManagement({
                   {branchFieldErrors.sourceBranchId ? (
                     <p className="text-xs text-red-600">{branchFieldErrors.sourceBranchId}</p>
                   ) : (
-                    <p className="text-xs text-slate-500">ถ้าเลือก Independent ระบบจะไม่ใช้สาขาต้นทาง</p>
+                    <p className="text-xs text-slate-500">
+                      {t(uiLocale, "storesManagement.branchWizard.source.hint")}
+                    </p>
                   )}
                 </div>
 
@@ -1305,8 +1402,8 @@ export function StoresManagement({
                     onClick={() => setIsBranchAdvancedOpen((current) => !current)}
                   >
                     {isBranchAdvancedOpen
-                      ? "ซ่อนตั้งค่าขั้นสูง"
-                      : "ตั้งค่าขั้นสูง (ปรับรายการแชร์แบบละเอียด)"}
+                      ? t(uiLocale, "storesManagement.branchWizard.advanced.hide")
+                      : t(uiLocale, "storesManagement.branchWizard.advanced.show")}
                   </button>
 
                   {isBranchAdvancedOpen ? (
@@ -1319,8 +1416,12 @@ export function StoresManagement({
                           }`}
                         >
                           <span className="min-w-0">
-                            <span className="block text-xs font-medium text-slate-900">{item.label}</span>
-                            <span className="block text-[11px] text-slate-500">{item.description}</span>
+                            <span className="block text-xs font-medium text-slate-900">
+                              {t(uiLocale, item.labelKey)}
+                            </span>
+                            <span className="block text-[11px] text-slate-500">
+                              {t(uiLocale, item.descriptionKey)}
+                            </span>
                           </span>
                           <input
                             type="checkbox"
@@ -1338,7 +1439,7 @@ export function StoresManagement({
                 <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">
                   <p className="inline-flex items-center gap-1 text-xs font-medium text-blue-800">
                     <Link2 className="h-3.5 w-3.5" />
-                    สรุปนโยบายแชร์
+                    {t(uiLocale, "storesManagement.branchWizard.summaryTitle")}
                   </p>
                   <p className="mt-1 text-xs text-blue-800">{branchSharingSummary}</p>
                 </div>
@@ -1348,35 +1449,41 @@ export function StoresManagement({
             {branchCreateStep === 3 ? (
               <div className="space-y-3">
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-                  <p className="text-xs font-medium text-emerald-700">พร้อมสร้างสาขาแล้ว</p>
+                  <p className="text-xs font-medium text-emerald-700">
+                    {t(uiLocale, "storesManagement.branchWizard.review.readyTitle")}
+                  </p>
                   <p className="mt-1 text-xs text-emerald-800">
-                    ตรวจสอบข้อมูลอีกครั้งก่อนกดสร้าง ระบบจะบันทึกทันที
+                    {t(uiLocale, "storesManagement.branchWizard.review.readyDescription")}
                   </p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">ตรวจสอบข้อมูล</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    {t(uiLocale, "storesManagement.branchWizard.review.title")}
+                  </p>
                   <dl className="mt-2 space-y-2 text-sm">
                     <div className="flex items-start justify-between gap-3">
-                      <dt className="text-slate-500">ชื่อสาขา</dt>
+                      <dt className="text-slate-500">{t(uiLocale, "storesManagement.branchWizard.review.nameLabel")}</dt>
                       <dd className="text-right font-medium text-slate-900">{normalizedBranchName || "-"}</dd>
                     </div>
                     <div className="flex items-start justify-between gap-3">
-                      <dt className="text-slate-500">รหัสสาขา</dt>
+                      <dt className="text-slate-500">{t(uiLocale, "storesManagement.branchWizard.review.codeLabel")}</dt>
                       <dd className="text-right font-medium text-slate-900">{normalizedBranchCode || "-"}</dd>
                     </div>
                     <div className="flex items-start justify-between gap-3">
-                      <dt className="text-slate-500">ที่อยู่</dt>
+                      <dt className="text-slate-500">{t(uiLocale, "storesManagement.branchWizard.review.addressLabel")}</dt>
                       <dd className="text-right font-medium text-slate-900">{branchAddress.trim() || "-"}</dd>
                     </div>
                     <div className="flex items-start justify-between gap-3">
-                      <dt className="text-slate-500">โหมดแชร์</dt>
-                      <dd className="text-right font-medium text-slate-900">{branchSharingMode}</dd>
+                      <dt className="text-slate-500">{t(uiLocale, "storesManagement.branchWizard.review.modeLabel")}</dt>
+                      <dd className="text-right font-medium text-slate-900">
+                        {t(uiLocale, branchSharingModeLabelKeys[branchSharingMode])}
+                      </dd>
                     </div>
                     <div className="flex items-start justify-between gap-3">
-                      <dt className="text-slate-500">สาขาต้นทาง</dt>
+                      <dt className="text-slate-500">{t(uiLocale, "storesManagement.branchWizard.review.sourceLabel")}</dt>
                       <dd className="text-right font-medium text-slate-900">
                         {branchSharingMode === "INDEPENDENT"
-                          ? "ไม่ใช้ (Independent)"
+                          ? t(uiLocale, "storesManagement.branchWizard.review.sourceIndependent")
                           : sourceBranchLabel ?? "-"}
                       </dd>
                     </div>
@@ -1385,19 +1492,23 @@ export function StoresManagement({
 
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-                    <p className="text-xs font-medium text-emerald-700">ข้อมูลที่แชร์</p>
+                    <p className="text-xs font-medium text-emerald-700">
+                      {t(uiLocale, "storesManagement.branchWizard.review.sharedTitle")}
+                    </p>
                     <p className="mt-1 text-xs text-emerald-800">
                       {sharedBranchSharingLabels.length > 0
                         ? sharedBranchSharingLabels.join(", ")
-                        : "ไม่แชร์ข้อมูลร่วม"}
+                        : t(uiLocale, "storesManagement.sharing.sharedEmpty")}
                     </p>
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                    <p className="text-xs font-medium text-slate-700">ข้อมูลที่แยก</p>
+                    <p className="text-xs font-medium text-slate-700">
+                      {t(uiLocale, "storesManagement.branchWizard.review.isolatedTitle")}
+                    </p>
                     <p className="mt-1 text-xs text-slate-700">
                       {isolatedBranchSharingLabels.length > 0
                         ? isolatedBranchSharingLabels.join(", ")
-                        : "ไม่มี (แชร์ทั้งหมด)"}
+                        : t(uiLocale, "storesManagement.sharing.isolatedEmpty")}
                     </p>
                   </div>
                 </div>
@@ -1410,7 +1521,9 @@ export function StoresManagement({
                     className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                     disabled={loadingKey !== null}
                   />
-                  <span className="text-sm text-slate-700">สร้างแล้วสลับไปสาขาใหม่นี้ทันที</span>
+                  <span className="text-sm text-slate-700">
+                    {t(uiLocale, "storesManagement.branchWizard.review.switchNow")}
+                  </span>
                 </label>
               </div>
             ) : null}
@@ -1422,8 +1535,8 @@ export function StoresManagement({
         <SlideUpSheet
           isOpen={isCreateStoreSheetOpen}
           onClose={closeCreateStoreSheet}
-          title="สร้างร้านใหม่"
-          description="กรอกข้อมูลร้านแล้วกดยืนยันการสร้าง"
+          title={t(uiLocale, "storesManagement.createStore.sheetTitle")}
+          description={t(uiLocale, "storesManagement.createStore.sheetDescription")}
           panelMaxWidthClass="min-[1200px]:max-w-md"
           disabled={loadingKey === "create-store"}
           footer={
@@ -1435,22 +1548,28 @@ export function StoresManagement({
                 onClick={closeCreateStoreSheet}
                 disabled={loadingKey === "create-store"}
               >
-                ยกเลิก
+                {t(uiLocale, "storesManagement.common.cancel")}
               </Button>
               <Button
                 className="h-10 min-w-[9rem] px-4"
                 onClick={createStore}
                 disabled={loadingKey !== null || !canCreateStore}
               >
-                {loadingKey === "create-store" ? "กำลังสร้างร้าน..." : "ยืนยันสร้างร้าน"}
+                {loadingKey === "create-store"
+                  ? t(uiLocale, "storesManagement.createStore.confirmLoading")
+                  : t(uiLocale, "storesManagement.createStore.confirmAction")}
               </Button>
             </div>
           }
         >
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <p className="text-xs text-slate-500">ประเภทร้าน</p>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label="ประเภทร้าน">
+              <p className="text-xs text-slate-500">{t(uiLocale, "onboarding.step.storeType")}</p>
+              <div
+                className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+                role="radiogroup"
+                aria-label={t(uiLocale, "onboarding.step.storeType")}
+              >
                 {storeTypeOptions.map((option) => {
                   const selected = storeType === option.value;
                   const Icon = option.icon;
@@ -1478,7 +1597,9 @@ export function StoresManagement({
                       >
                         <Icon className={`h-4 w-4 ${option.iconColorClassName}`} />
                       </span>
-                      <span className="text-sm font-medium text-slate-900">{option.title}</span>
+                      <span className="text-sm font-medium text-slate-900">
+                        {t(uiLocale, option.titleKey)}
+                      </span>
                     </label>
                   );
                 })}
@@ -1487,7 +1608,7 @@ export function StoresManagement({
 
             <div className="space-y-1.5">
               <label className="text-xs text-slate-500" htmlFor="create-store-name">
-                ชื่อร้าน
+                {t(uiLocale, "onboarding.form.storeName.label")}
               </label>
               <input
                 id="create-store-name"
@@ -1495,13 +1616,13 @@ export function StoresManagement({
                 onChange={(event) => setStoreName(event.target.value)}
                 className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                 disabled={loadingKey !== null || !canCreateStore}
-                placeholder="เช่น ร้านสาขา 2"
+                placeholder={t(uiLocale, "onboarding.form.storeName.placeholder")}
               />
             </div>
 
             <div className="space-y-1.5">
               <label className="text-xs text-slate-500" htmlFor="create-store-province">
-                Province
+                {t(uiLocale, "onboarding.form.province.label")}
               </label>
               <select
                 id="create-store-province"
@@ -1514,7 +1635,7 @@ export function StoresManagement({
                 className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                 disabled={loadingKey !== null || !canCreateStore}
               >
-                <option value="">เลือก Province</option>
+                <option value="">{t(uiLocale, "onboarding.form.province.placeholder")}</option>
                 {laosProvinces.map((province) => (
                   <option key={province.id} value={province.id}>
                     {province.nameEn}
@@ -1525,7 +1646,7 @@ export function StoresManagement({
 
             <div className="space-y-1.5">
               <label className="text-xs text-slate-500" htmlFor="create-store-district">
-                District
+                {t(uiLocale, "onboarding.form.district.label")}
               </label>
               <select
                 id="create-store-district"
@@ -1534,7 +1655,7 @@ export function StoresManagement({
                 disabled={!provinceId || loadingKey !== null || !canCreateStore}
                 className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
               >
-                <option value="">เลือก District</option>
+                <option value="">{t(uiLocale, "onboarding.form.district.placeholder")}</option>
                 {districtOptions.map((district) => (
                   <option key={district.id} value={district.id}>
                     {district.nameEn}
@@ -1545,7 +1666,7 @@ export function StoresManagement({
 
             <div className="space-y-1.5">
               <label className="text-xs text-slate-500" htmlFor="create-store-village">
-                Village
+                {t(uiLocale, "onboarding.form.village.label")}
               </label>
               <input
                 id="create-store-village"
@@ -1553,13 +1674,13 @@ export function StoresManagement({
                 onChange={(event) => setVillage(event.target.value)}
                 className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                 disabled={loadingKey !== null || !canCreateStore}
-                placeholder="เช่น Ban Phonxay"
+                placeholder={t(uiLocale, "onboarding.form.village.placeholder")}
               />
             </div>
 
             <div className="space-y-1.5">
               <label className="text-xs text-slate-500" htmlFor="create-store-phone">
-                เบอร์โทรร้าน
+                {t(uiLocale, "onboarding.form.phone.label")}
               </label>
               <input
                 id="create-store-phone"
@@ -1567,12 +1688,12 @@ export function StoresManagement({
                 onChange={(event) => setStorePhoneNumber(event.target.value)}
                 className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                 disabled={loadingKey !== null || !canCreateStore}
-                placeholder="เช่น +856 20 9999 9999"
+                placeholder={t(uiLocale, "onboarding.form.phone.placeholder")}
               />
             </div>
 
             <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              ค่าเริ่มต้นหลังสร้างร้าน: สกุลเงิน LAK และปิด VAT (7.00%) ปรับได้ภายหลังที่หน้าข้อมูลร้าน
+              {t(uiLocale, "storesManagement.createStore.defaultHint")}
             </p>
           </div>
         </SlideUpSheet>

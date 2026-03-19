@@ -16,16 +16,79 @@ import { Suspense } from "react";
 
 import { getSession } from "@/lib/auth/session";
 import { listActiveMemberships } from "@/lib/auth/session-db";
+import { uiLocaleToDateLocale, type UiLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
 import { getSuperadminHomeSnapshot } from "@/lib/superadmin/home-dashboard";
 
-function SuperadminOverviewFallback({ totalStores }: { totalStores: number }) {
+const quickActions = [
+  {
+    href: "/settings/superadmin/stores",
+    titleKey: "settings.superadminHome.quickActions.operations.title",
+    descriptionKey: "settings.superadminHome.quickActions.operations.description",
+    icon: Building2,
+  },
+  {
+    href: "/settings/superadmin/users",
+    titleKey: "settings.superadminHome.quickActions.access.title",
+    descriptionKey: "settings.superadminHome.quickActions.access.description",
+    icon: Users,
+  },
+  {
+    href: "/settings/superadmin/security",
+    titleKey: "settings.superadminHome.quickActions.security.title",
+    descriptionKey: "settings.superadminHome.quickActions.security.description",
+    icon: ShieldCheck,
+  },
+  {
+    href: "/settings/superadmin/quotas",
+    titleKey: "settings.superadminHome.quickActions.quotas.title",
+    descriptionKey: "settings.superadminHome.quickActions.quotas.description",
+    icon: Gauge,
+  },
+  {
+    href: "/settings/superadmin/global-config",
+    titleKey: "settings.superadminHome.quickActions.globalConfig.title",
+    descriptionKey: "settings.superadminHome.quickActions.globalConfig.description",
+    icon: Settings2,
+  },
+  {
+    href: "/settings/superadmin/audit-log",
+    titleKey: "settings.superadminHome.quickActions.auditLog.title",
+    descriptionKey: "settings.superadminHome.quickActions.auditLog.description",
+    icon: ClipboardList,
+  },
+  {
+    href: "/settings/superadmin/integrations",
+    titleKey: "settings.superadminHome.quickActions.integrations.title",
+    descriptionKey: "settings.superadminHome.quickActions.integrations.description",
+    icon: PlugZap,
+  },
+  {
+    href: "/settings/stores",
+    titleKey: "settings.superadminHome.quickActions.backToStores.title",
+    descriptionKey: "settings.superadminHome.quickActions.backToStores.description",
+    icon: Store,
+  },
+] as const;
+
+function SuperadminOverviewFallback({
+  totalStores,
+  uiLocale,
+  numberLocale,
+}: {
+  totalStores: number;
+  uiLocale: UiLocale;
+  numberLocale: string;
+}) {
   return (
     <>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-500">ร้านทั้งหมด</p>
+          <p className="text-xs text-slate-500">
+            {t(uiLocale, "settings.superadminHome.card.totalStores")}
+          </p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">
-            {totalStores.toLocaleString("th-TH")}
+            {totalStores.toLocaleString(numberLocale)}
           </p>
         </article>
         {Array.from({ length: 3 }).map((_, index) => (
@@ -73,92 +136,129 @@ async function SuperadminOverviewPanels({
   userId,
   storeIds,
   totalStores,
+  uiLocale,
+  numberLocale,
 }: {
   userId: string;
   storeIds: string[];
   totalStores: number;
+  uiLocale: UiLocale;
+  numberLocale: string;
 }) {
   const snapshot = await getSuperadminHomeSnapshot(userId, storeIds);
   const cacheDriver = process.env.REDIS_DRIVER?.trim() || "unknown";
 
   const alerts: string[] = [];
   if (snapshot.storesNeedAttention > 0) {
-    alerts.push(`มีร้านที่ควรตรวจสอบ ${snapshot.storesNeedAttention.toLocaleString("th-TH")} ร้าน`);
+    alerts.push(
+      `${t(uiLocale, "settings.superadminHome.alerts.storesNeedAttentionPrefix")} ${snapshot.storesNeedAttention.toLocaleString(numberLocale)} ${t(uiLocale, "settings.superadminHome.alerts.storesNeedAttentionSuffix")}`,
+    );
   }
   if (snapshot.channelErrorStoreCount > 0) {
     alerts.push(
-      `พบช่องทางเชื่อมต่อผิดพลาด ${snapshot.channelErrorStoreCount.toLocaleString("th-TH")} ร้าน`,
+      `${t(uiLocale, "settings.superadminHome.alerts.channelErrorsPrefix")} ${snapshot.channelErrorStoreCount.toLocaleString(numberLocale)} ${t(uiLocale, "settings.superadminHome.alerts.channelErrorsSuffix")}`,
     );
   }
   if (snapshot.totalSuspendedMembers > 0) {
     alerts.push(
-      `พบสมาชิกสถานะ SUSPENDED ${snapshot.totalSuspendedMembers.toLocaleString("th-TH")} คน`,
+      `${t(uiLocale, "settings.superadminHome.alerts.suspendedMembersPrefix")} ${snapshot.totalSuspendedMembers.toLocaleString(numberLocale)} ${t(uiLocale, "settings.superadminHome.alerts.suspendedMembersSuffix")}`,
     );
   }
   if (snapshot.totalInvitedMembers > 0) {
-    alerts.push(`มีคำเชิญค้าง ${snapshot.totalInvitedMembers.toLocaleString("th-TH")} คน`);
+    alerts.push(
+      `${t(uiLocale, "settings.superadminHome.alerts.invitedMembersPrefix")} ${snapshot.totalInvitedMembers.toLocaleString(numberLocale)} ${t(uiLocale, "settings.superadminHome.alerts.invitedMembersSuffix")}`,
+    );
   }
   if (!snapshot.storeCreationAllowed && snapshot.storeCreationBlockedReason) {
     alerts.push(snapshot.storeCreationBlockedReason);
   }
 
+  const messagingStatus =
+    snapshot.channelErrorStoreCount > 0
+      ? `${t(uiLocale, "settings.superadminHome.health.messaging.statusNeedsAttentionPrefix")} ${snapshot.channelErrorStoreCount.toLocaleString(numberLocale)} ${t(uiLocale, "settings.superadminHome.health.messaging.statusNeedsAttentionSuffix")}`
+      : t(uiLocale, "settings.superadminHome.health.messaging.statusNormal");
+
   return (
     <>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-500">ร้านทั้งหมด</p>
+          <p className="text-xs text-slate-500">
+            {t(uiLocale, "settings.superadminHome.card.totalStores")}
+          </p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">
-            {totalStores.toLocaleString("th-TH")}
+            {totalStores.toLocaleString(numberLocale)}
           </p>
         </article>
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-500">ร้านที่ต้องตรวจสอบ</p>
+          <p className="text-xs text-slate-500">
+            {t(uiLocale, "settings.superadminHome.card.storesNeedAttention")}
+          </p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">
-            {snapshot.storesNeedAttention.toLocaleString("th-TH")}
+            {snapshot.storesNeedAttention.toLocaleString(numberLocale)}
           </p>
         </article>
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-500">ออเดอร์วันนี้</p>
+          <p className="text-xs text-slate-500">
+            {t(uiLocale, "settings.superadminHome.card.todayOrders")}
+          </p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">
-            {snapshot.totalTodayOrders.toLocaleString("th-TH")}
+            {snapshot.totalTodayOrders.toLocaleString(numberLocale)}
           </p>
         </article>
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-500">ยอดขายวันนี้ (รวม)</p>
+          <p className="text-xs text-slate-500">
+            {t(uiLocale, "settings.superadminHome.card.todaySales")}
+          </p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">
-            {snapshot.totalTodaySales.toLocaleString("th-TH")}
+            {snapshot.totalTodaySales.toLocaleString(numberLocale)}
           </p>
         </article>
       </div>
 
       <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
-          <p className="text-sm font-semibold text-slate-900">System Health</p>
-          <p className="mt-0.5 text-xs text-slate-500">สถานะระบบหลักสำหรับตัดสินใจแก้ไขได้เร็ว</p>
+          <p className="text-sm font-semibold text-slate-900">
+            {t(uiLocale, "settings.superadminHome.health.title")}
+          </p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {t(uiLocale, "settings.superadminHome.health.subtitle")}
+          </p>
         </div>
         <ul className="divide-y divide-slate-100">
           <li className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
             <div>
-              <p className="text-sm font-medium text-slate-900">Database</p>
-              <p className="text-xs text-slate-500">เชื่อมต่อฐานข้อมูลสำหรับ Superadmin</p>
+              <p className="text-sm font-medium text-slate-900">
+                {t(uiLocale, "settings.superadminHome.health.database.title")}
+              </p>
+              <p className="text-xs text-slate-500">
+                {t(uiLocale, "settings.superadminHome.health.database.description")}
+              </p>
             </div>
             <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
-              พร้อมใช้งาน
+              {t(uiLocale, "settings.superadminHome.health.database.statusReady")}
             </span>
           </li>
           <li className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
             <div>
-              <p className="text-sm font-medium text-slate-900">Cache</p>
-              <p className="text-xs text-slate-500">driver: {cacheDriver}</p>
+              <p className="text-sm font-medium text-slate-900">
+                {t(uiLocale, "settings.superadminHome.health.cache.title")}
+              </p>
+              <p className="text-xs text-slate-500">
+                {t(uiLocale, "settings.superadminHome.health.cache.driverPrefix")} {cacheDriver}
+              </p>
             </div>
             <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600">
-              ปกติ
+              {t(uiLocale, "settings.superadminHome.health.cache.statusNormal")}
             </span>
           </li>
           <li className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
             <div>
-              <p className="text-sm font-medium text-slate-900">Messaging Channel</p>
-              <p className="text-xs text-slate-500">สถานะ FB/WA รวมทุกสโตร์</p>
+              <p className="text-sm font-medium text-slate-900">
+                {t(uiLocale, "settings.superadminHome.health.messaging.title")}
+              </p>
+              <p className="text-xs text-slate-500">
+                {t(uiLocale, "settings.superadminHome.health.messaging.description")}
+              </p>
             </div>
             <span
               className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${
@@ -167,9 +267,7 @@ async function SuperadminOverviewPanels({
                   : "border-emerald-200 bg-emerald-50 text-emerald-700"
               }`}
             >
-              {snapshot.channelErrorStoreCount > 0
-                ? `ต้องตรวจสอบ ${snapshot.channelErrorStoreCount.toLocaleString("th-TH")} ร้าน`
-                : "ปกติ"}
+              {messagingStatus}
             </span>
           </li>
         </ul>
@@ -177,11 +275,17 @@ async function SuperadminOverviewPanels({
 
       <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
-          <p className="text-sm font-semibold text-slate-900">Alerts</p>
-          <p className="mt-0.5 text-xs text-slate-500">รายการที่ควรจัดการก่อน</p>
+          <p className="text-sm font-semibold text-slate-900">
+            {t(uiLocale, "settings.superadminHome.alerts.title")}
+          </p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {t(uiLocale, "settings.superadminHome.alerts.subtitle")}
+          </p>
         </div>
         {alerts.length === 0 ? (
-          <p className="px-4 py-4 text-sm text-emerald-700">ยังไม่พบความเสี่ยงสำคัญในรอบนี้</p>
+          <p className="px-4 py-4 text-sm text-emerald-700">
+            {t(uiLocale, "settings.superadminHome.alerts.empty")}
+          </p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {alerts.map((alert, index) => (
@@ -195,28 +299,41 @@ async function SuperadminOverviewPanels({
       </article>
 
       <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-sm font-semibold text-slate-900">Global Policy Snapshot</p>
+        <p className="text-sm font-semibold text-slate-900">
+          {t(uiLocale, "settings.superadminHome.policySnapshot.title")}
+        </p>
         <p className="mt-2 text-xs text-slate-500">
-          Session default: {snapshot.globalSessionDefault.toLocaleString("th-TH")} เครื่องต่อผู้ใช้
+          {t(uiLocale, "settings.superadminHome.policySnapshot.sessionDefaultPrefix")}{" "}
+          {snapshot.globalSessionDefault.toLocaleString(numberLocale)}{" "}
+          {t(uiLocale, "settings.superadminHome.policySnapshot.sessionDefaultSuffix")}
         </p>
         <p className="text-xs text-slate-500">
-          Branch default:{" "}
-          {snapshot.globalBranchDefaultCanCreate ? "อนุญาตให้สร้างสาขา" : "ไม่อนุญาตสร้างสาขา"}{" "}
+          {t(uiLocale, "settings.superadminHome.policySnapshot.branchDefaultPrefix")}{" "}
+          {snapshot.globalBranchDefaultCanCreate
+            ? t(uiLocale, "settings.superadminHome.policySnapshot.branchAllowed")
+            : t(uiLocale, "settings.superadminHome.policySnapshot.branchBlocked")}{" "}
           {snapshot.globalBranchDefaultMax === null
-            ? "(ไม่จำกัด)"
-            : `(สูงสุด ${snapshot.globalBranchDefaultMax.toLocaleString("th-TH")} สาขา/ร้าน)`}
+            ? `(${t(uiLocale, "settings.superadminHome.policySnapshot.unlimited")})`
+            : `(${t(uiLocale, "settings.superadminHome.policySnapshot.maxPrefix")} ${snapshot.globalBranchDefaultMax.toLocaleString(numberLocale)} ${t(uiLocale, "settings.superadminHome.policySnapshot.maxSuffix")})`}
         </p>
         <p className="text-xs text-slate-500">
-          Store logo: สูงสุด {snapshot.globalStoreLogoPolicy.maxSizeMb.toLocaleString("th-TH")} MB /
-          resize {snapshot.globalStoreLogoPolicy.autoResize ? "เปิด" : "ปิด"} / กว้างสุด{" "}
-          {snapshot.globalStoreLogoPolicy.resizeMaxWidth.toLocaleString("th-TH")} px
+          {t(uiLocale, "settings.superadminHome.policySnapshot.storeLogoPrefix")}{" "}
+          {t(uiLocale, "superadmin.globalConfig.systemDefaults.logoUpload.maxSizePrefix")}{" "}
+          {snapshot.globalStoreLogoPolicy.maxSizeMb.toLocaleString(numberLocale)} MB / resize{" "}
+          {snapshot.globalStoreLogoPolicy.autoResize
+            ? t(uiLocale, "settings.superadminHome.policySnapshot.autoResizeEnabled")
+            : t(uiLocale, "settings.superadminHome.policySnapshot.autoResizeDisabled")}{" "}
+          / {t(uiLocale, "superadmin.globalConfig.systemDefaults.logoUpload.maxWidthPrefix")}{" "}
+          {snapshot.globalStoreLogoPolicy.resizeMaxWidth.toLocaleString(numberLocale)} px
         </p>
         <p className="text-xs text-slate-500">
-          Payment accounts: สูงสุด{" "}
-          {snapshot.globalPaymentPolicy.maxAccountsPerStore.toLocaleString("th-TH")} บัญชี/ร้าน •{" "}
+          {t(uiLocale, "settings.superadminHome.policySnapshot.paymentAccountsPrefix")}{" "}
+          {t(uiLocale, "superadmin.globalConfig.systemDefaults.paymentPolicy.maxAccountsPrefix")}{" "}
+          {snapshot.globalPaymentPolicy.maxAccountsPerStore.toLocaleString(numberLocale)}{" "}
+          {t(uiLocale, "settings.superadminHome.policySnapshot.paymentAccountsSuffix")} •{" "}
           {snapshot.globalPaymentPolicy.requireSlipForLaoQr
-            ? "บังคับแนบสลิป QR"
-            : "ไม่บังคับแนบสลิป QR"}
+            ? t(uiLocale, "settings.superadminHome.policySnapshot.requireSlip")
+            : t(uiLocale, "settings.superadminHome.policySnapshot.noSlip")}
         </p>
       </article>
     </>
@@ -228,6 +345,8 @@ export default async function SettingsSuperadminRootPage() {
   if (!session) {
     redirect("/login");
   }
+  const uiLocale = session.uiLocale;
+  const numberLocale = uiLocaleToDateLocale(uiLocale);
 
   const memberships = await listActiveMemberships(session.userId);
   if (memberships.length === 0) {
@@ -241,166 +360,66 @@ export default async function SettingsSuperadminRootPage() {
       <header className="space-y-1 px-1">
         <p className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
           <ShieldCheck className="h-3.5 w-3.5" />
-          Superadmin Home
+          {t(uiLocale, "settings.superadminHome.badge")}
         </p>
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">Superadmin Center</h1>
+        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
+          {t(uiLocale, "settings.superadminHome.title")}
+        </h1>
         <p className="text-sm text-slate-500">
-          ศูนย์ควบคุมงานปฏิบัติการ สิทธิ์ ความปลอดภัย และโควตาของร้านทั้งหมดในหน้าเดียว
+          {t(uiLocale, "settings.superadminHome.subtitle")}
         </p>
       </header>
 
       <div className="space-y-2">
         <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          Quick Actions
+          {t(uiLocale, "settings.superadminHome.quickActions.section")}
         </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <Link
-            href="/settings/superadmin/stores"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Building2 className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                Operations & Governance
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                จัดการร้าน/สาขาและตรวจสถานะร้านที่ต้องแก้ไข
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
+          {quickActions.map((item, index) => {
+            const Icon = item.icon;
+            const isLast = index === quickActions.length - 1;
 
-          <Link
-            href="/settings/superadmin/users"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Users className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">Access Center</span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                จัดการผู้ใช้ สิทธิ์ และ role template ข้ามร้าน
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/superadmin/security"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <ShieldCheck className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                Security & Compliance
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                ตรวจความเสี่ยง สิทธิ์ และเหตุการณ์ผิดปกติ
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/superadmin/quotas"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Gauge className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                Quota & Billing Control
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                ตรวจการใช้โควตาและรายการที่ใกล้เต็ม
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/superadmin/global-config"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Settings2 className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                Global Configuration
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                ค่ากลางของระบบ เช่น session/branch/logo policy
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/superadmin/audit-log"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <ClipboardList className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">Audit Log</span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                ตรวจ timeline เหตุการณ์ล่าสุด
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/superadmin/integrations"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <PlugZap className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                Channel Integrations
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                ตรวจสถานะการเชื่อมต่อ FB/WA ของแต่ละร้าน
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/stores"
-            className="group flex min-h-14 items-center gap-3 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Store className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                กลับหน้าเลือกร้าน / เปลี่ยนสาขา
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                ออกจากโหมดผู้ดูแลกลับหน้าปฏิบัติงาน
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`group flex min-h-14 items-center gap-3 px-4 py-3 transition-colors hover:bg-slate-50 ${
+                  isLast ? "" : "border-b border-slate-100"
+                }`}
+              >
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-slate-900">
+                    {t(uiLocale, item.titleKey)}
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs text-slate-500">
+                    {t(uiLocale, item.descriptionKey)}
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            );
+          })}
         </div>
       </div>
 
-      <Suspense fallback={<SuperadminOverviewFallback totalStores={memberships.length} />}>
+      <Suspense
+        fallback={
+          <SuperadminOverviewFallback
+            totalStores={memberships.length}
+            uiLocale={uiLocale}
+            numberLocale={numberLocale}
+          />
+        }
+      >
         <SuperadminOverviewPanels
           userId={session.userId}
           storeIds={storeIds}
           totalStores={memberships.length}
+          uiLocale={uiLocale}
+          numberLocale={numberLocale}
         />
       </Suspense>
     </section>

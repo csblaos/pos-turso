@@ -4,6 +4,12 @@ export type UiLocale = (typeof uiLocaleValues)[number];
 
 export const DEFAULT_UI_LOCALE: UiLocale = "th";
 
+export const uiLocaleNativeLabels: Record<UiLocale, string> = {
+  th: "ไทย",
+  lo: "ລາວ",
+  en: "English",
+};
+
 export function normalizeUiLocale(value: unknown): UiLocale {
   if (typeof value !== "string") {
     return DEFAULT_UI_LOCALE;
@@ -28,4 +34,3 @@ export function uiLocaleToDateLocale(locale: UiLocale) {
 
   return "th-TH";
 }
-

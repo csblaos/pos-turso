@@ -4,10 +4,13 @@ import { useEffect, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { LayoutGrid, Settings } from "lucide-react";
 
+import { t } from "@/lib/i18n/messages";
+import { useUiLocale } from "@/lib/i18n/use-ui-locale";
+
 const tabs = [
-  { href: "/system-admin", label: "Dashboard", icon: LayoutGrid },
-  { href: "/system-admin/config", label: "Config", icon: Settings },
-];
+  { href: "/system-admin", labelKey: "systemAdmin.nav.dashboard", icon: LayoutGrid },
+  { href: "/system-admin/config", labelKey: "systemAdmin.nav.config", icon: Settings },
+] as const;
 
 const prefetchRoutes = ["/system-admin", "/system-admin/config", "/system-admin/config/clients"];
 
@@ -20,6 +23,7 @@ const isTabActive = (pathname: string, href: string) => {
 };
 
 export function SystemAdminBottomNav() {
+  const uiLocale = useUiLocale();
   const pathname = usePathname();
   const router = useRouter();
   const [optimisticPath, setOptimisticPath] = useState<string | null>(null);
@@ -78,7 +82,7 @@ export function SystemAdminBottomNav() {
                   } w-full`}
                 >
                   <Icon className="h-4 w-4 min-[1200px]:h-5 min-[1200px]:w-5" />
-                  <span>{tab.label}</span>
+                  <span>{t(uiLocale, tab.labelKey)}</span>
                 </button>
               </li>
             );

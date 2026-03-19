@@ -48,7 +48,14 @@ npm run db:migrate
 - `lib/` shared logic และ query helper
 - `lib/i18n/` โครง i18n/ข้อความ UI (ไทย/ລາວ/English) และ helper locale
   - key กลุ่ม `tab.*` ใช้กับ bottom tabs ของ storefront
-  - key กลุ่ม `localeName.*` ใช้แสดงชื่อภาษาในหน้า `/settings/language`
+  - key กลุ่ม `localeName.*` ใช้แสดงชื่อภาษาในหน้า `/settings/language` โดย fix เป็น native labels `ไทย / ລາວ / English` ไม่แปลตาม locale ปัจจุบัน
+  - key กลุ่ม `onboarding.*` ใช้กับหน้า onboarding (`/onboarding`) สำหรับ stepper, form, channel setup และ cancel flow
+  - key กลุ่ม `systemAdmin.storeUserConfig.*` และ `systemAdmin.superadminManagement.*` ใช้กับหน้า config ใต้ `/system-admin/config/*`
+  - key กลุ่ม `systemAdmin.storeLogoPolicy.*`, `systemAdmin.branchPolicy.*`, `systemAdmin.layout.*`, `systemAdmin.nav.*`, `systemAdmin.configCenter.*`, และ `systemAdmin.dashboard.*` ใช้กับ shell/page/config ฝั่ง `/system-admin`
+  - key กลุ่ม `systemAdmin.clientsPage.*`, `systemAdmin.systemPage.*`, `systemAdmin.storesUsersPage.*`, และ `systemAdmin.securityPage.*` ใช้กับ header/summary ของหน้าใต้ `/system-admin/config/*`
+  - key กลุ่ม `superadmin.globalConfig.*`, `superadmin.auditLog.*`, `superadmin.integrations.*`, `superadmin.quotas.*`, `superadmin.security.*`, `superadmin.nav.*`, `superadmin.storeConfig.*`, `superadmin.branchConfig.*`, `superadmin.usersPage.*`, `superadmin.overview.*`, และ `superadmin.workspaceBadge` ใช้กับหน้าในพื้นที่ `/settings/superadmin/*`
+  - key กลุ่ม `storesManagement.*` ใช้กับ `components/app/stores-management.tsx` สำหรับ flow สลับร้าน/สาขา, สร้างร้าน, และสร้างสาขา ที่ถูก reuse ใน `/settings/stores`, `/settings/superadmin/stores/*`, และ `/settings/superadmin/users`
+  - key กลุ่ม `settings.superadminHome.*` ใช้กับหน้า overview `/settings/superadmin`
 - `lib/db/schema/tables.ts` DB schema หลัก (Drizzle)
 - `server/services/` business service layer
 - `server/repositories/` data access layer
@@ -75,12 +82,28 @@ npm run db:migrate
   - UX `/orders`:
     - หน้า `/orders` โฟกัสงานจัดการออเดอร์ที่สร้างแล้ว และใช้ CTA เดียว `เข้าโหมด POS` เพื่อไปหน้าเต็ม `/orders/new` (ถอดปุ่ม `สร้างด่วน` ออกจากหน้า manage)
     - ตารางรายการออเดอร์ใน `/orders` (desktop/tablet) คลิกได้ทั้งแถวเพื่อเข้า `/orders/[orderId]` แล้ว (ไม่จำกัดเฉพาะการกดเลข `SO-...`)
+    - หน้า `/orders` เริ่มเป็น work queue มากขึ้นแล้ว: ทั้ง mobile card และ desktop table แสดง `งานถัดไป` ต่อออเดอร์ พร้อม quick action จาก list สำหรับเคส routine (`confirm_paid`, `mark_packed`, `mark_shipped`, `submit_for_payment`) โดยเคสที่ยังต้องกรอกข้อมูลเพิ่ม เช่น COD ปิดยอดหรือ in-store credit settlement จะพาเปิด detail แทน
+    - หน้า `/orders` รองรับ multi-select ในหน้า list แล้ว พร้อม sticky bulk action bar สำหรับงาน routine ที่ทำจาก list ได้ (`confirm_paid`, `mark_packed`, `mark_shipped`, `submit_for_payment`) โดย bulk action รอบนี้ยิง action เดิมทีละออเดอร์และคงรายการที่ fail ไว้ให้ operator ตรวจต่อ
+    - หน้า `/orders` เพิ่ม selection summary และ bulk print จากหน้า list แล้ว: พิมพ์ใบเสร็จ/ป้ายแบบหลายรายการในหน้าเดิมด้วย current-page print flow (`window.print()` + merged print document) โดย bulk label จะพิมพ์เฉพาะรายการที่มีข้อมูลจัดส่งพอ และถ้าไม่มีข้อมูลพอจะ block พร้อมข้อความอธิบาย
+    - หน้า `/orders` ขยับเป็น work-queue tabs เต็มรูปแบบแล้ว โดย query `tab` ของหน้าและ `GET /api/orders` รองรับคิว `ALL`, `PAYMENT_REVIEW`, `TO_PACK`, `TO_SHIP`, `PICKUP_READY`, `COD_RECONCILE`; แต่ละ tab ใช้ server-side filter เดียวกันทั้ง list และ count badge เพื่อให้จำนวนงานกับรายการใน tab ตรงกัน
+    - หน้า `/orders` รองรับ review sheet จาก list แล้วสำหรับเคสที่เดิมต้องเข้า detail:
+      - `PAYMENT_REVIEW` บางเคส เช่น `Walk-in/Pickup + ON_CREDIT` สามารถเลือก `เงินสด/QR` และบัญชี QR จากหน้า list แล้วค่อยยิง `PATCH /api/orders/[orderId]` (`confirm_paid`) ได้ทันที
+      - `COD_RECONCILE` สามารถกรอก `ยอดรับจริง + ค่าธรรมเนียม/ค่าหัก` จากหน้า list แล้วใช้ `POST /api/orders/cod-reconcile` แบบ 1 รายการได้ทันที
+      - เคส `COD รอปิดยอด` ที่มีสิทธิ์ `orders.cod_return` จะมี action รอง `ตีกลับ` จากหน้า list เพิ่มด้วย: เปิด review sheet เพื่อกรอก `ค่าตีกลับเพิ่ม + เหตุผล/หมายเหตุ` แล้วค่อยยิง `PATCH /api/orders/[orderId]` action `mark_cod_returned` ได้เลยโดยไม่ต้องเข้า detail
+    - review sheet `COD ตีกลับ` จากหน้า `/orders` แสดง summary แยก `ต้นทุนขนส่งขาไปเดิม`, `ค่าตีกลับสะสมเดิม`, `ค่าตีกลับเพิ่ม`, และ `ต้นทุนขนส่งรวมหลังตีกลับ` เพื่อให้ operator เห็นชัดว่า `shippingCost` เป็นยอดรวมขาไป+ตีกลับ ไม่ใช่ค่าขนส่งทางเดียว
+    - mobile card ของหน้า `/orders` ปรับ layout action ใหม่เมื่อมีปุ่มรอง `ตีกลับ`: ปุ่มงานหลัก (`ปิดยอด COD`) จะกินเต็มแถวก่อน แล้วค่อยวาง `ตีกลับ` กับ `เปิด` แถวถัดไป เพื่อลดความอัดแน่นของ 3 ปุ่มในบรรทัดเดียว
+    - หน้า `/orders` มี default queue by role แล้ว: ถ้า URL ยังไม่มี `tab`, server จะเลือกคิวเริ่มต้นจาก `activeRoleName` + permissions เช่น role สายแพ็กของจะเด้งเข้า `TO_PACK`, role สายรับชำระจะเด้งเข้า `PAYMENT_REVIEW`, ส่วน `Owner/Manager` ยังเริ่มที่ `ALL`
+    - ปุ่ม `เลือกทั้งหมดในหน้า` บน header ของ `/orders` ถูกย่อให้ประหยัดพื้นที่แล้ว: mobile ใช้ icon-only พร้อม `aria-label/title`, ส่วน `sm+` ใช้ `icon + label สั้น` (`เลือกทั้งหน้า` / `ล้างเลือก`)
+    - แถบ work-queue tabs ของ `/orders` ซ่อน scrollbar UI แล้ว แต่ยังคง horizontal swipe/slide ได้เหมือนเดิม เพื่อให้ header สะอาดขึ้น
     - หน้า `/orders` แยกการมองสถานะรับที่ร้านชัดขึ้น: เคส `READY_FOR_PICKUP` จะแสดง badge รอง `ค้างจ่าย` หรือ `ชำระแล้ว` จาก `paymentStatus` (ทั้ง list มือถือและตาราง desktop/tablet)
     - หน้า `/orders` แสดง `ช่องทาง` ในบรรทัดเดียวกันทั้งมือถือและ desktop แล้ว โดยใช้ข้อความสั้น `Facebook` / `WhatsApp` / `Walk-in` / `Pickup`
     - ตาราง desktop ของหน้า `/orders` เพิ่มคอลัมน์ `ช่องทาง` (ค่าในรูป `Facebook • LAK • COD`) และคอลัมน์ `ยอดรวม` เหลือแสดงเฉพาะยอดเงิน
     - หน้า `/orders` ปรับ badge สถานะของออเดอร์ออนไลน์ให้แยก `สถานะงาน` ออกจาก `สถานะการชำระ` มากขึ้น: เคส `PENDING_PAYMENT` ของ online จะใช้ badge หลัก `รอดำเนินการ` แทน `ค้างจ่าย`, ส่วน badge รองอ่านจาก `paymentMethod/paymentStatus` เช่น `ยังไม่ชำระ`, `รอตรวจสลิป`, `COD`, `COD รอปิดยอด`, `ชำระแล้ว`
     - ปรับถ้อยคำ badge สถานะค้างชำระจาก `รอชำระ` เป็น `ค้างจ่าย` ทั้งหน้า `/orders` และ `/orders/[orderId]` (รวม label `รับสินค้าแล้ว (...)`)
     - เพิ่มปุ่มลัด `ปิดยอด COD รายวัน` ไปหน้า `/orders/cod-reconcile` (แสดงเมื่อผู้ใช้มีสิทธิ์ `orders.mark_paid`)
+    - หน้า `/orders/cod-reconcile` ยังเป็นหน้า settle COD แบบ batch เป็นหลัก แต่ถ้าผู้ใช้มีสิทธิ์ `orders.cod_return` จะมี action รอง `ตีกลับ` ต่อแถวเพิ่ม: เปิด review sheet กรอก `ค่าตีกลับเพิ่ม + เหตุผล/หมายเหตุ` แล้วค่อยยิง `PATCH /api/orders/[orderId]` action `mark_cod_returned` ได้จากหน้านี้โดยตรง
+    - หน้า `/orders/cod-reconcile` ปรับเป็น mobile-first workspace มากขึ้นแล้ว: filter อยู่ในการ์ดบนสุด, ใช้ custom date picker แบบเดียวกับฟอร์มอื่นผ่าน shared component `components/ui/date-picker-field.tsx`, รายการแสดงเป็น card ที่แยก `ยอดต้องได้/โอนจริง/codFee/ส่วนต่าง` ชัดเจน, และเมื่อเลือกหลายรายการจะมี sticky batch bar ด้านล่างสำหรับ `ยืนยันปิดยอดที่เลือก`
+    - ลำดับ filter ของหน้า `/orders/cod-reconcile` ปรับเป็น `ค้นหา` ก่อน แล้วค่อย `วันที่/ขนส่ง/วันนี้/รีเฟรช` เพื่อให้ mobile ใช้งานตาม mental model จริงมากขึ้นและลดการไล่สายตาแบบฟอร์มยาว; รอบล่าสุดตัด label ด้านบนของ search ออกและใช้ search field พร้อม icon ซ้าย + `aria-label` แทน เพื่อให้ card เบาและเร็วขึ้นบนมือถือ และล็อก dropdown `ขนส่ง` ให้เต็ม cell เดียวกับ date fields เพื่อลดอาการแนวไม่ตรงบนบาง breakpoint
     - ใช้ `SlideUpSheet` ตัวเดียวกันทั้งสามช่วงหน้าจอ
     - Mobile (`<768px`) = slide-up sheet (ปัดลงจาก handle หรือ header/กดนอกกล่อง/กด X เพื่อปิด)
     - Tablet (`768-1199px`) = centered sheet ขนาด `min(45rem, 100vw-2rem)` สูงสุด `92dvh`
@@ -265,6 +288,7 @@ npm run db:migrate
   - Matrix รองรับทั้งแบบแกนเดียว (เช่น Color อย่างเดียว/Size อย่างเดียว) และ 2 แกน (เช่น Color + Size) โดยมี preset ปุ่มด่วน + checkbox `ใช้แกนที่ 2`
   - ปรับความกว้าง create/edit product modal บน desktop เป็น `max-w-3xl` เพื่อให้ Matrix และฟอร์ม Variant อ่านง่ายขึ้น (mobile/tablet ยังเป็น sheet responsive เดิม)
   - create/edit product modal ตั้งค่าไม่ให้ปิดเมื่อกด backdrop (กดนอกกล่อง) เพื่อลดการปิดฟอร์มโดยไม่ตั้งใจ
+  - ปุ่ม `พิมพ์บาร์โค้ด` ใน Product Detail modal ใช้ current-page print flow แล้ว (inject print-root + `window.print()` + cleanup หลัง `afterprint`) แบบเดียวกับ print ในฝั่ง order เพื่อลด popup/new-tab และกัน popup block; ถ้า render แบบ `EAN8/EAN13` ไม่ผ่าน ระบบจะ fallback ไป `CODE128` อัตโนมัติแทนการ fail ทันที
   - ช่อง `ชื่อสินค้าแม่ (Model)` ในฟอร์มสินค้าเป็นแบบ auto-suggest จากฐานข้อมูลจริง (`GET /api/products/models`) และยังพิมพ์ชื่อใหม่ได้หากไม่พบรายการ
   - ช่อง `ลำดับแสดง` ในโหมด Variant (create) ตั้งค่าอัตโนมัติจากลำดับถัดไปของ Model (`nextSortOrder`) และยังแก้เองได้; หากผู้ใช้แก้เอง ระบบจะหยุด override อัตโนมัติ
   - ช่อง `ชื่อ Variant` ในฟอร์ม Variant เป็นแบบ auto-suggest จาก Model เดียวกัน (`variantLabels`) แต่ไม่ auto-fill ทันที เพื่อหลีกเลี่ยงการกรอกผิดโดยไม่ตั้งใจ
@@ -400,11 +424,13 @@ npm run db:migrate
   - ใช้ `getDashboardViewData` ฝั่ง server query (ไม่มี browser call ตรงไป `/api`)
   - เพิ่ม reminder งาน AP ค้างชำระใน dashboard (`overdue` / `due soon`) โดย reuse due-status logic เดียวกับ `purchase-ap.service`
   - แสดงรายการเตือนสูงสุด 5 PO พร้อมยอดค้าง และลิงก์ไป `/stock?tab=purchase` เพื่อตามงานต่อ
+  - หน้า `/dashboard` ถูกยกระดับเป็น mobile-first work dashboard แล้ว: hero แสดงร้าน/สาขา/บทบาท + summary สำคัญ, บล็อก `งานวันนี้` สรุปคิวที่ควรจัดการก่อน (`ตามการชำระ`, `เติมสต็อก`, `PO ค้างชำระ`, `ออเดอร์วันนี้`) พร้อม deep-link ไปหน้าทำงานจริง, ตัด section `ทางลัด` ออกเพราะซ้ำกับ navigator, คงไว้แค่ลิงก์ `รายงาน` จุดเดียว, และบล็อกล่างยังคง `AP` + `low stock` เป็นรายละเอียดเชิงปฏิบัติการ
 - Notifications:
   - เพิ่ม in-app inbox สำหรับ AP due/overdue ที่หน้า `/settings/notifications`
   - เพิ่ม quick inbox ใน navbar (`AppTopNav`) พร้อม bell badge + action `อ่านแล้ว` และ deep-link ไป `/stock?tab=purchase` / `/settings/notifications`
   - quick inbox บนจอ non-desktop (`<1200px`) ใช้ popover card แบบเดียวกับ desktop แต่ render แบบ fixed-centered (ผ่าน portal) เพื่อกันการล้นซ้าย และจำกัดความสูง (`~68dvh`)
-  - navbar คงปุ่ม `เปลี่ยนร้าน` แต่ปรับเป็น compact (icon-first) และซ่อนปุ่มเมื่ออยู่หน้า `/settings/stores`
+  - navbar คงปุ่ม `เปลี่ยนร้าน` แบบ compact (icon-first) และซ่อนปุ่มเมื่ออยู่หน้า `/settings/stores`
+  - ปุ่ม `เปลี่ยนร้าน` ใน navbar ไม่ redirect ไป `/settings/stores` แล้ว; ตอนนี้เปิด `SlideUpSheet` บนหน้าเดิมและ reuse `StoresManagement mode="quick"` เพื่อสลับร้าน/สาขาได้ทันที ก่อนให้ flow switch เดิมพาไป `nextRoute` ที่เหมาะกับร้านใหม่
   - เพิ่ม API inbox:
     - `GET/PATCH /api/settings/notifications/inbox` (list + mark read/unread/resolve)
     - ถ้า schema notification ยังไม่พร้อม (`notification_inbox`/`notification_rules` ยังไม่มี) `GET` จะ fallback เป็นรายการว่างพร้อม `warning` แทนการ 500; `PATCH` จะตอบ 503 พร้อมข้อความแนะนำให้รัน `db:repair` + `db:migrate`

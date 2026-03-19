@@ -4,8 +4,8 @@ import { ChevronRight, Gauge, ShieldCheck, Store } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import {
+  type BranchLimitSource,
   evaluateBranchCreationAccess,
-  formatBranchQuotaSummary,
   getGlobalBranchPolicy,
 } from "@/lib/branches/policy";
 import { getSession } from "@/lib/auth/session";
@@ -16,20 +16,25 @@ import {
 } from "@/lib/auth/store-creation";
 import { db } from "@/lib/db/client";
 import { storeBranches, storeMembers, stores, users } from "@/lib/db/schema";
+import { uiLocaleToDateLocale } from "@/lib/i18n/locales";
+import { t, type MessageKey } from "@/lib/i18n/messages";
 
 const toNumber = (value: unknown) => Number(value ?? 0);
+
 const toNonNegativeIntOrNull = (value: unknown) => {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
     return null;
   }
   return value;
 };
+
 const toUsagePercent = (current: number, max: number | null) => {
   if (max === null || max <= 0) {
     return null;
   }
   return Math.min(100, Math.max(0, Math.round((current / max) * 100)));
 };
+
 const resolveEffectiveBranchLimit = (params: {
   storeMaxBranchesOverride: number | null;
   superadminMaxBranchesPerStoreOverride: number | null;
@@ -62,11 +67,20 @@ const resolveEffectiveBranchLimit = (params: {
   };
 };
 
+const limitSourceLabelKey: Record<BranchLimitSource, MessageKey> = {
+  STORE_OVERRIDE: "superadmin.quotas.row.limitSource.STORE_OVERRIDE",
+  SUPERADMIN_OVERRIDE: "superadmin.quotas.row.limitSource.SUPERADMIN_OVERRIDE",
+  GLOBAL_DEFAULT: "superadmin.quotas.row.limitSource.GLOBAL_DEFAULT",
+  UNLIMITED: "superadmin.quotas.row.limitSource.UNLIMITED",
+};
+
 export default async function SettingsSuperadminQuotasPage() {
   const session = await getSession();
   if (!session) {
     redirect("/login");
   }
+  const uiLocale = session.uiLocale;
+  const numberLocale = uiLocaleToDateLocale(uiLocale);
 
   const memberships = await listActiveMemberships(session.userId);
   if (memberships.length === 0) {
@@ -75,45 +89,48 @@ export default async function SettingsSuperadminQuotasPage() {
 
   const storeIds = memberships.map((membership) => membership.storeId);
 
-  const [storePolicy, globalBranchPolicy, activeMemberRows, branchCountRows, storeRows, userRows] = await Promise.all([
-    getStoreCreationPolicy(session.userId),
-    getGlobalBranchPolicy(),
-    db
-      .select({
-        storeId: storeMembers.storeId,
-        count: sql<number>`count(*)`,
-      })
-      .from(storeMembers)
-      .where(and(inArray(storeMembers.storeId, storeIds), eq(storeMembers.status, "ACTIVE")))
-      .groupBy(storeMembers.storeId),
-    db
-      .select({
-        storeId: storeBranches.storeId,
-        count: sql<number>`count(*)`,
-      })
-      .from(storeBranches)
-      .where(inArray(storeBranches.storeId, storeIds))
-      .groupBy(storeBranches.storeId),
-    db
-      .select({
-        id: stores.id,
-        maxBranchesOverride: stores.maxBranchesOverride,
-      })
-      .from(stores)
-      .where(inArray(stores.id, storeIds)),
-    db
-      .select({
-        systemRole: users.systemRole,
-        canCreateBranches: users.canCreateBranches,
-        maxBranchesPerStore: users.maxBranchesPerStore,
-      })
-      .from(users)
-      .where(eq(users.id, session.userId))
-      .limit(1),
-  ]);
+  const [storePolicy, globalBranchPolicy, activeMemberRows, branchCountRows, storeRows, userRows] =
+    await Promise.all([
+      getStoreCreationPolicy(session.userId),
+      getGlobalBranchPolicy(),
+      db
+        .select({
+          storeId: storeMembers.storeId,
+          count: sql<number>`count(*)`,
+        })
+        .from(storeMembers)
+        .where(and(inArray(storeMembers.storeId, storeIds), eq(storeMembers.status, "ACTIVE")))
+        .groupBy(storeMembers.storeId),
+      db
+        .select({
+          storeId: storeBranches.storeId,
+          count: sql<number>`count(*)`,
+        })
+        .from(storeBranches)
+        .where(inArray(storeBranches.storeId, storeIds))
+        .groupBy(storeBranches.storeId),
+      db
+        .select({
+          id: stores.id,
+          maxBranchesOverride: stores.maxBranchesOverride,
+        })
+        .from(stores)
+        .where(inArray(stores.id, storeIds)),
+      db
+        .select({
+          systemRole: users.systemRole,
+          canCreateBranches: users.canCreateBranches,
+          maxBranchesPerStore: users.maxBranchesPerStore,
+        })
+        .from(users)
+        .where(eq(users.id, session.userId))
+        .limit(1),
+    ]);
 
   const storeAccess = evaluateStoreCreationAccess(storePolicy);
-  const activeMembersByStore = new Map(activeMemberRows.map((row) => [row.storeId, toNumber(row.count)]));
+  const activeMembersByStore = new Map(
+    activeMemberRows.map((row) => [row.storeId, toNumber(row.count)]),
+  );
   const branchCountByStore = new Map(branchCountRows.map((row) => [row.storeId, toNumber(row.count)]));
   const storeMaxBranchesOverrideByStore = new Map(
     storeRows.map((row) => [row.id, toNonNegativeIntOrNull(row.maxBranchesOverride)]),
@@ -126,6 +143,7 @@ export default async function SettingsSuperadminQuotasPage() {
   const superadminMaxBranchesPerStoreOverride = toNonNegativeIntOrNull(
     userRow?.maxBranchesPerStore,
   );
+
   const branchPolicies = memberships.map((membership) => {
     const storeExists = existingStoreIds.has(membership.storeId);
     const storeMaxBranchesOverride = storeMaxBranchesOverrideByStore.get(membership.storeId) ?? null;
@@ -137,6 +155,7 @@ export default async function SettingsSuperadminQuotasPage() {
       superadminMaxBranchesPerStoreOverride,
       globalDefaultMaxBranchesPerStore: globalBranchPolicy.defaultMaxBranchesPerStore,
     });
+
     const policy = {
       storeExists,
       isSuperadmin,
@@ -151,13 +170,11 @@ export default async function SettingsSuperadminQuotasPage() {
       effectiveMaxBranchesPerStore,
       effectiveLimitSource,
     };
-    const access = evaluateBranchCreationAccess(policy);
 
     return {
       membership,
       policy,
-      access,
-      summary: formatBranchQuotaSummary(policy),
+      access: evaluateBranchCreationAccess(policy),
     };
   });
 
@@ -174,24 +191,30 @@ export default async function SettingsSuperadminQuotasPage() {
   return (
     <section className="space-y-5">
       <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">Quota & Policy</h1>
-        <p className="text-sm text-slate-500">ตรวจสิทธิ์การสร้างร้าน/สาขาและขีดจำกัดปัจจุบันของแต่ละร้าน</p>
+        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
+          {t(uiLocale, "superadmin.quotas.title")}
+        </h1>
+        <p className="text-sm text-slate-500">{t(uiLocale, "superadmin.quotas.subtitle")}</p>
       </header>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-500">โควตาสร้างร้านของบัญชี</p>
+          <p className="text-xs text-slate-500">{t(uiLocale, "superadmin.quotas.card.storeQuota")}</p>
           <p className="mt-1 text-lg font-semibold text-slate-900">
             {typeof storePolicy.maxStores === "number"
-              ? `${storePolicy.activeOwnerStoreCount.toLocaleString("th-TH")} / ${storePolicy.maxStores.toLocaleString("th-TH")} ร้าน`
-              : `ไม่จำกัด (ปัจจุบัน ${storePolicy.activeOwnerStoreCount.toLocaleString("th-TH")} ร้าน)`}
+              ? `${storePolicy.activeOwnerStoreCount.toLocaleString(numberLocale)} / ${storePolicy.maxStores.toLocaleString(numberLocale)} ${t(uiLocale, "superadmin.quotas.card.storeLimitedSuffix")}`
+              : `${t(uiLocale, "superadmin.quotas.card.storeUnlimitedPrefix")} ${storePolicy.activeOwnerStoreCount.toLocaleString(numberLocale)} ${t(uiLocale, "superadmin.quotas.card.storeUnlimitedSuffix")}`}
           </p>
         </article>
 
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-500">สิทธิ์สร้างร้าน</p>
+          <p className="text-xs text-slate-500">
+            {t(uiLocale, "superadmin.quotas.card.storeCreationAccess")}
+          </p>
           <p className="mt-1 text-lg font-semibold text-slate-900">
-            {storeAccess.allowed ? "ใช้งานได้" : "ถูกจำกัด"}
+            {storeAccess.allowed
+              ? t(uiLocale, "superadmin.quotas.card.accessAllowed")
+              : t(uiLocale, "superadmin.quotas.card.accessBlocked")}
           </p>
           {!storeAccess.allowed && storeAccess.reason ? (
             <p className="mt-1 text-xs text-red-600">{storeAccess.reason}</p>
@@ -199,27 +222,40 @@ export default async function SettingsSuperadminQuotasPage() {
         </article>
 
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-500">ร้านที่ยังสร้างสาขาได้</p>
+          <p className="text-xs text-slate-500">
+            {t(uiLocale, "superadmin.quotas.card.branchEligibleStores")}
+          </p>
           <p className="mt-1 text-lg font-semibold text-slate-900">
-            {storesCanCreateBranchCount.toLocaleString("th-TH")} / {memberships.length.toLocaleString("th-TH")} ร้าน
+            {storesCanCreateBranchCount.toLocaleString(numberLocale)} /{" "}
+            {memberships.length.toLocaleString(numberLocale)}{" "}
+            {t(uiLocale, "superadmin.quotas.card.storesSuffix")}
           </p>
         </article>
 
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-500">ร้านใกล้เต็มโควตาสาขา (≥80%)</p>
+          <p className="text-xs text-slate-500">
+            {t(uiLocale, "superadmin.quotas.card.nearLimitStores")}
+          </p>
           <p className="mt-1 text-lg font-semibold text-slate-900">
-            {storesNearBranchLimitCount.toLocaleString("th-TH")} ร้าน
+            {storesNearBranchLimitCount.toLocaleString(numberLocale)}{" "}
+            {t(uiLocale, "superadmin.quotas.card.storesSuffix")}
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            ร้านที่ติดเพดานแล้ว/ถูกบล็อก: {storesBlockedCount.toLocaleString("th-TH")} ร้าน
+            {t(uiLocale, "superadmin.quotas.card.blockedStoresPrefix")}{" "}
+            {storesBlockedCount.toLocaleString(numberLocale)}{" "}
+            {t(uiLocale, "superadmin.quotas.card.storesSuffix")}
           </p>
         </article>
       </div>
 
       <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
-          <p className="text-sm font-semibold text-slate-900">นโยบายสาขาแยกร้าน</p>
-          <p className="mt-0.5 text-xs text-slate-500">ใช้ตรวจว่าร้านไหนติดโควตาหรือไม่มีสิทธิ์สร้างสาขา</p>
+          <p className="text-sm font-semibold text-slate-900">
+            {t(uiLocale, "superadmin.quotas.section.branchPolicies.title")}
+          </p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {t(uiLocale, "superadmin.quotas.section.branchPolicies.subtitle")}
+          </p>
         </div>
 
         <ul className="divide-y divide-slate-100">
@@ -229,14 +265,23 @@ export default async function SettingsSuperadminQuotasPage() {
               item.policy.currentBranchCount,
               item.policy.effectiveMaxBranchesPerStore,
             );
+            const summaryText =
+              item.policy.effectiveMaxBranchesPerStore === null
+                ? `${t(uiLocale, "superadmin.quotas.row.unlimited")} (${t(uiLocale, limitSourceLabelKey[item.policy.effectiveLimitSource])})`
+                : `${item.policy.currentBranchCount.toLocaleString(numberLocale)} / ${item.policy.effectiveMaxBranchesPerStore.toLocaleString(numberLocale)} ${t(uiLocale, "superadmin.quotas.row.branchUnit")} (${t(uiLocale, limitSourceLabelKey[item.policy.effectiveLimitSource])})`;
 
             return (
               <li key={item.membership.storeId} className="space-y-2 px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-900">{item.membership.storeName}</p>
+                    <p className="truncate text-sm font-medium text-slate-900">
+                      {item.membership.storeName}
+                    </p>
                     <p className="mt-0.5 truncate text-xs text-slate-500">
-                      บทบาท {item.membership.roleName} • สมาชิก ACTIVE {activeMembers.toLocaleString("th-TH")} คน
+                      {t(uiLocale, "superadmin.quotas.row.rolePrefix")} {item.membership.roleName} •{" "}
+                      {t(uiLocale, "superadmin.quotas.row.activeMembersPrefix")}{" "}
+                      {activeMembers.toLocaleString(numberLocale)}{" "}
+                      {t(uiLocale, "superadmin.quotas.row.activeMembersSuffix")}
                     </p>
                   </div>
                   <span
@@ -246,12 +291,14 @@ export default async function SettingsSuperadminQuotasPage() {
                         : "border-red-200 bg-red-50 text-red-700"
                     }`}
                   >
-                    {item.access.allowed ? "สร้างสาขาได้" : "สร้างสาขาไม่ได้"}
+                    {item.access.allowed
+                      ? t(uiLocale, "superadmin.quotas.row.allowed")
+                      : t(uiLocale, "superadmin.quotas.row.blocked")}
                   </span>
                 </div>
 
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                  <p className="text-xs font-medium text-slate-700">{item.summary}</p>
+                  <p className="text-xs font-medium text-slate-700">{summaryText}</p>
                   {usagePercent !== null ? (
                     <div className="mt-2">
                       <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
@@ -267,17 +314,25 @@ export default async function SettingsSuperadminQuotasPage() {
                         />
                       </div>
                       <p className="mt-1 text-[11px] text-slate-500">
-                        ใช้ไป {usagePercent.toLocaleString("th-TH")}% ของโควตาสาขา
+                        {t(uiLocale, "superadmin.quotas.row.usagePrefix")}{" "}
+                        {usagePercent.toLocaleString(numberLocale)}
+                        {t(uiLocale, "superadmin.quotas.row.usageSuffix")}
                       </p>
                     </div>
                   ) : (
-                    <p className="mt-1 text-[11px] text-slate-500">ไม่จำกัดโควตาสาขา</p>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      {t(uiLocale, "superadmin.quotas.row.unlimitedHint")}
+                    </p>
                   )}
                   {!item.access.allowed && item.access.reason ? (
                     <p className="mt-1 text-xs text-red-600">{item.access.reason}</p>
                   ) : (
                     <p className="mt-1 text-xs text-slate-500">
-                      ใช้เพดานตาม {item.policy.effectiveLimitSource} • สาขาปัจจุบัน {item.policy.currentBranchCount.toLocaleString("th-TH")} แห่ง
+                      {t(uiLocale, "superadmin.quotas.row.limitSourcePrefix")}{" "}
+                      {t(uiLocale, limitSourceLabelKey[item.policy.effectiveLimitSource])} •{" "}
+                      {t(uiLocale, "superadmin.quotas.row.currentBranchesPrefix")}{" "}
+                      {item.policy.currentBranchCount.toLocaleString(numberLocale)}{" "}
+                      {t(uiLocale, "superadmin.quotas.row.currentBranchesSuffix")}
                     </p>
                   )}
                 </div>
@@ -288,7 +343,9 @@ export default async function SettingsSuperadminQuotasPage() {
       </article>
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">นำทาง</p>
+        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          {t(uiLocale, "superadmin.nav.section")}
+        </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <Link
             href="/settings/superadmin"
@@ -298,8 +355,12 @@ export default async function SettingsSuperadminQuotasPage() {
               <Gauge className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">กลับ Superadmin Center</span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">เลือกเมนูจัดการอื่น ๆ</span>
+              <span className="block truncate text-sm font-medium text-slate-900">
+                {t(uiLocale, "superadmin.nav.backToCenter.title")}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-slate-500">
+                {t(uiLocale, "superadmin.nav.backToCenter.description")}
+              </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
           </Link>
@@ -313,10 +374,10 @@ export default async function SettingsSuperadminQuotasPage() {
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium text-slate-900">
-                กลับหน้าเลือกร้าน / เปลี่ยนสาขา
+                {t(uiLocale, "superadmin.nav.exitMode.title")}
               </span>
               <span className="mt-0.5 block truncate text-xs text-slate-500">
-                ออกจากโหมดผู้ดูแลกลับหน้าใช้งานรายวัน
+                {t(uiLocale, "superadmin.nav.exitMode.description")}
               </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
@@ -330,8 +391,12 @@ export default async function SettingsSuperadminQuotasPage() {
               <ShieldCheck className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">ไปหน้าตั้งค่าร้าน</span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">สร้างร้านใหม่หรือปรับโควตาร้าน</span>
+              <span className="block truncate text-sm font-medium text-slate-900">
+                {t(uiLocale, "superadmin.quotas.nav.toStoreConfig.title")}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-slate-500">
+                {t(uiLocale, "superadmin.quotas.nav.toStoreConfig.description")}
+              </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
           </Link>
@@ -345,10 +410,10 @@ export default async function SettingsSuperadminQuotasPage() {
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium text-slate-900">
-                ไปดู Global Configuration
+                {t(uiLocale, "superadmin.quotas.nav.toGlobalConfig.title")}
               </span>
               <span className="mt-0.5 block truncate text-xs text-slate-500">
-                ตรวจค่า default policy ที่ส่งผลกับโควตา
+                {t(uiLocale, "superadmin.quotas.nav.toGlobalConfig.description")}
               </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />

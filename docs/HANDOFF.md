@@ -2,7 +2,7 @@
 
 ## Snapshot Date
 
-- March 17, 2026
+- March 19, 2026
 
 ## Changed (ล่าสุด)
 
@@ -11,7 +11,54 @@
   - หน้า `/settings/language` เพิ่ม language picker และบันทึกผ่าน `PATCH /api/settings/account` action `update_locale`
   - session จะ sync locale จาก DB เพื่อให้ข้ามอุปกรณ์เห็นค่าเดียวกัน โดยไม่ต้อง logout
   - เมื่อเลือกภาษาเป็นลาว (`lo`) UI จะใช้ฟอนต์ `GoogleSans` (อ่านภาษาลาวชัดขึ้น) จากไฟล์ใน `public/fonts`
-  - ชื่อภาษาที่แสดงใน picker ใช้ key `localeName.*` (th/lo/en)
+  - ชื่อภาษาที่แสดงใน picker ใช้ key `localeName.*` แต่ fix เป็น native labels คงที่ `ไทย / ລາວ / English` ทุก locale
+  - หน้า `/onboarding` ย้ายข้อความใน wizard ไปใช้ key กลุ่ม `onboarding.*` ครอบคลุม stepper, ตัวเลือกประเภทร้าน, ฟอร์มตั้งค่าร้าน, channel setup, validation fallback และ modal ยกเลิก
+  - ขยาย i18n ต่อในฝั่ง `system-admin/superadmin`:
+    - `components/system-admin/system-store-user-config.tsx` และ `components/system-admin/superadmin-management.tsx` ใช้ key กลุ่ม `systemAdmin.storeUserConfig.*` และ `systemAdmin.superadminManagement.*`
+    - หน้า `/settings/superadmin/global-config` ใช้ key กลุ่ม `superadmin.globalConfig.*`
+    - หน้า `/settings/superadmin/audit-log` ใช้ key กลุ่ม `superadmin.auditLog.*` และเติม action label ที่ยังขาดใน `settings.auditLog.actionLabel.*`
+    - เพิ่ม i18n ต่อใน `components/system-admin/system-store-logo-policy-config.tsx`, `components/system-admin/system-branch-policy-config.tsx`, `app/(system-admin)/layout.tsx`, `components/system-admin/system-admin-bottom-nav.tsx`, `app/(system-admin)/system-admin/page.tsx`, `app/(system-admin)/system-admin/config/page.tsx`, และ `app/(app)/settings/superadmin/page.tsx`
+    - เพิ่ม key กลุ่ม `systemAdmin.storeLogoPolicy.*`, `systemAdmin.branchPolicy.*`, `systemAdmin.layout.*`, `systemAdmin.nav.*`, `systemAdmin.configCenter.*`, `systemAdmin.dashboard.*`, และ `settings.superadminHome.*` ครบ 3 ภาษา
+    - รอบล่าสุดเพิ่ม i18n ต่อใน `app/(app)/settings/superadmin/quotas/page.tsx`, `app/(app)/settings/superadmin/integrations/page.tsx`, `app/(system-admin)/system-admin/config/clients/page.tsx`, และ `app/(system-admin)/system-admin/config/system/page.tsx`
+    - เพิ่ม key กลุ่ม `superadmin.quotas.*`, `superadmin.nav.*` ที่ใช้ร่วมกันข้ามหน้า, `superadmin.integrations.storeTypePrefix`, และ `systemAdmin.clientsPage.*` / `systemAdmin.systemPage.*` ครบ 3 ภาษา
+    - รอบนี้เพิ่ม i18n ต่อใน `app/(system-admin)/system-admin/config/stores-users/page.tsx`, `app/(system-admin)/system-admin/config/security/page.tsx`, และ `app/(app)/settings/superadmin/security/page.tsx`
+    - เพิ่ม key กลุ่ม `systemAdmin.storesUsersPage.*`, `systemAdmin.securityPage.*`, และ `superadmin.security.*` ครบ 3 ภาษา
+    - รอบนี้เพิ่ม i18n ต่อใน `app/(app)/settings/superadmin/stores/page.tsx`, `app/(app)/settings/superadmin/stores/store-config/page.tsx`, และ `app/(app)/settings/superadmin/stores/branch-config/page.tsx`
+    - เพิ่ม key กลุ่ม `superadmin.storeConfig.*`, `superadmin.branchConfig.*`, และ `superadmin.workspaceBadge` ครบ 3 ภาษา พร้อมแปล store type label ในหน้า stores ให้ใช้ key เดิมของ onboarding แทน enum raw
+    - รอบนี้เพิ่ม i18n ต่อใน `components/app/stores-management.tsx` และ `app/(app)/settings/superadmin/users/page.tsx`
+    - ส่ง `uiLocale` เข้า `StoresManagement` จาก `app/(app)/settings/stores/page.tsx`, `app/(app)/settings/superadmin/stores/store-config/page.tsx`, และ `app/(app)/settings/superadmin/stores/branch-config/page.tsx` เพื่อให้ flow switch/create ใช้ locale เดียวกับ session
+    - เพิ่ม key กลุ่ม `storesManagement.*` และ `superadmin.usersPage.*` ครบ 3 ภาษา ครอบคลุม store/branch switcher, create store, create branch wizard, validation/feedback และ summary/role template/navigation ของหน้า `/settings/superadmin/users`
+    - รอบนี้เก็บ i18n ต่อใน `app/(app)/settings/page.tsx`, `app/(app)/settings/superadmin/overview/page.tsx`, และ `app/(system-admin)/system-admin/loading.tsx`
+    - หน้า `/settings` ย้าย label store type, summary capability, system-role prefix, admin entry และ channel labels ไปใช้ key/message กลางแทน hardcode
+    - หน้า `/settings/superadmin/overview` ใช้ key กลุ่ม `superadmin.overview.*` ครบ 3 ภาษา สำหรับ header, summary cards, top-stores panel และ reuse nav key เดิมของ superadmin
+    - `app/(system-admin)/system-admin/loading.tsx` เปลี่ยนมา reuse key `systemAdmin.dashboard.*` แทนข้อความ loading hardcode
+  - ปรับหน้า `/orders` ให้เป็น work queue มากขึ้น:
+    - `components/app/orders-management.tsx` เพิ่ม `งานถัดไป` และ quick action จากหน้า list โดยตรง สำหรับ flow routine ที่ไม่ต้องกรอกข้อมูลเพิ่ม (`confirm_paid`, `mark_packed`, `mark_shipped`, `submit_for_payment`)
+    - mobile card เปลี่ยนจากการเป็นลิงก์ทั้งใบอย่างเดียวมาเป็น card ที่มีปุ่ม `เปิด` และปุ่ม action หลัก
+    - desktop table เพิ่มคอลัมน์ `งานถัดไป` และ `การทำงาน`
+    - เคสที่ยังต้องกรอกยอด/บัญชีเพิ่ม เช่น COD settlement หรือ in-store credit settlement จะยังพาเปิด detail และมีข้อความกำกับจากหน้า list
+    - phase 2 เพิ่ม multi-select และ sticky bulk action bar บนหน้า `/orders`
+    - รองรับ bulk routine actions สำหรับรายการที่เลือก (`confirm_paid`, `mark_packed`, `mark_shipped`, `submit_for_payment`) โดยใช้ PATCH action เดิมทีละออเดอร์และสรุปผลสำเร็จ/ไม่สำเร็จให้หลังจบงาน
+    - desktop table เพิ่ม checkbox ทั้งหัวตารางและต่อแถว; mobile card เพิ่ม checkbox ต่อรายการและปุ่ม `เลือกทั้งหมดในหน้า`
+    - phase 3 เพิ่ม selection summary (`ยอดรวม`, จำนวนใบเสร็จ, จำนวนป้ายจัดส่ง) ใน bulk bar
+    - เพิ่ม bulk print `ใบเสร็จ` และ `ป้ายจัดส่ง` จาก selection ในหน้า `/orders` โดยดึง `GET /api/orders/[orderId]` ของแต่ละรายการมา merge เป็นเอกสารพิมพ์ชุดเดียวในหน้าเดิมแล้วเรียก `window.print()`
+    - bulk print ป้ายจะพิมพ์เฉพาะรายการที่มีข้อมูลจัดส่งเพียงพอ; ถ้า selection ไม่มีข้อมูลพอ ระบบจะ block และแสดง error ชัดเจน
+    - phase 4 เพิ่ม work-queue tabs แบบ server-backed บนหน้า `/orders` แล้ว: `ทุกออเดอร์`, `ต้องยืนยันชำระ`, `ต้องแพ็ก`, `ต้องจัดส่ง`, `รอลูกค้ารับ`, `COD รอปิดยอด`
+    - `lib/orders/queries.ts` เป็น source of truth ของ queue filter และ count badge; `app/(app)/orders/page.tsx` กับ `app/api/orders/route.ts` parse `tab` ผ่าน helper เดียวกันแล้ว
+    - queue count badge ดึงจาก server พร้อม response `listOrdersByTab` เพื่อให้จำนวนใน pill กับรายการใน tab ใช้เงื่อนไขชุดเดียวกัน
+    - ปุ่ม `เลือกทั้งหมดในหน้า` บน header ของ `/orders` เปลี่ยนเป็น control แบบ compact: mobile เป็น icon-only, desktop เป็น icon + label สั้น เพื่อลดการกินพื้นที่ใน header แต่ยังคง `aria-label/title` เต็ม
+    - รอบนี้เพิ่ม review sheet จากหน้า `/orders` สำหรับเคสที่ยังต้องกรอกข้อมูลเพิ่ม:
+      - `Walk-in/Pickup + ON_CREDIT` เปิด sheet เลือกวิธีรับเงินจริง (`เงินสด/QR`) และบัญชี QR ได้จาก list แล้วค่อยยิง `PATCH /api/orders/[orderId]`
+      - `COD รอปิดยอด` เปิด sheet กรอก `ยอดรับจริง + ค่าธรรมเนียม/ค่าหัก` จาก list แล้วค่อยยิง `POST /api/orders/cod-reconcile` แบบรายการเดียว
+    - `COD รอปิดยอด` ที่มีสิทธิ์ `orders.cod_return` มีปุ่มรอง `ตีกลับ` จาก list แล้ว: เปิด sheet กรอก `ค่าตีกลับเพิ่ม + เหตุผล/หมายเหตุ` ก่อนยิง `PATCH /api/orders/[orderId]` action `mark_cod_returned`
+    - เพิ่ม default queue by role บน `app/(app)/orders/page.tsx`: ถ้า URL ยังไม่มี `tab`, server จะเลือกคิวเริ่มต้นจาก `activeRoleName` + permissions เช่น pack/warehouse -> `TO_PACK`, payment/cashier/sales -> `PAYMENT_REVIEW`, ship/logistics -> `TO_SHIP`, ส่วน `Owner/Manager` เริ่มที่ `ALL`
+    - แถบ queue tabs ของ `/orders` ซ่อน scrollbar UI แล้วโดยคง horizontal swipe/slide เดิมไว้ เพื่อให้ header ดูสะอาดขึ้นบนมือถือ
+    - `app/(app)/orders/page.tsx` ส่งสิทธิ์ `orders.cod_return` ลง `OrdersManagement` แล้ว เพื่อให้หน้า list/work-queue แสดงปุ่ม `ตีกลับ` เฉพาะ role ที่มีสิทธิ์
+    - review sheet `COD ตีกลับ` แยก summary `ต้นทุนขนส่งขาไปเดิม`, `ค่าตีกลับสะสมเดิม`, `ค่าตีกลับเพิ่ม`, และ `ต้นทุนขนส่งรวมหลังตีกลับ` เพื่อกันความสับสนว่า `shippingCost` เป็นค่าขนส่งทางเดียว
+    - mobile card ของหน้า `/orders` จัด action ใหม่เมื่อมี `ตีกลับ`: ให้ปุ่มหลักกินเต็มแถวก่อน แล้วค่อยวาง `ตีกลับ` กับ `เปิด` ในแถวล่าง เพื่อแก้ความอัดแน่นของ 3 ปุ่มบนจอเล็ก
+  - ปรับปุ่ม `พิมพ์บาร์โค้ด` ใน Product Detail modal ให้พิมพ์บนหน้าเดิมแบบเดียวกับ order print sticker แล้ว:
+    - เลิกเปิด popup/new tab และใช้ inline print-root + `window.print()` + cleanup หลัง `afterprint`
+    - ถ้า barcode ดูเป็น `EAN8/EAN13` แต่ render ไม่ผ่าน `jsbarcode` ระบบจะ fallback ไปพิมพ์แบบ `CODE128` อัตโนมัติเพื่อลด toast error `ไม่สามารถพิมพ์บาร์โค้ดได้`
 
 - ขยาย i18n ในหน้า Settings/Superadmin เพิ่มเติม:
   - แทนที่ข้อความ hardcode ด้วย `t(uiLocale, ...)` ในหน้า permissions/security/profile/store/users/stores และหน้า `Superadmin: Operations & Governance`
@@ -26,6 +73,7 @@
   - เก็บข้อความ hardcode ในฟอร์ม/หน้ารายละเอียดให้เป็น key เพิ่มเติม (th/lo/en): `products.matrix.*`, `products.variant.*`, `products.form.*`, `products.detail.*`, `products.barcode.print.*`, `products.stockThresholds.*`
   - เพิ่ม action key ที่ใช้ซ้ำได้ เช่น `products.action.save`
   - แก้ชื่อพารามิเตอร์ใน toast renderer ของ barcode scanner เพื่อไม่ชนกับฟังก์ชันแปล `t(...)` (แก้ build error)
+  - ปรับปุ่ม `พิมพ์บาร์โค้ด` ใน Product Detail modal ให้พิมพ์บนหน้าเดิมแล้ว (inline print-root + `window.print()` + `afterprint` cleanup) แทนการเปิดแท็บ/หน้าต่างใหม่แบบ popup
 
 - ขยาย i18n ในหน้า `/stock` (หน้าหลักของโมดูลสต็อก) เพิ่มเติม:
   - แทนที่หัวข้อ/คำอธิบาย/ข้อความ no-access และ labels ของแท็บหลักด้วย key กลุ่ม `stock.page.*` และ `stock.tabs.*` (th/lo/en)
@@ -219,6 +267,9 @@
   - หน้า `/orders` เพิ่มปุ่มลัด `ปิดยอด COD รายวัน` (แสดงเฉพาะผู้มีสิทธิ์ `orders.mark_paid`)
   - รองรับ filter `dateFrom/dateTo`, `provider`, `q` และ pagination
   - ผู้ใช้แก้ `ยอดโอนจริง` + `codFee` รายรายการ แล้วเลือกหลายรายการเพื่อ `ยืนยันปิดยอดที่เลือก` ได้
+  - รอบนี้เพิ่ม action รอง `ตีกลับ` ต่อแถวในหน้า `/orders/cod-reconcile` แล้ว: ถ้า role มีสิทธิ์ `orders.cod_return` จะเปิด review sheet กรอก `ค่าตีกลับเพิ่ม + เหตุผล/หมายเหตุ` ก่อนยิง `PATCH /api/orders/[orderId]` action `mark_cod_returned`
+  - รอบนี้ redesign หน้า `/orders/cod-reconcile` เป็น mobile-first ขึ้น: ใช้ filter card ด้านบน, date range เปลี่ยนไปใช้ shared custom date picker (`components/ui/date-picker-field.tsx`), แถวรายการเป็น card ที่อ่านตัวเลขง่ายขึ้น, และย้าย CTA batch ไปเป็น sticky bar ด้านล่างเมื่อมี selection
+  - ลำดับ filter ปรับใหม่ให้ search อยู่บนสุดเต็มความกว้าง แล้วค่อยเป็น `ส่งตั้งแต่/ส่งถึง/ขนส่ง/วันนี้/รีเฟรช` เพื่อลดความรู้สึกเป็นฟอร์ม 4 ช่องและให้ mobile หาออเดอร์ได้เร็วกว่าเดิม; รอบล่าสุดตัด label ด้านบนของ search ออกแล้วใช้ช่องค้นหาพร้อม icon ซ้าย + `aria-label` แทน เพื่อให้หน้าเบาและ clean กว่าเดิม และบังคับ dropdown `ขนส่ง` ให้ใช้ความกว้างเต็ม cell เพื่อให้แนวตรงกับ date picker มากขึ้น
   - มี summary card real-time (ยอดต้องได้/ยอดโอนจริง/codFee/ส่วนต่าง) จากรายการที่เลือก + สรุปร่างข้อมูลทั้งหน้าปัจจุบัน
   - API ใหม่:
     - `GET /api/orders/cod-reconcile` ดึงรายการ COD pending reconcile
@@ -566,6 +617,7 @@
   - เพิ่ม quick inbox ที่ navbar (`AppTopNav`): bell badge, preview รายการล่าสุด, action `อ่านแล้ว`, และลิงก์ไปหน้า AP/Notification Center
   - ปรับ quick inbox บนจอ non-desktop (`<1024px`) ให้ใช้ popover card แบบเดียวกับ desktop (ไม่ full-screen) โดย render fixed-centered (portal) และจำกัดความสูง `~68dvh` เพื่อลดการล้นจอ/ล้นซ้าย
   - ปรับปุ่ม `เปลี่ยนร้าน` ใน navbar เป็น compact icon-first และซ่อนเมื่ออยู่หน้า `/settings/stores`
+  - รอบนี้ปุ่ม `เปลี่ยนร้าน` ใน navbar เปลี่ยนจากลิงก์ไป `/settings/stores` เป็น current-page quick switcher แล้ว: เปิด `SlideUpSheet` บนหน้าเดิมและฝัง `StoresManagement mode="quick"` เพื่อสลับร้าน/สาขาได้เลย โดยยังใช้ `POST /api/stores/switch` และ `POST /api/stores/branches/switch` ชุดเดิม
   - เพิ่ม graceful fallback ที่ `GET /api/settings/notifications/inbox` กรณี schema notification ยังไม่พร้อม: คืนรายการว่าง + warning แทน 500
   - เพิ่มข้อความแนะนำชัดเจนใน `PATCH /api/settings/notifications/inbox` (503) เมื่อ schema notification ยังไม่พร้อม เพื่อให้ผู้ดูแลรัน `npm run db:repair` และ `npm run db:migrate`
   - เพิ่ม cron schedule ใน `vercel.json` สำหรับ Vercel Hobby (`0 0 * * *` UTC) เพื่อรันวันละครั้ง
@@ -605,6 +657,7 @@
   - `getDashboardViewData` เพิ่มข้อมูล `purchaseApReminder` (แยก `overdue` / `due soon`, ยอดค้าง และรายการ PO top 5)
   - reuse logic due-status จาก `purchase-ap.service` ผ่าน `getPurchaseApDueReminders()` เพื่อให้กติกาตรงกับหน้า AP statement
   - dashboard ทุก store type (`online/cafe/restaurant/other`) แสดงบล็อกเตือนงาน AP และลิงก์ไป `/stock?tab=purchase`
+  - รอบนี้ dashboard storefront ถูก redesign เป็น mobile-first work dashboard: รวม layout ของ `online/cafe/restaurant/other` ให้ใช้ shared structure เดียวกันผ่าน `components/storefront/dashboard/shared.tsx`, hero แสดงร้าน/สาขา/บทบาท + summary metrics, section `งานวันนี้` เปลี่ยน metrics เป็น action-oriented cards พร้อม deep-link ไป `/orders`, `/stock?tab=inventory`, `/stock?tab=purchase`, ตัด section `ทางลัด` ออกเพราะซ้ำกับ navigator/menu และคงไว้แค่ลิงก์ `รายงาน` จุดเดียว, ส่วน AP + low-stock ถูกย้ายลงส่วน `รายละเอียดการดำเนินงาน`
 
 - เพิ่ม AP ราย supplier แบบ drill-down ในหน้า `/stock?tab=purchase`:
   - เพิ่ม API summary supplier `GET /api/stock/purchase-orders/ap-by-supplier`

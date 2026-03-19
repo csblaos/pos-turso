@@ -5,6 +5,8 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { authFetch } from "@/lib/auth/client-token";
+import { t } from "@/lib/i18n/messages";
+import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 
 type StoreConfigItem = {
   id: string;
@@ -57,16 +59,16 @@ type SystemStoreUserConfigProps = {
 };
 
 const storeTypeOptions = [
-  { value: "ONLINE_RETAIL", label: "Online POS" },
-  { value: "RESTAURANT", label: "Restaurant POS" },
-  { value: "CAFE", label: "Cafe POS" },
-  { value: "OTHER", label: "Other POS" },
+  { value: "ONLINE_RETAIL", labelKey: "onboarding.storeType.online.title" },
+  { value: "RESTAURANT", labelKey: "onboarding.storeType.restaurant.title" },
+  { value: "CAFE", labelKey: "onboarding.storeType.cafe.title" },
+  { value: "OTHER", labelKey: "onboarding.storeType.other.title" },
 ] as const;
 
 const systemRoleOptions = [
-  { value: "USER", label: "USER" },
-  { value: "SUPERADMIN", label: "SUPERADMIN" },
-  { value: "SYSTEM_ADMIN", label: "SYSTEM_ADMIN" },
+  { value: "USER", labelKey: "systemAdmin.storeUserConfig.role.USER" },
+  { value: "SUPERADMIN", labelKey: "systemAdmin.storeUserConfig.role.SUPERADMIN" },
+  { value: "SYSTEM_ADMIN", labelKey: "systemAdmin.storeUserConfig.role.SYSTEM_ADMIN" },
 ] as const;
 
 const toVatPercentText = (basisPoints: number) => (basisPoints / 100).toFixed(2);
@@ -106,6 +108,7 @@ const toBranchMode = (value: boolean | null): BranchMode => {
 
 export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigProps) {
   const router = useRouter();
+  const uiLocale = useUiLocale();
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -168,12 +171,12 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
 
     const vatRate = toVatBasisPoints(draft.vatRatePercent);
     if (Number.isNaN(vatRate)) {
-      handleError("อัตรา VAT ของร้านต้องเป็นตัวเลขที่ถูกต้อง");
+      handleError(t(uiLocale, "systemAdmin.storeUserConfig.error.invalidVatRate"));
       return;
     }
 
     if (!draft.currency.trim()) {
-      handleError("กรุณาระบุสกุลเงินของร้าน");
+      handleError(t(uiLocale, "systemAdmin.storeUserConfig.error.currencyRequired"));
       return;
     }
 
@@ -182,7 +185,7 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
       max: 500,
     });
     if (Number.isNaN(maxBranchesOverride)) {
-      handleError("โควตาสาขา override ต้องเป็นตัวเลข 0-500 หรือเว้นว่าง");
+      handleError(t(uiLocale, "systemAdmin.storeUserConfig.error.invalidMaxBranchesOverride"));
       return;
     }
 
@@ -206,12 +209,12 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
 
     const data = (await response.json().catch(() => null)) as { message?: string } | null;
     if (!response.ok) {
-      handleError(data?.message ?? "บันทึกค่าร้านไม่สำเร็จ");
+      handleError(data?.message ?? t(uiLocale, "systemAdmin.storeUserConfig.error.saveStoreFailed"));
       setLoadingKey(null);
       return;
     }
 
-    handleSuccess("บันทึกค่าร้านเรียบร้อยแล้ว");
+    handleSuccess(t(uiLocale, "systemAdmin.storeUserConfig.message.storeSaved"));
     setLoadingKey(null);
     router.refresh();
   };
@@ -223,13 +226,13 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
     }
 
     if (!draft.name.trim()) {
-      handleError("ชื่อผู้ใช้ต้องไม่ว่าง");
+      handleError(t(uiLocale, "systemAdmin.storeUserConfig.error.userNameRequired"));
       return;
     }
 
     const sessionLimit = parseOptionalInt(draft.sessionLimit, { min: 1, max: 10 });
     if (Number.isNaN(sessionLimit)) {
-      handleError("Session limit ต้องเป็นตัวเลข 1-10 หรือเว้นว่าง");
+      handleError(t(uiLocale, "systemAdmin.storeUserConfig.error.invalidSessionLimit"));
       return;
     }
 
@@ -237,7 +240,7 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
 
     const maxStores = parseOptionalInt(draft.maxStores, { min: 1, max: 100 });
     if (Number.isNaN(maxStores)) {
-      handleError("โควตาร้านต้องเป็นตัวเลข 1-100 หรือเว้นว่าง");
+      handleError(t(uiLocale, "systemAdmin.storeUserConfig.error.invalidMaxStores"));
       return;
     }
 
@@ -246,7 +249,7 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
       max: 500,
     });
     if (Number.isNaN(maxBranchesPerStore)) {
-      handleError("โควตาสาขาต่อร้านต้องเป็นตัวเลข 0-500 หรือเว้นว่าง");
+      handleError(t(uiLocale, "systemAdmin.storeUserConfig.error.invalidMaxBranchesPerStore"));
       return;
     }
 
@@ -275,12 +278,12 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
 
     const data = (await response.json().catch(() => null)) as { message?: string } | null;
     if (!response.ok) {
-      handleError(data?.message ?? "บันทึกค่าผู้ใช้ไม่สำเร็จ");
+      handleError(data?.message ?? t(uiLocale, "systemAdmin.storeUserConfig.error.saveUserFailed"));
       setLoadingKey(null);
       return;
     }
 
-    handleSuccess("บันทึกค่าผู้ใช้เรียบร้อยแล้ว");
+    handleSuccess(t(uiLocale, "systemAdmin.storeUserConfig.message.userSaved"));
     setLoadingKey(null);
     router.refresh();
   };
@@ -288,9 +291,11 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
   return (
     <section className="space-y-5">
       <article className="space-y-3 rounded-xl border bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold">Store Config (SYSTEM_ADMIN)</h2>
+        <h2 className="text-sm font-semibold">
+          {t(uiLocale, "systemAdmin.storeUserConfig.storeSection.title")}
+        </h2>
         <p className="text-xs text-muted-foreground">
-          ตั้งค่าร้านทั้งหมด รวมถึง branch override ต่อร้าน
+          {t(uiLocale, "systemAdmin.storeUserConfig.storeSection.description")}
         </p>
 
         <div className="space-y-3">
@@ -303,7 +308,9 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
             return (
               <div key={store.id} className="rounded-lg border p-3">
                 <p className="text-sm font-semibold">{store.name}</p>
-                <p className="text-xs text-muted-foreground">Store ID: {store.id}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t(uiLocale, "systemAdmin.storeUserConfig.storeSection.storeIdPrefix")} {store.id}
+                </p>
 
                 <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-2">
                   <input
@@ -315,7 +322,7 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
                       }))
                     }
                     className="h-9 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
-                    placeholder="ชื่อร้าน"
+                    placeholder={t(uiLocale, "systemAdmin.storeUserConfig.field.storeName.placeholder")}
                     disabled={loadingKey !== null}
                   />
 
@@ -335,7 +342,7 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
                   >
                     {storeTypeOptions.map((option) => (
                       <option key={option.value} value={option.value}>
-                        {option.label}
+                        {t(uiLocale, option.labelKey)}
                       </option>
                     ))}
                   </select>
@@ -353,7 +360,7 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
                       }))
                     }
                     className="h-9 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
-                    placeholder="สกุลเงิน เช่น LAK"
+                    placeholder={t(uiLocale, "systemAdmin.storeUserConfig.field.currency.placeholder")}
                     disabled={loadingKey !== null}
                   />
 
@@ -370,7 +377,7 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
                       }))
                     }
                     className="h-9 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
-                    placeholder="VAT (%)"
+                    placeholder={t(uiLocale, "systemAdmin.storeUserConfig.field.vatRate.placeholder")}
                     disabled={loadingKey !== null || !draft.vatEnabled}
                   />
 
@@ -389,12 +396,15 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
                       }))
                     }
                     className="h-9 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
-                    placeholder="Branch Override (ว่าง = ใช้ superadmin/global)"
+                    placeholder={t(
+                      uiLocale,
+                      "systemAdmin.storeUserConfig.field.maxBranchesOverride.placeholder",
+                    )}
                     disabled={loadingKey !== null}
                   />
 
                   <label className="flex h-9 items-center justify-between rounded-md border px-3 text-sm">
-                    <span>เปิดใช้งาน VAT</span>
+                    <span>{t(uiLocale, "systemAdmin.storeUserConfig.field.vatEnabled")}</span>
                     <input
                       type="checkbox"
                       checked={draft.vatEnabled}
@@ -415,22 +425,28 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
                   onClick={() => saveStoreConfig(store.id)}
                   disabled={loadingKey !== null}
                 >
-                  {loadingKey === `store-${store.id}` ? "กำลังบันทึก..." : "บันทึก Store Config"}
+                  {loadingKey === `store-${store.id}`
+                    ? t(uiLocale, "common.action.saving")
+                    : t(uiLocale, "systemAdmin.storeUserConfig.action.saveStoreConfig")}
                 </Button>
               </div>
             );
           })}
 
           {stores.length === 0 ? (
-            <p className="text-sm text-muted-foreground">ยังไม่มีร้านในระบบ</p>
+            <p className="text-sm text-muted-foreground">
+              {t(uiLocale, "systemAdmin.storeUserConfig.empty.stores")}
+            </p>
           ) : null}
         </div>
       </article>
 
       <article className="space-y-3 rounded-xl border bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold">User Config (SYSTEM_ADMIN)</h2>
+        <h2 className="text-sm font-semibold">
+          {t(uiLocale, "systemAdmin.storeUserConfig.userSection.title")}
+        </h2>
         <p className="text-xs text-muted-foreground">
-          ตั้งค่าผู้ใช้ทั้งหมด รวมสิทธิ์ระบบและโควตาสำหรับ SUPERADMIN
+          {t(uiLocale, "systemAdmin.storeUserConfig.userSection.description")}
         </p>
 
         <div className="space-y-3">
@@ -446,7 +462,9 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
               <div key={user.id} className="rounded-lg border p-3">
                 <p className="text-sm font-semibold">{user.name}</p>
                 <p className="text-xs text-muted-foreground">{user.email}</p>
-                <p className="text-xs text-muted-foreground">User ID: {user.id}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t(uiLocale, "systemAdmin.storeUserConfig.userSection.userIdPrefix")} {user.id}
+                </p>
 
                 <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-2">
                   <input
@@ -458,7 +476,7 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
                       }))
                     }
                     className="h-9 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
-                    placeholder="ชื่อผู้ใช้"
+                    placeholder={t(uiLocale, "systemAdmin.storeUserConfig.field.userName.placeholder")}
                     disabled={loadingKey !== null}
                   />
 
@@ -478,13 +496,13 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
                   >
                     {systemRoleOptions.map((option) => (
                       <option key={option.value} value={option.value}>
-                        {option.label}
+                        {t(uiLocale, option.labelKey)}
                       </option>
                     ))}
                   </select>
 
                   <label className="flex h-9 items-center justify-between rounded-md border px-3 text-sm">
-                    <span>อนุญาตสร้างร้าน</span>
+                    <span>{t(uiLocale, "systemAdmin.storeUserConfig.field.canCreateStores")}</span>
                     <input
                       type="checkbox"
                       checked={draft.canCreateStores}
@@ -513,7 +531,7 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
                       }))
                     }
                     className="h-9 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
-                    placeholder="โควตาร้าน (ว่าง = ไม่จำกัด)"
+                    placeholder={t(uiLocale, "systemAdmin.storeUserConfig.field.maxStores.placeholder")}
                     disabled={loadingKey !== null || !isSuperadmin || !draft.canCreateStores}
                   />
 
@@ -531,9 +549,15 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
                     className="h-9 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
                     disabled={loadingKey !== null || !isSuperadmin}
                   >
-                    <option value="GLOBAL">ใช้ค่า Global</option>
-                    <option value="ALLOW">อนุญาตสร้างสาขา</option>
-                    <option value="BLOCK">ไม่อนุญาตสร้างสาขา</option>
+                    <option value="GLOBAL">
+                      {t(uiLocale, "systemAdmin.storeUserConfig.field.branchMode.global")}
+                    </option>
+                    <option value="ALLOW">
+                      {t(uiLocale, "systemAdmin.storeUserConfig.field.branchMode.allow")}
+                    </option>
+                    <option value="BLOCK">
+                      {t(uiLocale, "systemAdmin.storeUserConfig.field.branchMode.block")}
+                    </option>
                   </select>
 
                   <input
@@ -551,7 +575,10 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
                       }))
                     }
                     className="h-9 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
-                    placeholder="โควตาสาขาต่อร้าน (ว่าง = ไม่จำกัด)"
+                    placeholder={t(
+                      uiLocale,
+                      "systemAdmin.storeUserConfig.field.maxBranchesPerStore.placeholder",
+                    )}
                     disabled={
                       loadingKey !== null ||
                       !isSuperadmin ||
@@ -574,7 +601,10 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
                       }))
                     }
                     className="h-9 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
-                    placeholder="Session Limit (1-10, ว่าง = ใช้ค่า ENV)"
+                    placeholder={t(
+                      uiLocale,
+                      "systemAdmin.storeUserConfig.field.sessionLimit.placeholder",
+                    )}
                     disabled={loadingKey !== null}
                   />
                 </div>
@@ -585,14 +615,18 @@ export function SystemStoreUserConfig({ stores, users }: SystemStoreUserConfigPr
                   onClick={() => saveUserConfig(user.id)}
                   disabled={loadingKey !== null}
                 >
-                  {loadingKey === `user-${user.id}` ? "กำลังบันทึก..." : "บันทึก User Config"}
+                  {loadingKey === `user-${user.id}`
+                    ? t(uiLocale, "common.action.saving")
+                    : t(uiLocale, "systemAdmin.storeUserConfig.action.saveUserConfig")}
                 </Button>
               </div>
             );
           })}
 
           {users.length === 0 ? (
-            <p className="text-sm text-muted-foreground">ยังไม่มีผู้ใช้ในระบบ</p>
+            <p className="text-sm text-muted-foreground">
+              {t(uiLocale, "systemAdmin.storeUserConfig.empty.users")}
+            </p>
           ) : null}
         </div>
       </article>

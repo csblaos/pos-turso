@@ -25,6 +25,7 @@ export default async function OrdersCodReconcilePage() {
 
   const canView = isPermissionGranted(permissionKeys, "orders.view");
   const canMarkPaid = isPermissionGranted(permissionKeys, "orders.mark_paid");
+  const canCodReturn = isPermissionGranted(permissionKeys, "orders.cod_return");
 
   const uiLocale = session.uiLocale ?? DEFAULT_UI_LOCALE;
   const OrdersCodReconcile = dynamic(
@@ -64,7 +65,7 @@ export default async function OrdersCodReconcilePage() {
         </p>
       </header>
 
-      <OrdersCodReconcile />
+      <OrdersCodReconcile canCodReturn={canCodReturn} />
 
       <Link href="/orders" className="text-sm font-medium text-blue-700 hover:underline">
         {t(uiLocale, "orders.codReconcile.page.backToOrders")}

@@ -1,10 +1,15 @@
 import { asc, desc } from "drizzle-orm";
 
 import { SystemStoreUserConfig } from "@/components/system-admin/system-store-user-config";
+import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { stores, users } from "@/lib/db/schema";
+import { DEFAULT_UI_LOCALE } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
 
 export default async function SystemAdminStoresUsersConfigPage() {
+  const session = await getSession();
+  const uiLocale = session?.uiLocale ?? DEFAULT_UI_LOCALE;
   const [storeRows, userRows] = await Promise.all([
     db
       .select({
@@ -39,9 +44,9 @@ export default async function SystemAdminStoresUsersConfigPage() {
   return (
     <section className="space-y-4">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold">Store & User Config</h1>
+        <h1 className="text-xl font-semibold">{t(uiLocale, "systemAdmin.storesUsersPage.title")}</h1>
         <p className="text-sm text-muted-foreground">
-          SYSTEM_ADMIN สามารถตั้งค่าร้านทั้งหมด และผู้ใช้ทั้งหมดได้จากหน้านี้
+          {t(uiLocale, "systemAdmin.storesUsersPage.subtitle")}
         </p>
       </header>
 

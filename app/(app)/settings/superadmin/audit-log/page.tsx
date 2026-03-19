@@ -20,6 +20,8 @@ import { listActiveMemberships } from "@/lib/auth/session-db";
 import { getUserSystemRole } from "@/lib/auth/system-admin";
 import { db } from "@/lib/db/client";
 import { auditEvents, roles, storeMembers, stores, users } from "@/lib/db/schema";
+import { type UiLocale, uiLocaleToDateLocale } from "@/lib/i18n/locales";
+import { t, type MessageKey } from "@/lib/i18n/messages";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -48,14 +50,14 @@ const parseResult = (value: string): ResultFilter => {
   return "ALL";
 };
 
-const formatDateTime = (value: string) => {
+const formatDateTime = (locale: UiLocale, value: string) => {
   const normalized = value.includes("T") ? value : `${value.replace(" ", "T")}Z`;
   const parsed = new Date(normalized);
   if (Number.isNaN(parsed.getTime())) {
     return value;
   }
 
-  return parsed.toLocaleString("th-TH", {
+  return parsed.toLocaleString(uiLocaleToDateLocale(locale), {
     dateStyle: "medium",
     timeStyle: "short",
   });
@@ -86,48 +88,48 @@ const parseJsonText = (value: string | null) => {
 };
 
 const actionFilterOptions = [
-  { value: "", label: "ทั้งหมด" },
-  { value: "order.create", label: "สร้างออเดอร์" },
-  { value: "order.update_shipping", label: "อัปเดตข้อมูลจัดส่ง" },
-  { value: "order.submit_for_payment", label: "ส่งออเดอร์รอชำระ" },
-  { value: "order.submit_payment_slip", label: "แนบสลิปชำระเงิน" },
-  { value: "order.confirm_paid", label: "ยืนยันชำระเงิน" },
-  { value: "order.mark_packed", label: "ยืนยันจัดของ" },
-  { value: "order.mark_shipped", label: "ยืนยันจัดส่ง" },
-  { value: "order.cancel", label: "ยกเลิกออเดอร์" },
-  { value: "stock.movement.create", label: "บันทึกการเคลื่อนไหวสต็อก" },
-  { value: "po.create", label: "สร้างใบสั่งซื้อ" },
-  { value: "po.update", label: "แก้ไขใบสั่งซื้อ" },
-  { value: "po.status.change", label: "เปลี่ยนสถานะใบสั่งซื้อ" },
-  { value: "store.settings.update", label: "แก้ตั้งค่าร้าน" },
-  { value: "store.settings.pdf.update", label: "แก้ตั้งค่าเอกสาร PDF" },
-  { value: "store.payment_account.create", label: "เพิ่มบัญชีรับเงิน" },
-  { value: "store.payment_account.update", label: "แก้บัญชีรับเงิน" },
-  { value: "store.payment_account.delete", label: "ลบบัญชีรับเงิน" },
-  { value: "store.member.create_new", label: "สร้างผู้ใช้ใหม่เข้าร้าน" },
-  { value: "store.member.add_existing", label: "เพิ่มผู้ใช้เดิมเข้าร้าน" },
-  { value: "store.member.create", label: "สร้างสมาชิก (legacy)" },
-  { value: "store.member.update", label: "แก้สมาชิก (legacy)" },
-  { value: "store.member.assign_role", label: "เปลี่ยนบทบาทสมาชิก" },
-  { value: "store.member.set_status", label: "เปลี่ยนสถานะสมาชิก" },
-  { value: "store.member.set_session_limit", label: "ตั้งค่า session limit สมาชิก" },
-  { value: "store.member.set_branch_access", label: "ตั้งค่าสิทธิ์สาขาสมาชิก" },
-  { value: "store.member.reset_password", label: "รีเซ็ตรหัสผ่านสมาชิก" },
-  { value: "store.role.permissions.update", label: "แก้สิทธิ์บทบาท" },
-  { value: "account.profile.update", label: "แก้ข้อมูลโปรไฟล์ตัวเอง" },
-  { value: "account.password.change", label: "เปลี่ยนรหัสผ่านตัวเอง" },
-  { value: "account.settings.update", label: "แก้การตั้งค่าบัญชี (legacy)" },
-  { value: "system.payment_policy.update", label: "แก้นโยบายการชำระเงิน" },
-  { value: "system.session_policy.update", label: "แก้นโยบาย session" },
-  { value: "system.branch_policy.update", label: "แก้นโยบายสาขา" },
-  { value: "system.store_logo_policy.update", label: "แก้นโยบายโลโกร้าน" },
+  { value: "", labelKey: "common.filter.all" },
+  { value: "order.create", labelKey: "settings.auditLog.actionLabel.order.create" },
+  { value: "order.update_shipping", labelKey: "settings.auditLog.actionLabel.order.update_shipping" },
+  { value: "order.submit_for_payment", labelKey: "settings.auditLog.actionLabel.order.submit_for_payment" },
+  { value: "order.submit_payment_slip", labelKey: "settings.auditLog.actionLabel.order.submit_payment_slip" },
+  { value: "order.confirm_paid", labelKey: "settings.auditLog.actionLabel.order.confirm_paid" },
+  { value: "order.mark_packed", labelKey: "settings.auditLog.actionLabel.order.mark_packed" },
+  { value: "order.mark_shipped", labelKey: "settings.auditLog.actionLabel.order.mark_shipped" },
+  { value: "order.cancel", labelKey: "settings.auditLog.actionLabel.order.cancel" },
+  { value: "stock.movement.create", labelKey: "settings.auditLog.actionLabel.stock.movement.create" },
+  { value: "po.create", labelKey: "settings.auditLog.actionLabel.po.create" },
+  { value: "po.update", labelKey: "settings.auditLog.actionLabel.po.update" },
+  { value: "po.status.change", labelKey: "settings.auditLog.actionLabel.po.status.change" },
+  { value: "store.settings.update", labelKey: "settings.auditLog.actionLabel.store.settings.update" },
+  { value: "store.settings.pdf.update", labelKey: "settings.auditLog.actionLabel.store.settings.pdf.update" },
+  { value: "store.payment_account.create", labelKey: "settings.auditLog.actionLabel.store.payment_account.create" },
+  { value: "store.payment_account.update", labelKey: "settings.auditLog.actionLabel.store.payment_account.update" },
+  { value: "store.payment_account.delete", labelKey: "settings.auditLog.actionLabel.store.payment_account.delete" },
+  { value: "store.member.create_new", labelKey: "settings.auditLog.actionLabel.store.member.create_new" },
+  { value: "store.member.add_existing", labelKey: "settings.auditLog.actionLabel.store.member.add_existing" },
+  { value: "store.member.create", labelKey: "settings.auditLog.actionLabel.store.member.create" },
+  { value: "store.member.update", labelKey: "settings.auditLog.actionLabel.store.member.update" },
+  { value: "store.member.assign_role", labelKey: "settings.auditLog.actionLabel.store.member.assign_role" },
+  { value: "store.member.set_status", labelKey: "settings.auditLog.actionLabel.store.member.set_status" },
+  { value: "store.member.set_session_limit", labelKey: "settings.auditLog.actionLabel.store.member.set_session_limit" },
+  { value: "store.member.set_branch_access", labelKey: "settings.auditLog.actionLabel.store.member.set_branch_access" },
+  { value: "store.member.reset_password", labelKey: "settings.auditLog.actionLabel.store.member.reset_password" },
+  { value: "store.role.permissions.update", labelKey: "settings.auditLog.actionLabel.store.role.permissions.update" },
+  { value: "account.profile.update", labelKey: "settings.auditLog.actionLabel.account.profile.update" },
+  { value: "account.password.change", labelKey: "settings.auditLog.actionLabel.account.password.change" },
+  { value: "account.settings.update", labelKey: "settings.auditLog.actionLabel.account.settings.update" },
+  { value: "system.payment_policy.update", labelKey: "settings.auditLog.actionLabel.system.payment_policy.update" },
+  { value: "system.session_policy.update", labelKey: "settings.auditLog.actionLabel.system.session_policy.update" },
+  { value: "system.branch_policy.update", labelKey: "settings.auditLog.actionLabel.system.branch_policy.update" },
+  { value: "system.store_logo_policy.update", labelKey: "settings.auditLog.actionLabel.system.store_logo_policy.update" },
 ] as const;
 
-const actionLabelMap: Record<string, string> = Object.fromEntries(
+const actionLabelMap: Record<string, MessageKey> = Object.fromEntries(
   actionFilterOptions
     .filter((option) => option.value.length > 0)
-    .map((option) => [option.value, option.label]),
-);
+    .map((option) => [option.value, option.labelKey]),
+) as Record<string, MessageKey>;
 
 const buildHref = (basePath: string, params: URLSearchParams) => {
   const query = params.toString();
@@ -143,6 +145,8 @@ export default async function SettingsSuperadminAuditLogPage({
   if (!session) {
     redirect("/login");
   }
+  const uiLocale = session.uiLocale;
+  const numberLocale = uiLocaleToDateLocale(uiLocale);
 
   const [memberships, systemRole, rawParams] = await Promise.all([
     listActiveMemberships(session.userId),
@@ -335,27 +339,29 @@ export default async function SettingsSuperadminAuditLogPage({
   return (
     <section className="space-y-5">
       <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">Audit Log</h1>
+        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
+          {t(uiLocale, "superadmin.auditLog.title")}
+        </h1>
         <p className="text-sm text-slate-500">
-          ตรวจสอบว่าใครทำอะไร เมื่อไร ครอบคลุมทั้ง Store และ System
+          {t(uiLocale, "superadmin.auditLog.subtitle")}
         </p>
       </header>
 
       <form className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" method="GET">
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
           <label className="space-y-1 text-xs text-slate-600">
-            ค้นหา
+            {t(uiLocale, "settings.auditLog.filter.q.label")}
             <input
               type="text"
               name="q"
               defaultValue={q}
-              placeholder="action / entity / ผู้ทำ"
+              placeholder={t(uiLocale, "settings.auditLog.filter.q.placeholder")}
               className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
             />
           </label>
 
           <label className="space-y-1 text-xs text-slate-600">
-            Action
+            {t(uiLocale, "settings.auditLog.filter.action.label")}
             <select
               name="action"
               defaultValue={action}
@@ -363,66 +369,66 @@ export default async function SettingsSuperadminAuditLogPage({
             >
               {actionFilterOptions.map((option) => (
                 <option key={option.value || "__all"} value={option.value}>
-                  {option.label}
+                  {t(uiLocale, option.labelKey)}
                 </option>
               ))}
             </select>
           </label>
 
           <label className="space-y-1 text-xs text-slate-600">
-            Action (ค้นหาเพิ่ม)
+            {t(uiLocale, "settings.auditLog.filter.actionLike.label")}
             <input
               type="text"
               name="actionLike"
               defaultValue={actionLike}
-              placeholder="เช่น store.member"
+              placeholder={t(uiLocale, "settings.auditLog.filter.actionLike.placeholder")}
               className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
             />
           </label>
 
           <label className="space-y-1 text-xs text-slate-600">
-            Scope
+            {t(uiLocale, "superadmin.auditLog.filter.scope.label")}
             {canViewSystem ? (
               <select
                 name="scope"
                 defaultValue={scope}
                 className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
               >
-                <option value="ALL">ทั้งหมด</option>
-                <option value="STORE">Store</option>
-                <option value="SYSTEM">System</option>
+                <option value="ALL">{t(uiLocale, "superadmin.auditLog.filter.scope.all")}</option>
+                <option value="STORE">{t(uiLocale, "superadmin.auditLog.filter.scope.store")}</option>
+                <option value="SYSTEM">{t(uiLocale, "superadmin.auditLog.filter.scope.system")}</option>
               </select>
             ) : (
               <>
                 <input type="hidden" name="scope" value="STORE" />
                 <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700">
-                  Store เท่านั้น
+                  {t(uiLocale, "superadmin.auditLog.filter.scope.storeOnly")}
                 </div>
               </>
             )}
           </label>
 
           <label className="space-y-1 text-xs text-slate-600">
-            ผลลัพธ์
+            {t(uiLocale, "settings.auditLog.filter.result.label")}
             <select
               name="result"
               defaultValue={result}
               className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
             >
-              <option value="ALL">ทั้งหมด</option>
-              <option value="SUCCESS">Success</option>
-              <option value="FAIL">Fail</option>
+              <option value="ALL">{t(uiLocale, "common.filter.all")}</option>
+              <option value="SUCCESS">{t(uiLocale, "common.result.success")}</option>
+              <option value="FAIL">{t(uiLocale, "common.result.fail")}</option>
             </select>
           </label>
 
           <label className="space-y-1 text-xs text-slate-600">
-            ร้าน
+            {t(uiLocale, "superadmin.auditLog.filter.store.label")}
             <select
               name="storeId"
               defaultValue={selectedStoreId}
               className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
             >
-              <option value="">ทุกร้าน</option>
+              <option value="">{t(uiLocale, "superadmin.auditLog.filter.store.all")}</option>
               {storeOptions.map((store) => (
                 <option key={store.id} value={store.id}>
                   {store.name}
@@ -432,7 +438,7 @@ export default async function SettingsSuperadminAuditLogPage({
           </label>
 
           <label className="space-y-1 text-xs text-slate-600">
-            จากวันที่
+            {t(uiLocale, "settings.auditLog.filter.fromDate.label")}
             <input
               type="date"
               name="from"
@@ -442,7 +448,7 @@ export default async function SettingsSuperadminAuditLogPage({
           </label>
 
           <label className="space-y-1 text-xs text-slate-600">
-            ถึงวันที่
+            {t(uiLocale, "settings.auditLog.filter.toDate.label")}
             <input
               type="date"
               name="to"
@@ -457,38 +463,45 @@ export default async function SettingsSuperadminAuditLogPage({
             type="submit"
             className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-sm font-medium text-white"
           >
-            ค้นหา
+            {t(uiLocale, "settings.auditLog.action.search")}
           </button>
           <Link
             href="/settings/superadmin/audit-log"
             className="inline-flex h-9 items-center rounded-lg border border-slate-200 px-3 text-sm text-slate-600"
           >
-            ล้างตัวกรอง
+            {t(uiLocale, "settings.auditLog.action.clearFilters")}
           </Link>
           <p className="ml-auto text-xs text-slate-500">
-            แสดง {rows.length.toLocaleString("th-TH")} รายการต่อหน้า
+            {t(uiLocale, "settings.auditLog.perPage.prefix")} {rows.length.toLocaleString(numberLocale)}{" "}
+            {t(uiLocale, "settings.auditLog.perPage.suffix")}
           </p>
         </div>
       </form>
 
       <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
-          <p className="text-sm font-semibold text-slate-900">กิจกรรมล่าสุด</p>
-          <p className="mt-0.5 text-xs text-slate-500">เรียงจากล่าสุดลงเก่าสุด</p>
+          <p className="text-sm font-semibold text-slate-900">{t(uiLocale, "settings.auditLog.title")}</p>
+          <p className="mt-0.5 text-xs text-slate-500">{t(uiLocale, "settings.auditLog.subtitle")}</p>
         </div>
 
         {rows.length === 0 ? (
-          <p className="px-4 py-4 text-sm text-slate-500">ยังไม่พบกิจกรรมตามตัวกรองที่เลือก</p>
+          <p className="px-4 py-4 text-sm text-slate-500">{t(uiLocale, "settings.auditLog.empty")}</p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {rows.map((row) => {
               const metadata = parseJsonText(row.metadata);
-              const actorName = row.actorNameSnapshot ?? row.actorName ?? "ระบบ";
-              const title = actionLabelMap[row.action] ?? row.action;
+              const actorName = row.actorNameSnapshot ?? row.actorName ?? t(uiLocale, "common.actor.system");
+              const title = actionLabelMap[row.action] ? t(uiLocale, actionLabelMap[row.action]) : row.action;
               const detailBits = [
                 `${row.entityType}${row.entityId ? `#${row.entityId}` : ""}`,
-                row.reasonCode ? `เหตุผล ${row.reasonCode}` : "",
+                row.reasonCode ? `${t(uiLocale, "settings.auditLog.reasonPrefix")} ${row.reasonCode}` : "",
               ].filter(Boolean);
+              const scopeLabel =
+                row.scope === "SYSTEM"
+                  ? t(uiLocale, "superadmin.auditLog.scopeLabel.SYSTEM")
+                  : t(uiLocale, "superadmin.auditLog.scopeLabel.STORE");
+              const storeLabel =
+                row.storeName ?? t(uiLocale, "superadmin.auditLog.detail.systemLabel");
 
               const metadataText = metadata
                 ? Object.entries(metadata)
@@ -499,14 +512,17 @@ export default async function SettingsSuperadminAuditLogPage({
 
               return (
                 <li key={row.id} className="px-4 py-3">
-                  <p className="text-xs text-slate-500">{formatDateTime(row.occurredAt)}</p>
+                  <p className="text-xs text-slate-500">{formatDateTime(uiLocale, row.occurredAt)}</p>
                   <p className="mt-1 text-sm font-medium text-slate-900">{title}</p>
                   <p className="mt-0.5 text-xs text-slate-600">
-                    [{row.scope}] {row.storeName ?? "System"} • โดย {actorName}
+                    [{scopeLabel}] {storeLabel} • {t(uiLocale, "settings.auditLog.byPrefix")} {actorName}
                     {row.actorRoleSnapshot ? ` (${row.actorRoleSnapshot})` : ""}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {detailBits.join(" • ")} • ผลลัพธ์ {row.result}
+                    {detailBits.join(" • ")} • {t(uiLocale, "settings.auditLog.resultPrefix")}{" "}
+                    {row.result === "SUCCESS"
+                      ? t(uiLocale, "common.result.success")
+                      : t(uiLocale, "common.result.fail")}
                   </p>
                   {metadataText ? <p className="mt-1 text-xs text-slate-500">{metadataText}</p> : null}
                 </li>
@@ -521,11 +537,11 @@ export default async function SettingsSuperadminAuditLogPage({
               href={buildHref("/settings/superadmin/audit-log", baseParams)}
               className="rounded-lg border border-slate-200 px-3 py-1.5 text-slate-600"
             >
-              กลับล่าสุด
+              {t(uiLocale, "settings.auditLog.pagination.backToLatest")}
             </Link>
           ) : (
             <span className="rounded-lg border border-slate-100 px-3 py-1.5 text-slate-300">
-              อยู่หน้าล่าสุด
+              {t(uiLocale, "settings.auditLog.pagination.atLatest")}
             </span>
           )}
 
@@ -534,18 +550,20 @@ export default async function SettingsSuperadminAuditLogPage({
               href={buildHref("/settings/superadmin/audit-log", nextParams)}
               className="rounded-lg border border-slate-200 px-3 py-1.5 text-slate-600"
             >
-              โหลดถัดไป
+              {t(uiLocale, "settings.auditLog.pagination.loadMore")}
             </Link>
           ) : (
             <span className="rounded-lg border border-slate-100 px-3 py-1.5 text-slate-300">
-              ไม่มีรายการเพิ่ม
+              {t(uiLocale, "settings.auditLog.pagination.noMore")}
             </span>
           )}
         </div>
       </article>
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">นำทาง</p>
+        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          {t(uiLocale, "superadmin.auditLog.nav.section")}
+        </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <Link
             href="/settings/superadmin"
@@ -555,8 +573,12 @@ export default async function SettingsSuperadminAuditLogPage({
               <ClipboardList className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">กลับ Superadmin Center</span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">เลือกเมนูจัดการอื่น ๆ</span>
+              <span className="block truncate text-sm font-medium text-slate-900">
+                {t(uiLocale, "superadmin.nav.backToCenter.title")}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-slate-500">
+                {t(uiLocale, "superadmin.nav.backToCenter.description")}
+              </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
           </Link>
@@ -569,8 +591,12 @@ export default async function SettingsSuperadminAuditLogPage({
               <Store className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">ดูโควตาและนโยบาย</span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">ตรวจสิทธิ์และขีดจำกัดรายร้าน</span>
+              <span className="block truncate text-sm font-medium text-slate-900">
+                {t(uiLocale, "superadmin.auditLog.nav.toQuotas.title")}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-slate-500">
+                {t(uiLocale, "superadmin.auditLog.nav.toQuotas.description")}
+              </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
           </Link>
@@ -584,10 +610,10 @@ export default async function SettingsSuperadminAuditLogPage({
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium text-slate-900">
-                กลับหน้าเลือกร้าน / เปลี่ยนสาขา
+                {t(uiLocale, "superadmin.auditLog.nav.exitMode.title")}
               </span>
               <span className="mt-0.5 block truncate text-xs text-slate-500">
-                ออกจากโหมดผู้ดูแลกลับหน้าใช้งานรายวัน
+                {t(uiLocale, "superadmin.nav.exitMode.description")}
               </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />

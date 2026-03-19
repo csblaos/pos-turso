@@ -5,6 +5,8 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { authFetch } from "@/lib/auth/client-token";
+import { t } from "@/lib/i18n/messages";
+import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 
 type SuperadminItem = {
   userId: string;
@@ -31,6 +33,7 @@ export function SuperadminManagement({
   globalBranchDefaults,
 }: SuperadminManagementProps) {
   const router = useRouter();
+  const uiLocale = useUiLocale();
 
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -135,7 +138,7 @@ export function SuperadminManagement({
       max: 100,
     });
     if (Number.isNaN(parsedMaxStores)) {
-      handleError("โควตาร้านต้องเป็นตัวเลข 1-100 หรือเว้นว่างเพื่อไม่จำกัด");
+      handleError(t(uiLocale, "systemAdmin.superadminManagement.error.invalidMaxStores"));
       return;
     }
 
@@ -144,7 +147,7 @@ export function SuperadminManagement({
       max: 500,
     });
     if (Number.isNaN(parsedMaxBranches)) {
-      handleError("โควตาสาขาต่อร้านต้องเป็นตัวเลข 0-500 หรือเว้นว่างเพื่อไม่จำกัด");
+      handleError(t(uiLocale, "systemAdmin.superadminManagement.error.invalidMaxBranchesPerStore"));
       return;
     }
 
@@ -175,7 +178,7 @@ export function SuperadminManagement({
       | null;
 
     if (!response.ok) {
-      handleError(data?.message ?? "สร้างบัญชี SUPERADMIN ไม่สำเร็จ");
+      handleError(data?.message ?? t(uiLocale, "systemAdmin.superadminManagement.error.createFailed"));
       setLoadingKey(null);
       return;
     }
@@ -193,7 +196,7 @@ export function SuperadminManagement({
         : "",
     );
 
-    handleSuccess("สร้างบัญชี SUPERADMIN เรียบร้อยแล้ว");
+    handleSuccess(t(uiLocale, "systemAdmin.superadminManagement.message.created"));
     setLoadingKey(null);
     refreshPage();
   };
@@ -205,7 +208,7 @@ export function SuperadminManagement({
       max: 100,
     });
     if (Number.isNaN(parsedMaxStores)) {
-      handleError("โควตาร้านต้องเป็นตัวเลข 1-100 หรือเว้นว่างเพื่อไม่จำกัด");
+      handleError(t(uiLocale, "systemAdmin.superadminManagement.error.invalidMaxStores"));
       return;
     }
 
@@ -219,7 +222,7 @@ export function SuperadminManagement({
       },
     );
     if (Number.isNaN(parsedMaxBranches)) {
-      handleError("โควตาสาขาต่อร้านต้องเป็นตัวเลข 0-500 หรือเว้นว่างเพื่อไม่จำกัด");
+      handleError(t(uiLocale, "systemAdmin.superadminManagement.error.invalidMaxBranchesPerStore"));
       return;
     }
 
@@ -248,24 +251,37 @@ export function SuperadminManagement({
       | null;
 
     if (!response.ok) {
-      handleError(data?.message ?? "บันทึกโควตาไม่สำเร็จ");
+      handleError(data?.message ?? t(uiLocale, "systemAdmin.superadminManagement.error.saveFailed"));
       setLoadingKey(null);
       return;
     }
 
-    handleSuccess("อัปเดตโควตาแล้ว");
+    handleSuccess(t(uiLocale, "systemAdmin.superadminManagement.message.saved"));
     setLoadingKey(null);
     refreshPage();
   };
 
+  const branchPolicyStatus = globalBranchDefaults.defaultCanCreateBranches
+    ? t(uiLocale, "systemAdmin.superadminManagement.globalBranchPolicy.allowed")
+    : t(uiLocale, "systemAdmin.superadminManagement.globalBranchPolicy.blocked");
+  const branchPolicyQuota =
+    globalBranchDefaults.defaultMaxBranchesPerStore !== null
+      ? `${globalBranchDefaults.defaultMaxBranchesPerStore} ${t(
+          uiLocale,
+          "systemAdmin.superadminManagement.globalBranchPolicy.branchesSuffix",
+        )}`
+      : t(uiLocale, "systemAdmin.superadminManagement.globalBranchPolicy.unlimited");
+
   return (
     <section className="space-y-5">
       <article className="space-y-3 rounded-xl border bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold">สร้างบัญชี SUPERADMIN</h2>
+        <h2 className="text-sm font-semibold">
+          {t(uiLocale, "systemAdmin.superadminManagement.create.title")}
+        </h2>
 
         <div className="space-y-2">
           <label className="text-xs text-muted-foreground" htmlFor="superadmin-name">
-            ชื่อผู้ดูแลลูกค้า
+            {t(uiLocale, "systemAdmin.superadminManagement.create.field.name")}
           </label>
           <input
             id="superadmin-name"
@@ -278,7 +294,7 @@ export function SuperadminManagement({
 
         <div className="space-y-2">
           <label className="text-xs text-muted-foreground" htmlFor="superadmin-email">
-            อีเมล
+            {t(uiLocale, "systemAdmin.superadminManagement.create.field.email")}
           </label>
           <input
             id="superadmin-email"
@@ -292,7 +308,7 @@ export function SuperadminManagement({
 
         <div className="space-y-2">
           <label className="text-xs text-muted-foreground" htmlFor="superadmin-password">
-            รหัสผ่านเริ่มต้น
+            {t(uiLocale, "systemAdmin.superadminManagement.create.field.password")}
           </label>
           <input
             id="superadmin-password"
@@ -305,7 +321,7 @@ export function SuperadminManagement({
         </div>
 
         <label className="flex items-center justify-between gap-2 rounded-md border border-dashed p-3 text-sm">
-          <span>อนุญาตให้สร้างร้าน</span>
+          <span>{t(uiLocale, "systemAdmin.superadminManagement.create.field.canCreateStores")}</span>
           <input
             type="checkbox"
             checked={formCanCreateStores}
@@ -316,7 +332,7 @@ export function SuperadminManagement({
 
         <div className="space-y-2">
           <label className="text-xs text-muted-foreground" htmlFor="superadmin-max-stores">
-            โควตาร้าน (ว่าง = ไม่จำกัด)
+            {t(uiLocale, "systemAdmin.superadminManagement.create.field.maxStores")}
           </label>
           <input
             id="superadmin-max-stores"
@@ -332,7 +348,9 @@ export function SuperadminManagement({
 
         <div className="space-y-2 rounded-md border border-dashed p-3">
           <label className="flex items-center justify-between gap-2 text-sm">
-            <span>ใช้ค่า Global Branch Policy</span>
+            <span>
+              {t(uiLocale, "systemAdmin.superadminManagement.create.field.useGlobalBranchPolicy")}
+            </span>
             <input
               type="checkbox"
               checked={formUseGlobalBranchPolicy}
@@ -341,18 +359,17 @@ export function SuperadminManagement({
             />
           </label>
           <p className="text-xs text-muted-foreground">
-            Global ตอนนี้ (จากฐานข้อมูล):{" "}
-            {globalBranchDefaults.defaultCanCreateBranches ? "อนุญาตสร้างสาขา" : "ไม่อนุญาตสร้างสาขา"}{" "}
-            / โควตา{" "}
-            {globalBranchDefaults.defaultMaxBranchesPerStore !== null
-              ? `${globalBranchDefaults.defaultMaxBranchesPerStore} สาขา`
-              : "ไม่จำกัด"}
+            {t(uiLocale, "systemAdmin.superadminManagement.globalBranchPolicy.currentPrefix")}{" "}
+            {branchPolicyStatus} / {t(uiLocale, "systemAdmin.superadminManagement.globalBranchPolicy.quotaPrefix")}{" "}
+            {branchPolicyQuota}
           </p>
 
           {!formUseGlobalBranchPolicy ? (
             <>
               <label className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
-                <span>อนุญาตให้สร้างสาขา</span>
+                <span>
+                  {t(uiLocale, "systemAdmin.superadminManagement.create.field.canCreateBranches")}
+                </span>
                 <input
                   type="checkbox"
                   checked={formCanCreateBranches}
@@ -367,7 +384,10 @@ export function SuperadminManagement({
                 value={formMaxBranchesPerStore}
                 onChange={(event) => setFormMaxBranchesPerStore(event.target.value)}
                 className="h-10 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
-                placeholder="โควตาสาขาต่อร้าน (ว่าง = ไม่จำกัด)"
+                placeholder={t(
+                  uiLocale,
+                  "systemAdmin.superadminManagement.create.field.maxBranchesPerStorePlaceholder",
+                )}
                 disabled={loadingKey !== null || !formCanCreateBranches}
               />
             </>
@@ -375,12 +395,16 @@ export function SuperadminManagement({
         </div>
 
         <Button className="h-10 w-full" onClick={createSuperadmin} disabled={loadingKey !== null}>
-          {loadingKey === "create-superadmin" ? "กำลังสร้าง..." : "สร้างบัญชี SUPERADMIN"}
+          {loadingKey === "create-superadmin"
+            ? t(uiLocale, "systemAdmin.superadminManagement.action.creating")
+            : t(uiLocale, "systemAdmin.superadminManagement.action.create")}
         </Button>
       </article>
 
       <article className="space-y-3 rounded-xl border bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold">SUPERADMIN ทั้งหมด</h2>
+        <h2 className="text-sm font-semibold">
+          {t(uiLocale, "systemAdmin.superadminManagement.list.title")}
+        </h2>
 
         <div className="space-y-3">
           {superadmins.map((item) => (
@@ -388,13 +412,14 @@ export function SuperadminManagement({
               <p className="text-sm font-semibold">{item.name}</p>
               <p className="text-xs text-muted-foreground">{item.email}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                ร้านที่เป็น Owner อยู่: {item.activeOwnerStoreCount}
+                {t(uiLocale, "systemAdmin.superadminManagement.list.ownerStoresPrefix")}{" "}
+                {item.activeOwnerStoreCount}
               </p>
 
               <div className="mt-3 space-y-3">
                 <div className="space-y-2">
                   <label className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span>อนุญาตให้สร้างร้าน</span>
+                    <span>{t(uiLocale, "systemAdmin.superadminManagement.list.field.canCreateStores")}</span>
                     <input
                       type="checkbox"
                       checked={Boolean(draftCanCreateMap[item.userId])}
@@ -419,7 +444,10 @@ export function SuperadminManagement({
                         [item.userId]: event.target.value,
                       }))
                     }
-                    placeholder="โควตาร้าน (ว่าง = ไม่จำกัด)"
+                    placeholder={t(
+                      uiLocale,
+                      "systemAdmin.superadminManagement.list.field.maxStoresPlaceholder",
+                    )}
                     className="h-9 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
                     disabled={loadingKey !== null || !Boolean(draftCanCreateMap[item.userId])}
                   />
@@ -427,7 +455,9 @@ export function SuperadminManagement({
 
                 <div className="space-y-2 rounded-md border border-dashed p-2">
                   <label className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span>ใช้ค่า Global Branch Policy</span>
+                    <span>
+                      {t(uiLocale, "systemAdmin.superadminManagement.list.field.useGlobalBranchPolicy")}
+                    </span>
                     <input
                       type="checkbox"
                       checked={Boolean(draftUseGlobalBranchMap[item.userId])}
@@ -444,7 +474,9 @@ export function SuperadminManagement({
                   {!Boolean(draftUseGlobalBranchMap[item.userId]) ? (
                     <>
                       <label className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                        <span>อนุญาตให้สร้างสาขา</span>
+                        <span>
+                          {t(uiLocale, "systemAdmin.superadminManagement.list.field.canCreateBranches")}
+                        </span>
                         <input
                           type="checkbox"
                           checked={Boolean(draftCanCreateBranchesMap[item.userId])}
@@ -469,7 +501,10 @@ export function SuperadminManagement({
                             [item.userId]: event.target.value,
                           }))
                         }
-                        placeholder="โควตาสาขาต่อร้าน (ว่าง = ไม่จำกัด)"
+                        placeholder={t(
+                          uiLocale,
+                          "systemAdmin.superadminManagement.list.field.maxBranchesPerStorePlaceholder",
+                        )}
                         className="h-9 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
                         disabled={
                           loadingKey !== null ||
@@ -486,14 +521,18 @@ export function SuperadminManagement({
                   onClick={() => updateStoreCreationConfig(item.userId)}
                   disabled={loadingKey !== null}
                 >
-                  {loadingKey === `update-${item.userId}` ? "กำลังบันทึก..." : "บันทึก"}
+                  {loadingKey === `update-${item.userId}`
+                    ? t(uiLocale, "common.action.saving")
+                    : t(uiLocale, "products.action.save")}
                 </Button>
               </div>
             </div>
           ))}
 
           {superadmins.length === 0 ? (
-            <p className="text-sm text-muted-foreground">ยังไม่มีบัญชี SUPERADMIN</p>
+            <p className="text-sm text-muted-foreground">
+              {t(uiLocale, "systemAdmin.superadminManagement.empty")}
+            </p>
           ) : null}
         </div>
       </article>

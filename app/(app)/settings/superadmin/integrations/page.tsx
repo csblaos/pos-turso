@@ -7,14 +7,10 @@ import { getSession } from "@/lib/auth/session";
 import { listActiveMemberships } from "@/lib/auth/session-db";
 import { db } from "@/lib/db/client";
 import { fbConnections, stores, waConnections } from "@/lib/db/schema";
+import { type UiLocale, uiLocaleToDateLocale } from "@/lib/i18n/locales";
+import { t, type MessageKey } from "@/lib/i18n/messages";
 
 type ConnectionStatus = "DISCONNECTED" | "CONNECTED" | "ERROR";
-
-const statusLabel: Record<ConnectionStatus, string> = {
-  DISCONNECTED: "ยังไม่เชื่อมต่อ",
-  CONNECTED: "เชื่อมต่อแล้ว",
-  ERROR: "พบปัญหา",
-};
 
 const statusClassName: Record<ConnectionStatus, string> = {
   DISCONNECTED: "border-slate-200 bg-slate-50 text-slate-600",
@@ -22,7 +18,20 @@ const statusClassName: Record<ConnectionStatus, string> = {
   ERROR: "border-red-200 bg-red-50 text-red-700",
 };
 
-const formatDateTime = (value: string | null) => {
+const statusLabelKey: Record<ConnectionStatus, MessageKey> = {
+  DISCONNECTED: "settings.channelStatus.DISCONNECTED",
+  CONNECTED: "settings.channelStatus.CONNECTED",
+  ERROR: "settings.channelStatus.ERROR",
+};
+
+const storeTypeLabelKey = {
+  ONLINE_RETAIL: "onboarding.storeType.online.title",
+  RESTAURANT: "onboarding.storeType.restaurant.title",
+  CAFE: "onboarding.storeType.cafe.title",
+  OTHER: "onboarding.storeType.other.title",
+} as const;
+
+const formatDateTime = (locale: UiLocale, value: string | null) => {
   if (!value) {
     return "-";
   }
@@ -33,18 +42,24 @@ const formatDateTime = (value: string | null) => {
     return value;
   }
 
-  return parsed.toLocaleString("th-TH", {
+  return parsed.toLocaleString(uiLocaleToDateLocale(locale), {
     dateStyle: "medium",
     timeStyle: "short",
   });
 };
 
-function StatusPill({ status }: { status: ConnectionStatus }) {
+function StatusPill({
+  status,
+  uiLocale,
+}: {
+  status: ConnectionStatus;
+  uiLocale: UiLocale;
+}) {
   return (
     <span
       className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${statusClassName[status]}`}
     >
-      {statusLabel[status]}
+      {t(uiLocale, statusLabelKey[status])}
     </span>
   );
 }
@@ -54,6 +69,8 @@ export default async function SettingsSuperadminIntegrationsPage() {
   if (!session) {
     redirect("/login");
   }
+  const uiLocale = session.uiLocale;
+  const numberLocale = uiLocaleToDateLocale(uiLocale);
 
   const memberships = await listActiveMemberships(session.userId);
   if (memberships.length === 0) {
@@ -104,39 +121,57 @@ export default async function SettingsSuperadminIntegrationsPage() {
     }
   }
 
-  const connectedFbCount = storeRows.filter((store) => fbByStore.get(store.id)?.status === "CONNECTED").length;
-  const connectedWaCount = storeRows.filter((store) => waByStore.get(store.id)?.status === "CONNECTED").length;
+  const connectedFbCount = storeRows.filter(
+    (store) => fbByStore.get(store.id)?.status === "CONNECTED",
+  ).length;
+  const connectedWaCount = storeRows.filter(
+    (store) => waByStore.get(store.id)?.status === "CONNECTED",
+  ).length;
 
   return (
     <section className="space-y-5">
       <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">การเชื่อมต่อช่องทาง</h1>
-        <p className="text-sm text-slate-500">ตรวจสถานะ Facebook และ WhatsApp ของทุกร้านที่คุณดูแล</p>
+        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
+          {t(uiLocale, "superadmin.integrations.title")}
+        </h1>
+        <p className="text-sm text-slate-500">{t(uiLocale, "superadmin.integrations.subtitle")}</p>
       </header>
 
       <div className="grid grid-cols-2 gap-3">
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-500">ร้านที่เชื่อมต่อ Facebook</p>
+          <p className="text-xs text-slate-500">
+            {t(uiLocale, "superadmin.integrations.card.fbConnected")}
+          </p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">
-            {connectedFbCount.toLocaleString("th-TH")} / {storeRows.length.toLocaleString("th-TH")}
+            {connectedFbCount.toLocaleString(numberLocale)} /{" "}
+            {storeRows.length.toLocaleString(numberLocale)}
           </p>
         </article>
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-slate-500">ร้านที่เชื่อมต่อ WhatsApp</p>
+          <p className="text-xs text-slate-500">
+            {t(uiLocale, "superadmin.integrations.card.waConnected")}
+          </p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">
-            {connectedWaCount.toLocaleString("th-TH")} / {storeRows.length.toLocaleString("th-TH")}
+            {connectedWaCount.toLocaleString(numberLocale)} /{" "}
+            {storeRows.length.toLocaleString(numberLocale)}
           </p>
         </article>
       </div>
 
       <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
-          <p className="text-sm font-semibold text-slate-900">สถานะแต่ละร้าน</p>
-          <p className="mt-0.5 text-xs text-slate-500">ใช้เพื่อตรวจร้านที่ยังไม่เชื่อมต่อหรือมีปัญหา</p>
+          <p className="text-sm font-semibold text-slate-900">
+            {t(uiLocale, "superadmin.integrations.section.storeStatus.title")}
+          </p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {t(uiLocale, "superadmin.integrations.section.storeStatus.subtitle")}
+          </p>
         </div>
 
         {storeRows.length === 0 ? (
-          <p className="px-4 py-4 text-sm text-slate-500">ยังไม่พบร้านในความดูแล</p>
+          <p className="px-4 py-4 text-sm text-slate-500">
+            {t(uiLocale, "superadmin.integrations.empty")}
+          </p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {storeRows.map((store) => {
@@ -153,7 +188,10 @@ export default async function SettingsSuperadminIntegrationsPage() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-slate-900">{store.name}</p>
-                      <p className="truncate text-xs text-slate-500">{store.storeType}</p>
+                      <p className="truncate text-xs text-slate-500">
+                        {t(uiLocale, "superadmin.integrations.storeTypePrefix")}{" "}
+                        {t(uiLocale, storeTypeLabelKey[store.storeType])}
+                      </p>
                     </div>
                   </div>
 
@@ -161,19 +199,31 @@ export default async function SettingsSuperadminIntegrationsPage() {
                     <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xs font-medium text-slate-700">Facebook</p>
-                        <StatusPill status={fbStatus} />
+                        <StatusPill status={fbStatus} uiLocale={uiLocale} />
                       </div>
-                      <p className="mt-1 truncate text-xs text-slate-500">เพจ: {fb?.pageName?.trim() || "-"}</p>
-                      <p className="truncate text-xs text-slate-500">เชื่อมต่อล่าสุด: {formatDateTime(fb?.connectedAt ?? null)}</p>
+                      <p className="mt-1 truncate text-xs text-slate-500">
+                        {t(uiLocale, "superadmin.integrations.label.pagePrefix")}{" "}
+                        {fb?.pageName?.trim() || "-"}
+                      </p>
+                      <p className="truncate text-xs text-slate-500">
+                        {t(uiLocale, "superadmin.integrations.label.lastConnectedPrefix")}{" "}
+                        {formatDateTime(uiLocale, fb?.connectedAt ?? null)}
+                      </p>
                     </div>
 
                     <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xs font-medium text-slate-700">WhatsApp</p>
-                        <StatusPill status={waStatus} />
+                        <StatusPill status={waStatus} uiLocale={uiLocale} />
                       </div>
-                      <p className="mt-1 truncate text-xs text-slate-500">หมายเลข: {wa?.phoneNumber?.trim() || "-"}</p>
-                      <p className="truncate text-xs text-slate-500">เชื่อมต่อล่าสุด: {formatDateTime(wa?.connectedAt ?? null)}</p>
+                      <p className="mt-1 truncate text-xs text-slate-500">
+                        {t(uiLocale, "superadmin.integrations.label.phonePrefix")}{" "}
+                        {wa?.phoneNumber?.trim() || "-"}
+                      </p>
+                      <p className="truncate text-xs text-slate-500">
+                        {t(uiLocale, "superadmin.integrations.label.lastConnectedPrefix")}{" "}
+                        {formatDateTime(uiLocale, wa?.connectedAt ?? null)}
+                      </p>
                     </div>
                   </div>
                 </li>
@@ -184,7 +234,9 @@ export default async function SettingsSuperadminIntegrationsPage() {
       </article>
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">นำทาง</p>
+        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          {t(uiLocale, "superadmin.nav.section")}
+        </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <Link
             href="/settings/superadmin"
@@ -194,8 +246,12 @@ export default async function SettingsSuperadminIntegrationsPage() {
               <PlugZap className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">กลับ Superadmin Center</span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">เลือกเมนูจัดการอื่น ๆ</span>
+              <span className="block truncate text-sm font-medium text-slate-900">
+                {t(uiLocale, "superadmin.nav.backToCenter.title")}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-slate-500">
+                {t(uiLocale, "superadmin.nav.backToCenter.description")}
+              </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
           </Link>
@@ -208,8 +264,12 @@ export default async function SettingsSuperadminIntegrationsPage() {
               <Store className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">กลับภาพรวมข้ามร้าน</span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">ดู KPI รวมของทุกร้าน</span>
+              <span className="block truncate text-sm font-medium text-slate-900">
+                {t(uiLocale, "superadmin.nav.backToOverview.title")}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-slate-500">
+                {t(uiLocale, "superadmin.nav.backToOverview.description")}
+              </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
           </Link>
@@ -223,10 +283,10 @@ export default async function SettingsSuperadminIntegrationsPage() {
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium text-slate-900">
-                กลับหน้าเลือกร้าน / เปลี่ยนสาขา
+                {t(uiLocale, "superadmin.nav.exitMode.title")}
               </span>
               <span className="mt-0.5 block truncate text-xs text-slate-500">
-                ออกจากโหมดผู้ดูแลกลับหน้าใช้งานรายวัน
+                {t(uiLocale, "superadmin.nav.exitMode.description")}
               </span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />

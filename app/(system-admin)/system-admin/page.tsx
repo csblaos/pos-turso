@@ -1,23 +1,30 @@
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { getSession } from "@/lib/auth/session";
+import { DEFAULT_UI_LOCALE, type UiLocale, uiLocaleToDateLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
 import {
   getSystemAdminDashboardStats,
   type SystemAdminDashboardStats,
 } from "@/lib/system-admin/dashboard";
 import { listSuperadmins, type SuperadminItem } from "@/lib/system-admin/superadmins";
 
-function DashboardStatsCardsSkeleton() {
+function DashboardStatsCardsSkeleton({
+  uiLocale,
+}: {
+  uiLocale: UiLocale;
+}) {
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      {[
-        "Total Client",
-        "Total Store",
-        "Total User",
-        "สมาชิก ACTIVE",
-      ].map((label) => (
-        <div key={label} className="rounded-xl border bg-white p-4">
-          <p className="text-xs text-muted-foreground">{label}</p>
+      {([
+        "systemAdmin.dashboard.card.totalClients",
+        "systemAdmin.dashboard.card.totalStores",
+        "systemAdmin.dashboard.card.totalUsers",
+        "systemAdmin.dashboard.card.activeMembers",
+      ] as const).map((labelKey) => (
+        <div key={labelKey} className="rounded-xl border bg-white p-4">
+          <p className="text-xs text-muted-foreground">{t(uiLocale, labelKey)}</p>
           <div className="mt-2 h-8 w-20 animate-pulse rounded bg-slate-200" />
         </div>
       ))}
@@ -27,29 +34,47 @@ function DashboardStatsCardsSkeleton() {
 
 async function DashboardStatsCards({
   statsPromise,
+  uiLocale,
+  numberLocale,
 }: {
   statsPromise: Promise<SystemAdminDashboardStats>;
+  uiLocale: UiLocale;
+  numberLocale: string;
 }) {
   const stats = await statsPromise;
 
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <div className="rounded-xl border bg-white p-4">
-        <p className="text-xs text-muted-foreground">Total Client</p>
-        <p className="mt-1 text-2xl font-semibold">{stats.totalClients.toLocaleString("th-TH")}</p>
-      </div>
-      <div className="rounded-xl border bg-white p-4">
-        <p className="text-xs text-muted-foreground">Total Store</p>
-        <p className="mt-1 text-2xl font-semibold">{stats.totalStores.toLocaleString("th-TH")}</p>
-      </div>
-      <div className="rounded-xl border bg-white p-4">
-        <p className="text-xs text-muted-foreground">Total User</p>
-        <p className="mt-1 text-2xl font-semibold">{stats.totalUsers.toLocaleString("th-TH")}</p>
-      </div>
-      <div className="rounded-xl border bg-white p-4">
-        <p className="text-xs text-muted-foreground">สมาชิก ACTIVE</p>
+        <p className="text-xs text-muted-foreground">
+          {t(uiLocale, "systemAdmin.dashboard.card.totalClients")}
+        </p>
         <p className="mt-1 text-2xl font-semibold">
-          {stats.totalActiveMembers.toLocaleString("th-TH")}
+          {stats.totalClients.toLocaleString(numberLocale)}
+        </p>
+      </div>
+      <div className="rounded-xl border bg-white p-4">
+        <p className="text-xs text-muted-foreground">
+          {t(uiLocale, "systemAdmin.dashboard.card.totalStores")}
+        </p>
+        <p className="mt-1 text-2xl font-semibold">
+          {stats.totalStores.toLocaleString(numberLocale)}
+        </p>
+      </div>
+      <div className="rounded-xl border bg-white p-4">
+        <p className="text-xs text-muted-foreground">
+          {t(uiLocale, "systemAdmin.dashboard.card.totalUsers")}
+        </p>
+        <p className="mt-1 text-2xl font-semibold">
+          {stats.totalUsers.toLocaleString(numberLocale)}
+        </p>
+      </div>
+      <div className="rounded-xl border bg-white p-4">
+        <p className="text-xs text-muted-foreground">
+          {t(uiLocale, "systemAdmin.dashboard.card.activeMembers")}
+        </p>
+        <p className="mt-1 text-2xl font-semibold">
+          {stats.totalActiveMembers.toLocaleString(numberLocale)}
         </p>
       </div>
     </div>
@@ -72,8 +97,12 @@ function TopClientsSkeleton() {
 
 async function TopClientsList({
   superadminsPromise,
+  uiLocale,
+  numberLocale,
 }: {
   superadminsPromise: Promise<SuperadminItem[]>;
+  uiLocale: UiLocale;
+  numberLocale: string;
 }) {
   const superadmins = await superadminsPromise;
   const topClients = [...superadmins]
@@ -81,7 +110,11 @@ async function TopClientsList({
     .slice(0, 5);
 
   if (topClients.length === 0) {
-    return <p className="mt-3 text-sm text-muted-foreground">ยังไม่มีข้อมูลลูกค้า</p>;
+    return (
+      <p className="mt-3 text-sm text-muted-foreground">
+        {t(uiLocale, "systemAdmin.dashboard.topClients.empty")}
+      </p>
+    );
   }
 
   return (
@@ -91,7 +124,8 @@ async function TopClientsList({
           <p className="font-medium">{item.name}</p>
           <p className="text-xs text-muted-foreground">{item.email}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            ร้านที่เป็น Owner: {item.activeOwnerStoreCount.toLocaleString("th-TH")} ร้าน
+            {t(uiLocale, "systemAdmin.dashboard.topClients.ownerStoresPrefix")}{" "}
+            {item.activeOwnerStoreCount.toLocaleString(numberLocale)}
           </p>
         </li>
       ))}
@@ -111,72 +145,98 @@ function StorePermissionSummarySkeleton() {
 
 async function StorePermissionSummary({
   statsPromise,
+  uiLocale,
+  numberLocale,
 }: {
   statsPromise: Promise<SystemAdminDashboardStats>;
+  uiLocale: UiLocale;
+  numberLocale: string;
 }) {
   const stats = await statsPromise;
 
   return (
     <div className="space-y-2">
       <p className="text-sm text-muted-foreground">
-        Client ที่เปิดสิทธิ์สร้างร้าน: {stats.totalClientsCanCreateStores.toLocaleString("th-TH")}
+        {t(uiLocale, "systemAdmin.dashboard.storePermissions.canCreateStores")}{" "}
+        {stats.totalClientsCanCreateStores.toLocaleString(numberLocale)}
       </p>
       <p className="text-sm text-muted-foreground">
-        Client แบบไม่จำกัดจำนวนร้าน: {stats.totalUnlimitedClients.toLocaleString("th-TH")}
+        {t(uiLocale, "systemAdmin.dashboard.storePermissions.unlimitedClients")}{" "}
+        {stats.totalUnlimitedClients.toLocaleString(numberLocale)}
       </p>
       <p className="text-sm text-muted-foreground">
-        สมาชิกที่ถูกระงับ: {stats.totalSuspendedMembers.toLocaleString("th-TH")}
+        {t(uiLocale, "systemAdmin.dashboard.storePermissions.suspendedMembers")}{" "}
+        {stats.totalSuspendedMembers.toLocaleString(numberLocale)}
       </p>
     </div>
   );
 }
 
-export default function SystemAdminDashboardPage() {
+export default async function SystemAdminDashboardPage() {
+  const session = await getSession();
+  const uiLocale = session?.uiLocale ?? DEFAULT_UI_LOCALE;
+  const numberLocale = uiLocaleToDateLocale(uiLocale);
   const statsPromise = getSystemAdminDashboardStats();
   const superadminsPromise = listSuperadmins();
 
   return (
     <section className="space-y-4">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold">System Dashboard</h1>
+        <h1 className="text-xl font-semibold">{t(uiLocale, "systemAdmin.dashboard.title")}</h1>
         <p className="text-sm text-muted-foreground">
-          ภาพรวมลูกค้าที่สมัครใช้ POS และสถานะการใช้งานระบบ
+          {t(uiLocale, "systemAdmin.dashboard.subtitle")}
         </p>
       </header>
 
-      <Suspense fallback={<DashboardStatsCardsSkeleton />}>
-        <DashboardStatsCards statsPromise={statsPromise} />
+      <Suspense fallback={<DashboardStatsCardsSkeleton uiLocale={uiLocale} />}>
+        <DashboardStatsCards
+          statsPromise={statsPromise}
+          uiLocale={uiLocale}
+          numberLocale={numberLocale}
+        />
       </Suspense>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         <article className="rounded-xl border bg-white p-4 lg:col-span-2">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">Top Client ตามจำนวนร้าน</h2>
+            <h2 className="text-sm font-semibold">
+              {t(uiLocale, "systemAdmin.dashboard.topClients.title")}
+            </h2>
             <Link
               href="/system-admin/config/clients"
               prefetch
               className="text-sm text-blue-700 hover:underline"
             >
-              จัดการลูกค้า
+              {t(uiLocale, "systemAdmin.dashboard.topClients.manage")}
             </Link>
           </div>
 
           <Suspense fallback={<TopClientsSkeleton />}>
-            <TopClientsList superadminsPromise={superadminsPromise} />
+            <TopClientsList
+              superadminsPromise={superadminsPromise}
+              uiLocale={uiLocale}
+              numberLocale={numberLocale}
+            />
           </Suspense>
         </article>
 
         <article className="space-y-2 rounded-xl border bg-white p-4">
-          <h2 className="text-sm font-semibold">ภาพรวมสิทธิ์สร้างร้าน</h2>
+          <h2 className="text-sm font-semibold">
+            {t(uiLocale, "systemAdmin.dashboard.storePermissions.title")}
+          </h2>
           <Suspense fallback={<StorePermissionSummarySkeleton />}>
-            <StorePermissionSummary statsPromise={statsPromise} />
+            <StorePermissionSummary
+              statsPromise={statsPromise}
+              uiLocale={uiLocale}
+              numberLocale={numberLocale}
+            />
           </Suspense>
           <Link
             href="/system-admin/config"
             prefetch
             className="inline-block text-sm text-blue-700 hover:underline"
           >
-            ไปหน้าตั้งค่าระบบ
+            {t(uiLocale, "systemAdmin.dashboard.storePermissions.goToConfig")}
           </Link>
         </article>
       </div>

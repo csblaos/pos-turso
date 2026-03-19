@@ -7,8 +7,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch, setClientAuthToken } from "@/lib/auth/client-token";
-import { t, type MessageKey } from "@/lib/i18n/messages";
-import { type UiLocale, uiLocaleValues } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
+import { type UiLocale, uiLocaleNativeLabels, uiLocaleValues } from "@/lib/i18n/locales";
 
 type AccountLanguageSettingsProps = {
   locale: UiLocale;
@@ -25,8 +25,8 @@ type UpdateLocaleResponse = {
   };
 };
 
-function getLocaleOptionLabel(option: UiLocale, uiLocale: UiLocale) {
-  return t(uiLocale, `localeName.${option}` as MessageKey);
+function getLocaleOptionLabel(option: UiLocale) {
+  return uiLocaleNativeLabels[option];
 }
 
 export function AccountLanguageSettings({ locale, initialUiLocale }: AccountLanguageSettingsProps) {
@@ -137,7 +137,7 @@ export function AccountLanguageSettings({ locale, initialUiLocale }: AccountLang
               {t(locale, "settings.language.cta")}
             </span>
             <span className="mt-0.5 block truncate text-xs text-slate-500">
-              {getLocaleOptionLabel(savedUiLocale, locale)}
+              {getLocaleOptionLabel(savedUiLocale)}
             </span>
           </span>
           <span
@@ -171,7 +171,7 @@ export function AccountLanguageSettings({ locale, initialUiLocale }: AccountLang
             >
               {uiLocaleValues.map((option) => (
                 <option key={option} value={option}>
-                  {getLocaleOptionLabel(option, locale)}
+                  {getLocaleOptionLabel(option)}
                 </option>
               ))}
             </select>

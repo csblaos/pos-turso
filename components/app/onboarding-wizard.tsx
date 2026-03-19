@@ -14,7 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +22,8 @@ import {
   clearClientAuthToken,
   setClientAuthToken,
 } from "@/lib/auth/client-token";
+import { t, type MessageKey } from "@/lib/i18n/messages";
+import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 import { clearPurchaseLocalStorage } from "@/lib/purchases/client-storage";
 import {
   formatLaosAddress,
@@ -43,12 +45,18 @@ type WizardProps = {
   activeStoreType: OnboardingStoreType | null;
 };
 
+const onboardingStepKeys = [
+  "onboarding.step.storeType",
+  "onboarding.step.storeSetup",
+  "onboarding.step.channels",
+] as const satisfies ReadonlyArray<MessageKey>;
+
 const storeTypeOptions = [
   {
     value: "ONLINE_RETAIL",
-    title: "Online POS",
-    shortTitle: "ร้านออนไลน์",
-    description: "เหมาะกับร้านค้าที่เน้นการขายออนไลน์และโซเชียล",
+    titleKey: "onboarding.storeType.online.title",
+    shortTitleKey: "onboarding.storeType.online.shortTitle",
+    descriptionKey: "onboarding.storeType.online.description",
     icon: ShoppingBag,
     iconColorClassName: "text-sky-700",
     iconBgClassName: "bg-sky-100 ring-sky-200",
@@ -56,9 +64,9 @@ const storeTypeOptions = [
   },
   {
     value: "RESTAURANT",
-    title: "Restaurant POS",
-    shortTitle: "ร้านอาหาร",
-    description: "เหมาะกับร้านอาหารที่มีงานหน้าร้านและจัดการออเดอร์เร็ว",
+    titleKey: "onboarding.storeType.restaurant.title",
+    shortTitleKey: "onboarding.storeType.restaurant.shortTitle",
+    descriptionKey: "onboarding.storeType.restaurant.description",
     icon: UtensilsCrossed,
     iconColorClassName: "text-amber-700",
     iconBgClassName: "bg-amber-100 ring-amber-200",
@@ -66,9 +74,9 @@ const storeTypeOptions = [
   },
   {
     value: "CAFE",
-    title: "Cafe POS",
-    shortTitle: "คาเฟ่",
-    description: "เหมาะกับคาเฟ่ที่ต้องการจัดการเมนูและหน้าร้านแบบคล่องตัว",
+    titleKey: "onboarding.storeType.cafe.title",
+    shortTitleKey: "onboarding.storeType.cafe.shortTitle",
+    descriptionKey: "onboarding.storeType.cafe.description",
     icon: Coffee,
     iconColorClassName: "text-emerald-700",
     iconBgClassName: "bg-emerald-100 ring-emerald-200",
@@ -76,9 +84,9 @@ const storeTypeOptions = [
   },
   {
     value: "OTHER",
-    title: "Other POS",
-    shortTitle: "ธุรกิจอื่นๆ",
-    description: "สำหรับธุรกิจอื่นๆ ที่ต้องการเริ่มใช้งานทันที",
+    titleKey: "onboarding.storeType.other.title",
+    shortTitleKey: "onboarding.storeType.other.shortTitle",
+    descriptionKey: "onboarding.storeType.other.description",
     icon: Grid3X3,
     iconColorClassName: "text-violet-700",
     iconBgClassName: "bg-violet-100 ring-violet-200",
@@ -86,9 +94,9 @@ const storeTypeOptions = [
   },
 ] as const satisfies ReadonlyArray<{
   value: OnboardingStoreType;
-  title: string;
-  shortTitle: string;
-  description: string;
+  titleKey: MessageKey;
+  shortTitleKey: MessageKey;
+  descriptionKey: MessageKey;
   icon: LucideIcon;
   iconColorClassName: string;
   iconBgClassName: string;
@@ -100,12 +108,10 @@ const defaultChannelState: ChannelState = {
   whatsapp: "DISCONNECTED",
 };
 
-const nonOnlineChannelMessage = "เชื่อมช่องทางได้เฉพาะร้านประเภท Online POS";
-
-const statusLabel: Record<ChannelStatus, string> = {
-  DISCONNECTED: "ยังไม่เชื่อมต่อ",
-  CONNECTED: "เชื่อมต่อแล้ว",
-  ERROR: "พบข้อผิดพลาด",
+const statusLabelKey: Record<ChannelStatus, MessageKey> = {
+  DISCONNECTED: "onboarding.channel.status.disconnected",
+  CONNECTED: "onboarding.channel.status.connected",
+  ERROR: "onboarding.channel.status.error",
 };
 
 function FacebookPageBrandIcon({ className }: { className?: string }) {
@@ -134,7 +140,9 @@ function WhatsAppBrandIcon({ className }: { className?: string }) {
 
 export function OnboardingWizard({ hasStoreMembership, activeStoreType }: WizardProps) {
   const router = useRouter();
+  const uiLocale = useUiLocale();
   const initialStoreType = activeStoreType ?? "ONLINE_RETAIL";
+  const nonOnlineChannelMessage = t(uiLocale, "onboarding.channel.nonOnlineOnly");
   const [step, setStep] = useState<1 | 2 | 3>(hasStoreMembership ? 3 : 1);
   const [storeType, setStoreType] = useState<OnboardingStoreType>(initialStoreType);
   const [storeName, setStoreName] = useState("");
@@ -153,7 +161,7 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
     reason: string | null;
   }>({
     eligible: initialStoreType === "ONLINE_RETAIL",
-    reason: initialStoreType === "ONLINE_RETAIL" ? null : nonOnlineChannelMessage,
+    reason: null,
   });
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -174,12 +182,6 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
   );
 
   useEffect(() => {
-    if (step === 3) {
-      void loadChannelStatus();
-    }
-  }, [step]);
-
-  useEffect(() => {
     if (!logoFile) {
       setLogoPreviewUrl(null);
       return;
@@ -193,7 +195,7 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
     };
   }, [logoFile]);
 
-  const loadChannelStatus = async () => {
+  const loadChannelStatus = useCallback(async () => {
     const response = await authFetch("/api/onboarding/channels", {
       method: "GET",
       cache: "no-store",
@@ -209,7 +211,7 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
       | null;
 
     if (!response.ok) {
-      setErrorMessage(data?.message ?? "ไม่สามารถโหลดสถานะช่องทางได้");
+      setErrorMessage(data?.message ?? t(uiLocale, "onboarding.error.loadChannelStatus"));
       return;
     }
 
@@ -223,10 +225,16 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
     if (typeof data.eligible === "boolean") {
       setChannelEligibility({
         eligible: data.eligible,
-        reason: data.eligible ? null : data.reason ?? nonOnlineChannelMessage,
+        reason: data.eligible ? null : data.reason ?? null,
       });
     }
-  };
+  }, [uiLocale]);
+
+  useEffect(() => {
+    if (step === 3) {
+      void loadChannelStatus();
+    }
+  }, [step, loadChannelStatus]);
 
   const goToStep2 = () => {
     if (!selectedStoreType?.available) {
@@ -240,37 +248,37 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
 
   const submitStore = async () => {
     if (!storeName.trim()) {
-      setErrorMessage("กรุณากรอกชื่อร้าน");
+      setErrorMessage(t(uiLocale, "onboarding.error.storeNameRequired"));
       return;
     }
     if (!provinceId) {
-      setErrorMessage("กรุณาเลือก Province");
+      setErrorMessage(t(uiLocale, "onboarding.error.provinceRequired"));
       return;
     }
     if (!districtId) {
-      setErrorMessage("กรุณาเลือก District");
+      setErrorMessage(t(uiLocale, "onboarding.error.districtRequired"));
       return;
     }
     if (!village.trim()) {
-      setErrorMessage("กรุณากรอก Village");
+      setErrorMessage(t(uiLocale, "onboarding.error.villageRequired"));
       return;
     }
     if (!storePhoneNumber.trim()) {
-      setErrorMessage("กรุณากรอกเบอร์โทรร้าน");
+      setErrorMessage(t(uiLocale, "onboarding.error.phoneRequired"));
       return;
     }
     if (!/^[0-9+\-\s()]{6,20}$/.test(storePhoneNumber.trim())) {
-      setErrorMessage("รูปแบบเบอร์โทรไม่ถูกต้อง");
+      setErrorMessage(t(uiLocale, "onboarding.error.phoneInvalid"));
       return;
     }
     if (!formattedAddress) {
-      setErrorMessage("ข้อมูลที่อยู่ร้านไม่ครบ");
+      setErrorMessage(t(uiLocale, "onboarding.error.addressIncomplete"));
       return;
     }
 
     const finalAddress = formattedAddress;
     if (finalAddress.length > 300) {
-      setErrorMessage("ข้อมูลที่อยู่ร้านยาวเกินกำหนด");
+      setErrorMessage(t(uiLocale, "onboarding.error.addressTooLong"));
       return;
     }
 
@@ -279,7 +287,7 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
     setErrorMessage(null);
     setChannelEligibility({
       eligible: storeType === "ONLINE_RETAIL",
-      reason: storeType === "ONLINE_RETAIL" ? null : nonOnlineChannelMessage,
+      reason: null,
     });
 
     const formData = new FormData();
@@ -304,7 +312,7 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
 
     if (!response.ok) {
       setNoticeMessage(null);
-      setErrorMessage(data?.message ?? "สร้างร้านไม่สำเร็จ");
+      setErrorMessage(data?.message ?? t(uiLocale, "onboarding.error.createStoreFailed"));
       setIsSubmitting(false);
       return;
     }
@@ -344,7 +352,7 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
       | null;
 
     if (!response.ok) {
-      setErrorMessage(data?.message ?? "เชื่อมต่อช่องทางไม่สำเร็จ");
+      setErrorMessage(data?.message ?? t(uiLocale, "onboarding.error.connectChannelFailed"));
       setIsSubmitting(false);
       return;
     }
@@ -390,20 +398,24 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
   return (
     <section className="space-y-5">
       <header className="space-y-2 text-center">
-        <p className="text-sm font-medium text-blue-600">ตั้งค่าร้านค้าเริ่มต้น</p>
-        <h1 className="text-2xl font-semibold tracking-tight">เริ่มใช้งานระบบขาย</h1>
+        <p className="text-sm font-medium text-blue-600">
+          {t(uiLocale, "onboarding.header.eyebrow")}
+        </p>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {t(uiLocale, "onboarding.header.title")}
+        </h1>
       </header>
 
       <div className="rounded-xl border bg-slate-50 p-3">
         <ol className="grid grid-cols-3 gap-2 text-xs">
-          {["ประเภทร้าน", "ตั้งค่าร้าน", "เชื่อมช่องทาง"].map((title, index) => {
+          {onboardingStepKeys.map((titleKey, index) => {
             const current = index + 1;
             const done = step > current;
             const active = step === current;
 
             return (
               <li
-                key={title}
+                key={titleKey}
                 className={`flex items-center gap-1 rounded-md px-2 py-1 ${
                   active ? "bg-blue-100 text-blue-800" : "text-slate-500"
                 }`}
@@ -413,7 +425,7 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
                 ) : (
                   <Circle className="h-3.5 w-3.5" />
                 )}
-                <span className="truncate">{title}</span>
+                <span className="truncate">{t(uiLocale, titleKey)}</span>
               </li>
             );
           })}
@@ -427,18 +439,26 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
         onClick={openCancelConfirm}
         disabled={isSubmitting || isCancelling}
       >
-        {isCancelling ? "กำลังออกจากระบบ..." : "ยกเลิกการตั้งค่า"}
+        {isCancelling
+          ? t(uiLocale, "onboarding.cancel.loggingOut")
+          : t(uiLocale, "onboarding.cancel.action")}
       </Button>
 
       {step === 1 ? (
         <div className="space-y-3">
           {selectedStoreType ? (
             <article className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-700 p-4 text-white">
-              <p className="text-xs text-slate-200">ประเภทร้านที่เลือก</p>
+              <p className="text-xs text-slate-200">
+                {t(uiLocale, "onboarding.storeType.selected")}
+              </p>
               <div className="mt-2 flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-lg font-semibold">{selectedStoreType.shortTitle}</p>
-                  <p className="mt-1 text-xs text-slate-200">{selectedStoreType.description}</p>
+                  <p className="text-lg font-semibold">
+                    {t(uiLocale, selectedStoreType.shortTitleKey)}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-200">
+                    {t(uiLocale, selectedStoreType.descriptionKey)}
+                  </p>
                 </div>
                 <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/15">
                   <selectedStoreType.icon className="h-5 w-5" />
@@ -472,7 +492,7 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-semibold">{option.title}</p>
+                        <p className="text-sm font-semibold">{t(uiLocale, option.titleKey)}</p>
                         {selected ? <CheckCircle2 className="h-4 w-4 text-blue-600" /> : null}
                       </div>
                       <p
@@ -480,7 +500,7 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
                           option.available ? "text-slate-500" : "text-amber-600"
                         }`}
                       >
-                        {option.description}
+                        {t(uiLocale, option.descriptionKey)}
                       </p>
                     </div>
                   </div>
@@ -494,7 +514,7 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
             onClick={goToStep2}
             disabled={!selectedStoreType?.available}
           >
-            ดำเนินการต่อ
+            {t(uiLocale, "onboarding.action.continue")}
           </Button>
         </div>
       ) : null}
@@ -503,7 +523,9 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
         <div className="space-y-4">
           {selectedStoreType ? (
             <article className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-sky-50 p-4">
-              <p className="text-xs text-muted-foreground">โหมดร้านที่กำลังตั้งค่า</p>
+              <p className="text-xs text-muted-foreground">
+                {t(uiLocale, "onboarding.storeSetup.mode")}
+              </p>
               <div className="mt-2 flex items-center gap-3">
                 <div
                   className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1 ${selectedStoreType.iconBgClassName}`}
@@ -513,8 +535,10 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
                   />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">{selectedStoreType.title}</p>
-                  <p className="text-xs text-muted-foreground">{selectedStoreType.description}</p>
+                  <p className="text-sm font-medium">{t(uiLocale, selectedStoreType.titleKey)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t(uiLocale, selectedStoreType.descriptionKey)}
+                  </p>
                 </div>
               </div>
             </article>
@@ -524,21 +548,21 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
             <label className="rounded-xl border bg-white p-3">
               <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
                 <Store className="h-4 w-4" />
-                ชื่อร้าน
+                {t(uiLocale, "onboarding.form.storeName.label")}
               </div>
               <input
                 id="storeName"
                 value={storeName}
                 onChange={(event) => setStoreName(event.target.value)}
                 className="h-10 w-full rounded-md border bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
-                placeholder="เช่น Cafe Riverside"
+                placeholder={t(uiLocale, "onboarding.form.storeName.placeholder")}
               />
             </label>
 
             <label className="rounded-xl border bg-white p-3">
               <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
                 <MapPin className="h-4 w-4" />
-                Province
+                {t(uiLocale, "onboarding.form.province.label")}
               </div>
               <select
                 value={provinceId ?? ""}
@@ -549,7 +573,7 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
                 }}
                 className="h-10 w-full rounded-md border bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
               >
-                <option value="">เลือก Province</option>
+                <option value="">{t(uiLocale, "onboarding.form.province.placeholder")}</option>
                 {laosProvinces.map((province) => (
                   <option key={province.id} value={province.id}>
                     {province.nameEn}
@@ -561,7 +585,7 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
             <label className="rounded-xl border bg-white p-3">
               <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
                 <MapPin className="h-4 w-4" />
-                District
+                {t(uiLocale, "onboarding.form.district.label")}
               </div>
               <select
                 value={districtId ?? ""}
@@ -569,7 +593,7 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
                 disabled={!provinceId}
                 className="h-10 w-full rounded-md border bg-white px-3 text-sm outline-none ring-primary focus:ring-2 disabled:bg-slate-100"
               >
-                <option value="">เลือก District</option>
+                <option value="">{t(uiLocale, "onboarding.form.district.placeholder")}</option>
                 {districtOptions.map((district) => (
                   <option key={district.id} value={district.id}>
                     {district.nameEn}
@@ -581,33 +605,33 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
             <label className="rounded-xl border bg-white p-3">
               <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
                 <MapPin className="h-4 w-4" />
-                Village
+                {t(uiLocale, "onboarding.form.village.label")}
               </div>
               <input
                 value={village}
                 onChange={(event) => setVillage(event.target.value)}
                 className="h-10 w-full rounded-md border bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
-                placeholder="เช่น Ban Phonxay"
+                placeholder={t(uiLocale, "onboarding.form.village.placeholder")}
               />
             </label>
 
             <label className="rounded-xl border bg-white p-3">
               <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
                 <Phone className="h-4 w-4" />
-                เบอร์โทรร้าน
+                {t(uiLocale, "onboarding.form.phone.label")}
               </div>
               <input
                 value={storePhoneNumber}
                 onChange={(event) => setStorePhoneNumber(event.target.value)}
                 className="h-10 w-full rounded-md border bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
-                placeholder="เช่น +856 20 9999 9999"
+                placeholder={t(uiLocale, "onboarding.form.phone.placeholder")}
               />
             </label>
 
             <label className="rounded-xl border border-dashed bg-slate-50 p-3">
               <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
                 <ImagePlus className="h-4 w-4" />
-                ไฟล์โลโก้ร้าน (ไม่บังคับ)
+                {t(uiLocale, "onboarding.form.logo.label")}
               </div>
               <input
                 type="file"
@@ -619,11 +643,11 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
                 className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white hover:file:bg-slate-700"
               />
               <p className="mt-2 text-xs text-muted-foreground">
-                รองรับ JPG, PNG, WEBP, SVG (ขนาดสูงสุดตามที่ระบบกำหนด)
+                {t(uiLocale, "onboarding.form.logo.hint")}
               </p>
               {logoFile ? (
                 <p className="mt-1 flex items-center gap-1 text-xs text-emerald-700">
-                  <span className="shrink-0">ไฟล์ที่เลือก:</span>
+                  <span className="shrink-0">{t(uiLocale, "onboarding.form.logo.selected")}</span>
                   <span className="max-w-[220px] truncate" title={logoFile.name}>
                     {logoFile.name}
                   </span>
@@ -635,7 +659,7 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={logoPreviewUrl}
-                      alt="ตัวอย่างโลโก้ร้าน"
+                      alt={t(uiLocale, "onboarding.form.logo.previewAlt")}
                       className="h-full w-full object-cover"
                     />
                   ) : (
@@ -647,7 +671,7 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
           </div>
 
           <p className="rounded-xl border bg-amber-50 p-3 text-xs text-amber-800">
-            หมายเหตุ: Currency และ VAT จะไปตั้งค่าใน Setting ของร้าน ภายหลังได้
+            {t(uiLocale, "onboarding.storeSetup.note")}
           </p>
 
           <div className="grid grid-cols-2 gap-2">
@@ -657,10 +681,12 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
               onClick={() => setStep(1)}
               disabled={isSubmitting}
             >
-              ย้อนกลับ
+              {t(uiLocale, "onboarding.action.back")}
             </Button>
             <Button className="h-11" onClick={submitStore} disabled={isSubmitting}>
-              {isSubmitting ? "กำลังสร้างร้าน..." : "สร้างร้านและดำเนินการต่อ"}
+              {isSubmitting
+                ? t(uiLocale, "onboarding.action.creatingStore")
+                : t(uiLocale, "onboarding.action.createStoreAndContinue")}
             </Button>
           </div>
         </div>
@@ -675,7 +701,9 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
                 : "border-amber-200 bg-gradient-to-br from-amber-50 via-white to-orange-50"
             }`}
           >
-            <p className="text-xs text-muted-foreground">เชื่อมช่องทางการขาย</p>
+            <p className="text-xs text-muted-foreground">
+              {t(uiLocale, "onboarding.channel.sectionTitle")}
+            </p>
             <div className="mt-2 flex items-start gap-3">
               <div
                 className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
@@ -691,12 +719,12 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
               <div>
                 <p className="text-sm font-semibold">
                   {channelEligibility.eligible
-                    ? "ร้านนี้รองรับการเชื่อม Facebook Page และ WhatsApp"
-                    : "ฟีเจอร์นี้เปิดเฉพาะ Online POS"}
+                    ? t(uiLocale, "onboarding.channel.eligible.title")
+                    : t(uiLocale, "onboarding.channel.ineligible.title")}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {channelEligibility.eligible
-                    ? "เชื่อมต่อช่องทางเพื่อเริ่มรับออเดอร์จากโซเชียลได้ทันที"
+                    ? t(uiLocale, "onboarding.channel.eligible.description")
                     : channelEligibility.reason ?? nonOnlineChannelMessage}
                 </p>
               </div>
@@ -711,10 +739,11 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
             >
               <div className="flex items-center gap-2">
                 <FacebookPageBrandIcon className="h-5 w-5" />
-                <p className="font-medium">Facebook Page</p>
+                <p className="font-medium">{t(uiLocale, "onboarding.channel.facebook.label")}</p>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                สถานะ: {statusLabel[channelStatus.facebook]}
+                {t(uiLocale, "onboarding.channel.status.prefix")}{" "}
+                {t(uiLocale, statusLabelKey[channelStatus.facebook])}
               </p>
               <Button
                 variant={channelStatus.facebook === "CONNECTED" ? "outline" : "default"}
@@ -723,10 +752,10 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
                 disabled={isSubmitting || !channelEligibility.eligible}
               >
                 {!channelEligibility.eligible
-                  ? "ใช้ได้เฉพาะ Online POS"
+                  ? t(uiLocale, "onboarding.channel.action.onlineOnly")
                   : channelStatus.facebook === "CONNECTED"
-                    ? "เชื่อมต่อแล้ว"
-                    : "เชื่อมต่อ Facebook Page"}
+                    ? t(uiLocale, "onboarding.channel.action.connected")
+                    : t(uiLocale, "onboarding.channel.facebook.connect")}
               </Button>
             </article>
 
@@ -737,10 +766,11 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
             >
               <div className="flex items-center gap-2">
                 <WhatsAppBrandIcon className="h-5 w-5" />
-                <p className="font-medium">WhatsApp</p>
+                <p className="font-medium">{t(uiLocale, "onboarding.channel.whatsapp.label")}</p>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                สถานะ: {statusLabel[channelStatus.whatsapp]}
+                {t(uiLocale, "onboarding.channel.status.prefix")}{" "}
+                {t(uiLocale, statusLabelKey[channelStatus.whatsapp])}
               </p>
               <Button
                 variant={channelStatus.whatsapp === "CONNECTED" ? "outline" : "default"}
@@ -749,18 +779,18 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
                 disabled={isSubmitting || !channelEligibility.eligible}
               >
                 {!channelEligibility.eligible
-                  ? "ใช้ได้เฉพาะ Online POS"
+                  ? t(uiLocale, "onboarding.channel.action.onlineOnly")
                   : channelStatus.whatsapp === "CONNECTED"
-                    ? "เชื่อมต่อแล้ว"
-                    : "เชื่อมต่อ WhatsApp"}
+                    ? t(uiLocale, "onboarding.channel.action.connected")
+                    : t(uiLocale, "onboarding.channel.whatsapp.connect")}
               </Button>
             </article>
           </div>
 
           <Button className="h-11 w-full" onClick={completeOnboarding}>
             {channelEligibility.eligible
-              ? "เข้าสู่หน้าแดชบอร์ด"
-              : "ข้ามการเชื่อมช่องทางและเข้าสู่แดชบอร์ด"}
+              ? t(uiLocale, "onboarding.action.enterDashboard")
+              : t(uiLocale, "onboarding.action.skipChannelsAndEnterDashboard")}
           </Button>
         </div>
       ) : null}
@@ -771,9 +801,11 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
       {isCancelConfirmOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
           <div className="w-full max-w-sm rounded-2xl border bg-white p-4 shadow-xl">
-            <h2 className="text-base font-semibold">ยกเลิกการตั้งค่า?</h2>
+            <h2 className="text-base font-semibold">
+              {t(uiLocale, "onboarding.cancel.confirm.title")}
+            </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              หากยืนยัน ระบบจะออกจากบัญชีนี้ทันที และข้อมูลที่ยังไม่บันทึกจะไม่ถูกเก็บ
+              {t(uiLocale, "onboarding.cancel.confirm.description")}
             </p>
             <div className="mt-4 grid grid-cols-2 gap-2">
               <Button
@@ -783,7 +815,7 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
                 onClick={() => setIsCancelConfirmOpen(false)}
                 disabled={isCancelling}
               >
-                กลับไปต่อ
+                {t(uiLocale, "onboarding.cancel.confirm.back")}
               </Button>
               <Button
                 type="button"
@@ -791,7 +823,9 @@ export function OnboardingWizard({ hasStoreMembership, activeStoreType }: Wizard
                 onClick={confirmCancelOnboarding}
                 disabled={isCancelling}
               >
-                {isCancelling ? "กำลังออก..." : "ยืนยันยกเลิก"}
+                {isCancelling
+                  ? t(uiLocale, "onboarding.cancel.confirm.cancelling")
+                  : t(uiLocale, "onboarding.cancel.confirm.confirm")}
               </Button>
             </div>
           </div>

@@ -11,8 +11,8 @@ import { createOrderSchema } from "@/lib/orders/validation";
 import {
   generateOrderNo,
   getOrderCatalogForStore,
-  type OrderListTab,
   listOrdersByTab,
+  parseOrderListTab,
 } from "@/lib/orders/queries";
 import { buildAuditEventValues, safeLogAuditEvent } from "@/server/services/audit.service";
 import { invalidateDashboardSummaryCache } from "@/server/services/dashboard.service";
@@ -37,11 +37,7 @@ export async function GET(request: Request) {
     const { storeId } = await enforcePermission("orders.view");
 
     const { searchParams } = new URL(request.url);
-    const tabParam = searchParams.get("tab") ?? "ALL";
-    const tab: OrderListTab =
-      tabParam === "PENDING_PAYMENT" || tabParam === "PAID" || tabParam === "SHIPPED"
-        ? tabParam
-        : "ALL";
+    const tab = parseOrderListTab(searchParams.get("tab"));
     const pageParam = Number(searchParams.get("page") ?? "1");
     const pageSizeParam = Number(searchParams.get("pageSize") ?? "20");
 

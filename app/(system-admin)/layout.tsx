@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { getSession } from "@/lib/auth/session";
 import { getUserSystemRole } from "@/lib/auth/system-admin";
+import { t } from "@/lib/i18n/messages";
 import { SystemAdminBottomNav } from "@/components/system-admin/system-admin-bottom-nav";
 import { SystemAdminLogoutButton } from "@/components/system-admin/system-admin-logout-button";
 import { MenuBackButton } from "@/components/ui/menu-back-button";
@@ -19,6 +20,7 @@ export default async function SystemAdminLayout({
   if (systemRole !== "SYSTEM_ADMIN") {
     redirect("/");
   }
+  const uiLocale = session.uiLocale;
 
   return (
     <div className="mx-auto flex min-h-dvh w-full flex-col bg-slate-50 min-[1200px]:max-w-[var(--app-shell-max-width-desktop)] min-[1200px]:border-x min-[1200px]:shadow-sm">
@@ -34,8 +36,10 @@ export default async function SystemAdminLayout({
             <SystemAdminLogoutButton />
           </div>
           <div className="space-y-0.5">
-            <p className="text-xs text-muted-foreground">POS System Admin</p>
-            <p className="text-base font-semibold tracking-tight">ศูนย์จัดการระบบกลาง</p>
+            <p className="text-xs text-muted-foreground">{t(uiLocale, "systemAdmin.layout.eyebrow")}</p>
+            <p className="text-base font-semibold tracking-tight">
+              {t(uiLocale, "systemAdmin.layout.title")}
+            </p>
           </div>
         </div>
       </header>

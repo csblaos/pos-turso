@@ -49,6 +49,7 @@ export default async function DashboardPage() {
 
     const uiLocale = session.uiLocale ?? DEFAULT_UI_LOCALE;
     const canView = isPermissionGranted(permissionKeys, "dashboard.view");
+    const canViewOrders = isPermissionGranted(permissionKeys, "orders.view");
     const canViewInventory = isPermissionGranted(permissionKeys, "inventory.view");
     const canViewReports = isPermissionGranted(permissionKeys, "reports.view");
 
@@ -82,6 +83,7 @@ export default async function DashboardPage() {
         storeType={session.activeStoreType}
         session={session}
         dashboardDataPromise={dashboardDataPromise}
+        canViewOrders={canViewOrders}
         canViewInventory={canViewInventory}
         canViewReports={canViewReports}
       />

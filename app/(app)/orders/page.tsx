@@ -10,7 +10,75 @@ import {
   getUserPermissionsForCurrentSession,
   isPermissionGranted,
 } from "@/lib/rbac/access";
-import { getOrderCatalogForStore, type OrderListTab, listOrdersByTab } from "@/lib/orders/queries";
+import {
+  getOrderCatalogForStore,
+  type OrderListTab,
+  listOrdersByTab,
+  parseOrderListTab,
+} from "@/lib/orders/queries";
+
+const resolveDefaultOrdersTab = (params: {
+  activeRoleName: string | null;
+  canMarkPaid: boolean;
+  canPack: boolean;
+  canShip: boolean;
+}): OrderListTab => {
+  const roleName = params.activeRoleName?.trim().toLowerCase() ?? "";
+
+  if (roleName === "owner" || roleName === "manager") {
+    return "ALL";
+  }
+
+  if (
+    roleName.includes("warehouse") ||
+    roleName.includes("pack") ||
+    roleName.includes("picker") ||
+    roleName.includes("stock")
+  ) {
+    if (params.canPack) {
+      return "TO_PACK";
+    }
+    if (params.canShip) {
+      return "TO_SHIP";
+    }
+  }
+
+  if (
+    roleName.includes("ship") ||
+    roleName.includes("delivery") ||
+    roleName.includes("logistic")
+  ) {
+    if (params.canShip) {
+      return "TO_SHIP";
+    }
+  }
+
+  if (
+    roleName.includes("cash") ||
+    roleName.includes("sale") ||
+    roleName.includes("payment") ||
+    roleName.includes("front")
+  ) {
+    if (params.canMarkPaid) {
+      return "PAYMENT_REVIEW";
+    }
+  }
+
+  if (params.canMarkPaid && !params.canPack) {
+    return "PAYMENT_REVIEW";
+  }
+  if (params.canPack && !params.canMarkPaid) {
+    return "TO_PACK";
+  }
+  if (params.canShip && !params.canMarkPaid && !params.canPack) {
+    return "TO_SHIP";
+  }
+  if (params.canPack && params.canShip && !params.canMarkPaid) {
+    return "TO_PACK";
+  }
+
+  return "ALL";
+};
 
 export default async function OrdersPage({
   searchParams,
@@ -49,19 +117,25 @@ export default async function OrdersPage({
       },
     );
 
-    const tabParam = params.tab ?? "ALL";
-    const tab: OrderListTab =
-      tabParam === "PENDING_PAYMENT" || tabParam === "PAID" || tabParam === "SHIPPED"
-        ? tabParam
-        : "ALL";
+    const tab = parseOrderListTab(params.tab);
     const pageParam = Number(params.page ?? "1");
     const page = Number.isFinite(pageParam) ? pageParam : 1;
 
     const canView = isPermissionGranted(permissionKeys, "orders.view");
     const canCreate = isPermissionGranted(permissionKeys, "orders.create");
+    const canUpdate = isPermissionGranted(permissionKeys, "orders.update");
     const canMarkPaid = isPermissionGranted(permissionKeys, "orders.mark_paid");
+    const canPack = isPermissionGranted(permissionKeys, "orders.pack");
+    const canShip = isPermissionGranted(permissionKeys, "orders.ship");
+    const canCodReturn = isPermissionGranted(permissionKeys, "orders.cod_return");
+    const defaultTab = resolveDefaultOrdersTab({
+      activeRoleName: session.activeRoleName,
+      canMarkPaid,
+      canPack,
+      canShip,
+    });
     const canRequestCancel =
-      isPermissionGranted(permissionKeys, "orders.update") ||
+      canUpdate ||
       isPermissionGranted(permissionKeys, "orders.cancel") ||
       isPermissionGranted(permissionKeys, "orders.delete");
     const canSelfApproveCancel =
@@ -74,6 +148,10 @@ export default async function OrdersPage({
           <p className="text-sm text-red-600">{t(uiLocale, "orders.page.noAccess")}</p>
         </section>
       );
+    }
+
+    if (!params.tab && defaultTab !== "ALL") {
+      redirect(`/orders?tab=${defaultTab}`);
     }
 
     const [catalog, ordersPage] = await Promise.all([
@@ -105,6 +183,11 @@ export default async function OrdersPage({
           activeTab={tab}
           catalog={catalog}
           canCreate={canCreate}
+          canUpdate={canUpdate}
+          canMarkPaid={canMarkPaid}
+          canPack={canPack}
+          canShip={canShip}
+          canCodReturn={canCodReturn}
           canRequestCancel={canRequestCancel}
           canSelfApproveCancel={canSelfApproveCancel}
         />

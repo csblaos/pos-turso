@@ -4,6 +4,8 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { authFetch } from "@/lib/auth/client-token";
+import { t } from "@/lib/i18n/messages";
+import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 
 type SystemStoreLogoPolicyConfigProps = {
   initialConfig: {
@@ -14,6 +16,7 @@ type SystemStoreLogoPolicyConfigProps = {
 };
 
 export function SystemStoreLogoPolicyConfig({ initialConfig }: SystemStoreLogoPolicyConfigProps) {
+  const uiLocale = useUiLocale();
   const [maxSizeMb, setMaxSizeMb] = useState(String(initialConfig.maxSizeMb));
   const [autoResize, setAutoResize] = useState(initialConfig.autoResize);
   const [resizeMaxWidth, setResizeMaxWidth] = useState(String(initialConfig.resizeMaxWidth));
@@ -26,7 +29,7 @@ export function SystemStoreLogoPolicyConfig({ initialConfig }: SystemStoreLogoPo
     const parsedResizeMaxWidth = Number(resizeMaxWidth);
 
     if (!Number.isInteger(parsedMaxSizeMb) || parsedMaxSizeMb < 1 || parsedMaxSizeMb > 20) {
-      setErrorMessage("ขนาดไฟล์สูงสุดต้องเป็นตัวเลข 1-20 MB");
+      setErrorMessage(t(uiLocale, "systemAdmin.storeLogoPolicy.error.invalidMaxSize"));
       setSuccessMessage(null);
       return;
     }
@@ -36,7 +39,7 @@ export function SystemStoreLogoPolicyConfig({ initialConfig }: SystemStoreLogoPo
       parsedResizeMaxWidth < 256 ||
       parsedResizeMaxWidth > 4096
     ) {
-      setErrorMessage("ขนาดกว้างสำหรับ Resize ต้องเป็นตัวเลข 256-4096 px");
+      setErrorMessage(t(uiLocale, "systemAdmin.storeLogoPolicy.error.invalidResizeMaxWidth"));
       setSuccessMessage(null);
       return;
     }
@@ -69,7 +72,7 @@ export function SystemStoreLogoPolicyConfig({ initialConfig }: SystemStoreLogoPo
       | null;
 
     if (!response.ok) {
-      setErrorMessage(data?.message ?? "บันทึก Store Logo Policy ไม่สำเร็จ");
+      setErrorMessage(data?.message ?? t(uiLocale, "systemAdmin.storeLogoPolicy.error.saveFailed"));
       setIsSubmitting(false);
       return;
     }
@@ -80,20 +83,20 @@ export function SystemStoreLogoPolicyConfig({ initialConfig }: SystemStoreLogoPo
       setResizeMaxWidth(String(data.config.resizeMaxWidth));
     }
 
-    setSuccessMessage("บันทึก Store Logo Policy แล้ว");
+    setSuccessMessage(t(uiLocale, "systemAdmin.storeLogoPolicy.message.saved"));
     setIsSubmitting(false);
   };
 
   return (
     <article className="space-y-3 rounded-xl border bg-white p-4">
-      <h2 className="text-sm font-semibold">Store Logo Upload Policy</h2>
+      <h2 className="text-sm font-semibold">{t(uiLocale, "systemAdmin.storeLogoPolicy.title")}</h2>
       <p className="text-sm text-muted-foreground">
-        จำกัดขนาดไฟล์ และตั้งค่า Resize อัตโนมัติก่อนอัปโหลดไป R2 เพื่อลดต้นทุนจัดเก็บ
+        {t(uiLocale, "systemAdmin.storeLogoPolicy.description")}
       </p>
 
       <div className="space-y-2">
         <label className="text-xs text-muted-foreground" htmlFor="global-store-logo-max-size">
-          ขนาดไฟล์สูงสุด (MB)
+          {t(uiLocale, "systemAdmin.storeLogoPolicy.field.maxSizeMb")}
         </label>
         <input
           id="global-store-logo-max-size"
@@ -108,7 +111,7 @@ export function SystemStoreLogoPolicyConfig({ initialConfig }: SystemStoreLogoPo
       </div>
 
       <label className="flex items-center justify-between gap-2 rounded-md border p-3 text-sm">
-        <span>เปิด Resize โลโก้อัตโนมัติ</span>
+        <span>{t(uiLocale, "systemAdmin.storeLogoPolicy.field.autoResize")}</span>
         <input
           type="checkbox"
           checked={autoResize}
@@ -119,7 +122,7 @@ export function SystemStoreLogoPolicyConfig({ initialConfig }: SystemStoreLogoPo
 
       <div className="space-y-2">
         <label className="text-xs text-muted-foreground" htmlFor="global-store-logo-resize-width">
-          ความกว้างสูงสุดหลัง Resize (px)
+          {t(uiLocale, "systemAdmin.storeLogoPolicy.field.resizeMaxWidth")}
         </label>
         <input
           id="global-store-logo-resize-width"
@@ -134,11 +137,13 @@ export function SystemStoreLogoPolicyConfig({ initialConfig }: SystemStoreLogoPo
       </div>
 
       <p className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700">
-        คำแนะนำ: เปิด Resize และตั้ง 1024-1280px จะช่วยลดขนาดไฟล์และค่า R2 ได้มาก โดยยังคมชัดพอสำหรับโลโก้
+        {t(uiLocale, "systemAdmin.storeLogoPolicy.hint.recommended")}
       </p>
 
       <Button className="h-10 w-full" onClick={save} disabled={isSubmitting}>
-        {isSubmitting ? "กำลังบันทึก..." : "บันทึก Store Logo Policy"}
+        {isSubmitting
+          ? t(uiLocale, "systemAdmin.storeLogoPolicy.action.saving")
+          : t(uiLocale, "systemAdmin.storeLogoPolicy.action.save")}
       </Button>
 
       {successMessage ? <p className="text-sm text-emerald-700">{successMessage}</p> : null}

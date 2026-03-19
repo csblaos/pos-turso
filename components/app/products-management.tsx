@@ -361,6 +361,7 @@ export function ProductsManagement({
   const [costDraft, setCostDraft] = useState(0);
   const [costReasonDraft, setCostReasonDraft] = useState("");
   const [showDetailImagePreview, setShowDetailImagePreview] = useState(false);
+  const [barcodePrintLoadingId, setBarcodePrintLoadingId] = useState<string | null>(null);
   const detailContentRef = useRef<HTMLDivElement>(null);
   const [detailContentHeight, setDetailContentHeight] = useState<number | null>(null);
 
@@ -2377,10 +2378,33 @@ export function ProductsManagement({
     }
   };
 
+  const buildBarcodePrintMarkup = useCallback(
+    (product: ProductListItem) => {
+      if (!product.barcode) {
+        return "";
+      }
+
+      const safeName = escapeHtml(product.name);
+      const safePrice = escapeHtml(fmtPrice(product.priceBase, currency, numberLocale));
+      const safeBarcode = escapeHtml(product.barcode);
+
+      return `
+        <section class="print-page print-barcode-page">
+          <div class="print-barcode-label">
+            <div class="print-barcode-name">${safeName}</div>
+            <svg class="print-barcode-svg" data-barcode-value="${safeBarcode}"></svg>
+            <div class="print-barcode-price">${safePrice}</div>
+          </div>
+        </section>
+      `;
+    },
+    [currency, numberLocale],
+  );
+
   /* ── Print barcode label ── */
   const printBarcodeLabel = useCallback(
-    (product: ProductListItem) => {
-      if (!product.barcode) return;
+    async (product: ProductListItem) => {
+      if (!product.barcode || typeof window === "undefined") return;
 
       const barcodeFormat =
         product.barcode.length === 13
@@ -2388,77 +2412,167 @@ export function ProductsManagement({
           : product.barcode.length === 8
             ? "EAN8"
             : "CODE128";
-      const safeName = escapeHtml(product.name);
-      const safePrice = escapeHtml(fmtPrice(product.priceBase, currency, numberLocale));
-      const safeTitle = escapeHtml(
-        `${t(uiLocale, "products.barcode.print.windowTitle.prefix")} ${product.name}`,
-      );
-      const barcodeValueJson = JSON.stringify(product.barcode);
-      const barcodeFormatJson = JSON.stringify(barcodeFormat);
+      const printRootId = "product-detail-inline-print-root";
+      const printStyleId = "product-detail-inline-print-style";
 
-      const printWindow = window.open("", "_blank", "width=420,height=320");
-      if (!printWindow) {
-        toast.error(t(uiLocale, "products.barcode.error.popupBlocked"));
+      setBarcodePrintLoadingId(product.id);
+      document.getElementById(printRootId)?.remove();
+      document.getElementById(printStyleId)?.remove();
+
+      const printRoot = document.createElement("div");
+      printRoot.id = printRootId;
+      printRoot.setAttribute("aria-hidden", "true");
+      printRoot.innerHTML = buildBarcodePrintMarkup(product);
+
+      const barcodeSvg = printRoot.querySelector(".print-barcode-svg") as SVGElement | null;
+      if (!barcodeSvg) {
+        setBarcodePrintLoadingId(null);
+        toast.error(t(uiLocale, "products.barcode.error.printFailed"));
         return;
       }
 
-      printWindow.document.write(`<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <title>${safeTitle}</title>
-  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3/dist/JsBarcode.all.min.js"><\/script>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    @page { size: 50mm 30mm; margin: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
-    .label {
-      width: 50mm; height: 30mm;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      padding: 1mm 2mm;
-      page-break-after: always;
-    }
-    .product-name {
-      font-size: 7pt; font-weight: 600;
-      text-align: center; margin-bottom: 1mm;
-      max-width: 46mm; overflow: hidden;
-      white-space: nowrap; text-overflow: ellipsis;
-    }
-    .price {
-      font-size: 8pt; font-weight: 700;
-      margin-top: 0.5mm;
-    }
-    svg { max-width: 44mm; height: auto; }
-    @media print {
-      body { -webkit-print-color-adjust: exact; }
-    }
-  </style>
-</head>
-<body>
-  <div class="label">
-    <div class="product-name">${safeName}</div>
-    <svg id="barcode"></svg>
-    <div class="price">${safePrice}</div>
-  </div>
-  <script>
-    JsBarcode("#barcode", ${barcodeValueJson}, {
-      format: ${barcodeFormatJson},
-      width: 1.5,
-      height: 30,
-      fontSize: 10,
-      margin: 0,
-      displayValue: true,
-    });
-    window.onload = function() {
-      setTimeout(function() { window.print(); }, 300);
-    };
-  <\/script>
-</body>
-</html>`);
-      printWindow.document.close();
+      const printStyle = document.createElement("style");
+      printStyle.id = printStyleId;
+      printStyle.textContent = `
+        @media screen {
+          #${printRootId} {
+            display: none !important;
+          }
+        }
+        @media print {
+          @page {
+            size: 50mm 30mm;
+            margin: 0;
+          }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+          }
+          body > *:not(#${printRootId}) {
+            display: none !important;
+          }
+          #${printRootId} {
+            display: block !important;
+          }
+          #${printRootId} .print-page {
+            color: #000000;
+            font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          }
+          #${printRootId} .print-barcode-page {
+            width: 50mm;
+            margin: 0 auto;
+            padding: 0;
+          }
+          #${printRootId} .print-barcode-label {
+            width: 50mm;
+            height: 30mm;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 1mm 2mm;
+            overflow: hidden;
+          }
+          #${printRootId} .print-barcode-name {
+            max-width: 46mm;
+            margin-bottom: 1mm;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            text-align: center;
+            font-size: 7pt;
+            font-weight: 600;
+          }
+          #${printRootId} .print-barcode-svg {
+            max-width: 44mm;
+            height: auto;
+          }
+          #${printRootId} .print-barcode-price {
+            margin-top: 0.5mm;
+            font-size: 8pt;
+            font-weight: 700;
+          }
+        }
+      `;
+
+      document.head.appendChild(printStyle);
+      document.body.appendChild(printRoot);
+
+      try {
+        const { default: JsBarcode } = await import("jsbarcode");
+        const formatsToTry = barcodeFormat === "CODE128" ? ["CODE128"] : [barcodeFormat, "CODE128"];
+        let rendered = false;
+
+        for (const format of formatsToTry) {
+          try {
+            JsBarcode(barcodeSvg, product.barcode, {
+              format,
+              width: 1.5,
+              height: 30,
+              fontSize: 10,
+              margin: 0,
+              displayValue: true,
+            });
+            rendered = true;
+            break;
+          } catch {
+            barcodeSvg.innerHTML = "";
+          }
+        }
+
+        if (!rendered) {
+          throw new Error("BARCODE_RENDER_FAILED");
+        }
+      } catch {
+        printRoot.remove();
+        printStyle.remove();
+        setBarcodePrintLoadingId(null);
+        toast.error(t(uiLocale, "products.barcode.error.printFailed"));
+        return;
+      }
+
+      const cleanup = () => {
+        printRoot.remove();
+        printStyle.remove();
+      };
+
+      let settled = false;
+      const settleLoading = () => {
+        if (settled) return;
+        settled = true;
+        setBarcodePrintLoadingId(null);
+      };
+
+      const handleAfterPrint = () => {
+        settleLoading();
+        cleanup();
+      };
+      window.addEventListener("afterprint", handleAfterPrint, { once: true });
+
+      window.setTimeout(() => {
+        settleLoading();
+      }, 1200);
+
+      window.setTimeout(() => {
+        cleanup();
+      }, 20000);
+
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          try {
+            window.focus();
+            window.print();
+          } catch {
+            window.removeEventListener("afterprint", handleAfterPrint);
+            settleLoading();
+            cleanup();
+            toast.error(t(uiLocale, "products.barcode.error.printFailed"));
+          }
+        });
+      });
     },
-    [currency, numberLocale, uiLocale],
+    [buildBarcodePrintMarkup, uiLocale],
   );
 
   /* ── Open scanner with context ── */
@@ -4184,9 +4298,12 @@ export function ProductsManagement({
                   variant="outline"
                   className="h-9 w-full rounded-lg text-xs"
                   onClick={() => printBarcodeLabel(detailProduct)}
+                  disabled={barcodePrintLoadingId === detailProduct.id}
                 >
                   <Printer className="mr-1.5 h-3.5 w-3.5" />
-                  {t(uiLocale, "products.detail.action.printBarcode")}
+                  {barcodePrintLoadingId === detailProduct.id
+                    ? t(uiLocale, "products.detail.action.printBarcode.loading")
+                    : t(uiLocale, "products.detail.action.printBarcode")}
                 </Button>
               )}
             </div>

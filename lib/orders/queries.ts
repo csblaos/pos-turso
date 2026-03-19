@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 
 import { db } from "@/lib/db/client";
@@ -26,7 +26,23 @@ import { getGlobalPaymentPolicy } from "@/lib/system-config/policy";
 
 export const PAID_LIKE_STATUSES = ["PAID", "PACKED", "SHIPPED"] as const;
 
-export type OrderListTab = "ALL" | "PENDING_PAYMENT" | "PAID" | "SHIPPED";
+export const ORDER_LIST_TABS = [
+  "ALL",
+  "PAYMENT_REVIEW",
+  "TO_PACK",
+  "TO_SHIP",
+  "PICKUP_READY",
+  "COD_RECONCILE",
+] as const;
+
+export type OrderListTab = (typeof ORDER_LIST_TABS)[number];
+export type OrderListQueueCounts = Record<OrderListTab, number>;
+
+export const isOrderListTab = (value: string | null | undefined): value is OrderListTab =>
+  typeof value === "string" && ORDER_LIST_TABS.includes(value as OrderListTab);
+
+export const parseOrderListTab = (value: string | null | undefined): OrderListTab =>
+  isOrderListTab(value) ? value : "ALL";
 
 export type OrderListItem = {
   id: string;
@@ -52,6 +68,9 @@ export type OrderListItem = {
   customerName: string | null;
   contactDisplayName: string | null;
   total: number;
+  shippingCost: number;
+  codFee: number;
+  codReturnNote: string | null;
   paymentCurrency: "LAK" | "THB" | "USD";
   paymentMethod: "CASH" | "LAO_QR" | "ON_CREDIT" | "COD" | "BANK_TRANSFER";
   createdAt: string;
@@ -278,6 +297,7 @@ export type PaginatedOrderList = {
   pageSize: number;
   pageCount: number;
   tab: OrderListTab;
+  queueCounts: OrderListQueueCounts;
 };
 
 export type CodReconcileItem = {
@@ -290,8 +310,10 @@ export type CodReconcileItem = {
   shippingCarrier: string | null;
   expectedCodAmount: number;
   total: number;
+  shippingCost: number;
   codAmount: number;
   codFee: number;
+  codReturnNote: string | null;
 };
 
 export type PaginatedCodReconcileList = {
@@ -302,24 +324,55 @@ export type PaginatedCodReconcileList = {
   pageCount: number;
 };
 
-const listFilter = (tab: OrderListTab) => {
-  if (tab === "PENDING_PAYMENT") {
-    return inArray(orders.status, [
-      "PENDING_PAYMENT",
-      "READY_FOR_PICKUP",
-      "PICKED_UP_PENDING_PAYMENT",
-    ]);
+const buildOrderListWhere = (storeId: string, tab: OrderListTab) => {
+  if (tab === "PAYMENT_REVIEW") {
+    return and(
+      eq(orders.storeId, storeId),
+      ne(orders.paymentMethod, "COD"),
+      inArray(orders.status, [
+        "PENDING_PAYMENT",
+        "READY_FOR_PICKUP",
+        "PICKED_UP_PENDING_PAYMENT",
+      ]),
+    );
   }
 
-  if (tab === "PAID") {
-    return inArray(orders.status, ["PAID", "PACKED"]);
+  if (tab === "TO_PACK") {
+    return and(
+      eq(orders.storeId, storeId),
+      or(
+        and(eq(orders.status, "PAID"), ne(orders.channel, "WALK_IN")),
+        and(
+          eq(orders.paymentMethod, "COD"),
+          eq(orders.status, "PENDING_PAYMENT"),
+          eq(orders.paymentStatus, "COD_PENDING_SETTLEMENT"),
+        ),
+      ),
+    );
   }
 
-  if (tab === "SHIPPED") {
-    return inArray(orders.status, ["SHIPPED", "COD_RETURNED"]);
+  if (tab === "TO_SHIP") {
+    return and(eq(orders.storeId, storeId), eq(orders.status, "PACKED"));
   }
 
-  return undefined;
+  if (tab === "PICKUP_READY") {
+    return and(
+      eq(orders.storeId, storeId),
+      eq(orders.status, "READY_FOR_PICKUP"),
+      inArray(orders.paymentStatus, ["PAID", "COD_SETTLED"]),
+    );
+  }
+
+  if (tab === "COD_RECONCILE") {
+    return and(
+      eq(orders.storeId, storeId),
+      eq(orders.paymentMethod, "COD"),
+      eq(orders.status, "SHIPPED"),
+      eq(orders.paymentStatus, "COD_PENDING_SETTLEMENT"),
+    );
+  }
+
+  return eq(orders.storeId, storeId);
 };
 
 export async function listOrdersByTab(
@@ -327,19 +380,24 @@ export async function listOrdersByTab(
   tab: OrderListTab,
   options?: { page?: number; pageSize?: number },
 ): Promise<PaginatedOrderList> {
-  const whereCondition = listFilter(tab);
   const pageSize = Math.max(1, Math.min(options?.pageSize ?? 20, 100));
   const page = Math.max(1, options?.page ?? 1);
   const offset = (page - 1) * pageSize;
-  const scopedWhere = whereCondition
-    ? and(eq(orders.storeId, storeId), whereCondition)
-    : eq(orders.storeId, storeId);
+  const scopedWhere = buildOrderListWhere(storeId, tab);
 
   let rows: OrderListItem[] = [];
   let countRows: Array<{ value: number }> = [];
+  let queueCounts: OrderListQueueCounts = {
+    ALL: 0,
+    PAYMENT_REVIEW: 0,
+    TO_PACK: 0,
+    TO_SHIP: 0,
+    PICKUP_READY: 0,
+    COD_RECONCILE: 0,
+  };
 
   try {
-    [rows, countRows] = await Promise.all([
+    const [queryRows, queryCountRows, queueCountEntries] = await Promise.all([
       timeDbQuery("orders.list.rows", async () =>
         db
           .select({
@@ -351,6 +409,9 @@ export async function listOrdersByTab(
             customerName: orders.customerName,
             contactDisplayName: contacts.displayName,
             total: orders.total,
+            shippingCost: orders.shippingCost,
+            codFee: orders.codFee,
+            codReturnNote: orders.codReturnNote,
             paymentCurrency: orders.paymentCurrency,
             paymentMethod: orders.paymentMethod,
             createdAt: orders.createdAt,
@@ -370,9 +431,23 @@ export async function listOrdersByTab(
           .from(orders)
           .where(scopedWhere),
       ),
+      Promise.all(
+        ORDER_LIST_TABS.map(async (queueTab) => {
+          const [row] = await timeDbQuery(`orders.list.count.${queueTab.toLowerCase()}`, async () =>
+            db
+              .select({ value: sql<number>`count(*)` })
+              .from(orders)
+              .where(buildOrderListWhere(storeId, queueTab)),
+          );
+          return [queueTab, Number(row?.value ?? 0)] as const;
+        }),
+      ),
     ]);
+    rows = queryRows;
+    countRows = queryCountRows;
+    queueCounts = Object.fromEntries(queueCountEntries) as OrderListQueueCounts;
   } catch {
-    const [legacyRows, legacyCountRows] = await Promise.all([
+    const [legacyRows, legacyCountRows, legacyAllCountRows] = await Promise.all([
       timeDbQuery("orders.list.rows.legacy", async () =>
         db
           .select({
@@ -403,6 +478,12 @@ export async function listOrdersByTab(
           .from(orders)
           .where(scopedWhere),
       ),
+      timeDbQuery("orders.list.count.legacy.all", async () =>
+        db
+          .select({ value: sql<number>`count(*)` })
+          .from(orders)
+          .where(eq(orders.storeId, storeId)),
+      ),
     ]);
 
     rows = legacyRows.map((row) => ({
@@ -411,16 +492,28 @@ export async function listOrdersByTab(
       channel: row.channel,
       status: row.status,
       paymentStatus: row.paymentStatus,
-      customerName: row.customerName,
-      contactDisplayName: row.contactDisplayName,
-      total: row.total,
-      paymentCurrency: parseStoreCurrency(row.storeCurrency),
-      paymentMethod: "CASH",
+            customerName: row.customerName,
+            contactDisplayName: row.contactDisplayName,
+            total: row.total,
+            shippingCost: 0,
+            codFee: 0,
+            codReturnNote: null,
+            paymentCurrency: parseStoreCurrency(row.storeCurrency),
+            paymentMethod: "CASH",
       createdAt: row.createdAt,
       paidAt: row.paidAt,
       shippedAt: row.shippedAt,
     }));
     countRows = legacyCountRows;
+    const totalAll = Number(legacyAllCountRows[0]?.value ?? 0);
+    queueCounts = {
+      ALL: tab === "ALL" ? Number(legacyCountRows[0]?.value ?? 0) : totalAll,
+      PAYMENT_REVIEW: tab === "PAYMENT_REVIEW" ? Number(legacyCountRows[0]?.value ?? 0) : 0,
+      TO_PACK: tab === "TO_PACK" ? Number(legacyCountRows[0]?.value ?? 0) : 0,
+      TO_SHIP: tab === "TO_SHIP" ? Number(legacyCountRows[0]?.value ?? 0) : 0,
+      PICKUP_READY: tab === "PICKUP_READY" ? Number(legacyCountRows[0]?.value ?? 0) : 0,
+      COD_RECONCILE: tab === "COD_RECONCILE" ? Number(legacyCountRows[0]?.value ?? 0) : 0,
+    };
   }
 
   const total = Number(countRows[0]?.value ?? 0);
@@ -433,6 +526,7 @@ export async function listOrdersByTab(
     pageSize,
     pageCount,
     tab,
+    queueCounts,
   };
 }
 
@@ -509,8 +603,10 @@ export async function listPendingCodReconcile(
             else ${orders.total}
           end`,
           total: orders.total,
+          shippingCost: orders.shippingCost,
           codAmount: orders.codAmount,
           codFee: orders.codFee,
+          codReturnNote: orders.codReturnNote,
         })
         .from(orders)
         .leftJoin(contacts, eq(orders.contactId, contacts.id))

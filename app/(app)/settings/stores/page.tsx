@@ -38,6 +38,7 @@ export default async function SettingsStoresPage() {
         memberships={memberships}
         activeStoreId={activeStoreId}
         activeBranchId={session.activeBranchId}
+        uiLocale={uiLocale}
         isSuperadmin={isSuperadmin}
         canCreateStore={false}
         createStoreBlockedReason={null}

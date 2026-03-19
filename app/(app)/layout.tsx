@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { AppTopNav } from "@/components/app/app-top-nav";
 import { BottomTabNav } from "@/components/app/bottom-tab-nav";
 import { getSession } from "@/lib/auth/session";
+import { listActiveMemberships } from "@/lib/auth/session-db";
 import { getUserSystemRole } from "@/lib/auth/system-admin";
 import { db } from "@/lib/db/client";
 import { stores } from "@/lib/db/schema";
@@ -32,7 +33,7 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  const [permissionKeys, activeStoreProfile] = await Promise.all([
+  const [permissionKeys, activeStoreProfile, memberships] = await Promise.all([
     getUserPermissionsForCurrentSession(),
     db
       .select({
@@ -43,6 +44,7 @@ export default async function AppLayout({
       .where(eq(stores.id, session.activeStoreId))
       .limit(1)
       .then((rows) => rows[0] ?? null),
+    listActiveMemberships(session.userId),
   ]);
   const activeStoreType = normalizeStoreType(session.activeStoreType);
   const layoutPreset = getStorefrontLayoutPreset(activeStoreType);
@@ -57,10 +59,14 @@ export default async function AppLayout({
         className={`sticky top-0 z-10 border-b px-4 py-3 backdrop-blur md:px-6 min-[1200px]:px-8 ${layoutPreset.headerBgClassName}`}
       >
         <AppTopNav
+          activeStoreId={session.activeStoreId}
           activeStoreName={activeStoreName}
           activeStoreLogoUrl={activeStoreProfile?.logoUrl ?? null}
+          activeBranchId={session.activeBranchId}
           activeBranchName={session.activeBranchName}
           shellTitle={t(uiLocale, layoutPreset.shellTitleKey)}
+          memberships={memberships}
+          isSuperadmin={systemRole === "SUPERADMIN"}
           uiLocale={uiLocale}
           canViewNotifications={
             permissionKeys.includes("*") || permissionKeys.includes("settings.view")

@@ -20,9 +20,16 @@ import { listActiveMemberships } from "@/lib/auth/session-db";
 import { db } from "@/lib/db/client";
 import { fbConnections, storeBranches, storeMembers, stores, waConnections } from "@/lib/db/schema";
 import { uiLocaleToDateLocale } from "@/lib/i18n/locales";
-import { t } from "@/lib/i18n/messages";
+import { t, type MessageKey } from "@/lib/i18n/messages";
 
 const toNumber = (value: unknown) => Number(value ?? 0);
+
+const storeTypeLabelKeyMap = {
+  ONLINE_RETAIL: "onboarding.storeType.online.title",
+  RESTAURANT: "onboarding.storeType.restaurant.title",
+  CAFE: "onboarding.storeType.cafe.title",
+  OTHER: "onboarding.storeType.other.title",
+} as const satisfies Record<string, MessageKey>;
 
 export default async function SettingsSuperadminStoresPage() {
   const session = await getSession();
@@ -197,7 +204,8 @@ export default async function SettingsSuperadminStoresPage() {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-slate-900">{row.name}</p>
                     <p className="truncate text-xs text-slate-500">
-                      {row.storeType} • {t(uiLocale, "superadmin.governance.row.branchesLabel")}{" "}
+                      {t(uiLocale, storeTypeLabelKeyMap[row.storeType])} •{" "}
+                      {t(uiLocale, "superadmin.governance.row.branchesLabel")}{" "}
                       {row.branchCount.toLocaleString(numberLocale)} •{" "}
                       {t(uiLocale, "superadmin.governance.row.activeLabel")}{" "}
                       {row.active.toLocaleString(numberLocale)} •{" "}

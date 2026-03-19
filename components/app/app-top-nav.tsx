@@ -6,17 +6,30 @@ import { usePathname, useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { Bell, Maximize2, Minimize2, RefreshCw } from "lucide-react";
 
+import { StoresManagement } from "@/components/app/stores-management";
 import { MenuBackButton } from "@/components/ui/menu-back-button";
+import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch } from "@/lib/auth/client-token";
 import { type UiLocale, uiLocaleToDateLocale } from "@/lib/i18n/locales";
 import { t } from "@/lib/i18n/messages";
 
+type StoreMembershipItem = {
+  storeId: string;
+  storeName: string;
+  storeType: "ONLINE_RETAIL" | "RESTAURANT" | "CAFE" | "OTHER";
+  roleName: string;
+};
+
 type AppTopNavProps = {
+  activeStoreId: string;
   activeStoreName: string;
   activeStoreLogoUrl: string | null;
+  activeBranchId: string | null;
   activeBranchName: string | null;
   shellTitle: string;
   canViewNotifications: boolean;
+  memberships: StoreMembershipItem[];
+  isSuperadmin: boolean;
   uiLocale: UiLocale;
 };
 
@@ -121,11 +134,15 @@ function formatShortDateTime(value: string | null, uiLocale: UiLocale): string {
 }
 
 export function AppTopNav({
+  activeStoreId,
   activeStoreName,
   activeStoreLogoUrl,
+  activeBranchId,
   activeBranchName,
   shellTitle,
   canViewNotifications,
+  memberships,
+  isSuperadmin,
   uiLocale,
 }: AppTopNavProps) {
   const pathname = usePathname();
@@ -143,6 +160,7 @@ export function AppTopNav({
   const [notificationError, setNotificationError] = useState<string | null>(null);
   const [markingReadId, setMarkingReadId] = useState<string | null>(null);
   const [isClientReady, setIsClientReady] = useState(false);
+  const [isStoreSwitcherOpen, setIsStoreSwitcherOpen] = useState(false);
   const notificationBoxRef = useRef<HTMLDivElement | null>(null);
   const notificationPanelRef = useRef<HTMLDivElement | null>(null);
 
@@ -233,6 +251,10 @@ export function AppTopNav({
   useEffect(() => {
     setIsClientReady(true);
   }, []);
+
+  useEffect(() => {
+    setIsStoreSwitcherOpen(false);
+  }, [pathname, activeStoreId, activeBranchId]);
 
   const showFullscreenButton =
     canUseFullscreen && (isDesktopViewport || (allowFullscreenOnTouch && isTouchDevice));
@@ -581,15 +603,16 @@ export function AppTopNav({
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {showStoreSwitchButton ? (
-          <Link
-            href="/settings/stores"
-            title="เปลี่ยนร้าน"
-            aria-label="เปลี่ยนร้าน"
+          <button
+            type="button"
+            title={t(uiLocale, "settings.link.switchStore.title")}
+            aria-label={t(uiLocale, "settings.link.switchStore.title")}
+            onClick={() => setIsStoreSwitcherOpen(true)}
             className="inline-flex h-9 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 active:scale-[0.98] xl:px-3"
           >
             <StoreSwitchIcon className="h-3.5 w-3.5" />
-            <span className="hidden xl:inline">เปลี่ยนร้าน</span>
-          </Link>
+            <span className="hidden xl:inline">{t(uiLocale, "settings.link.switchStore.title")}</span>
+          </button>
         ) : null}
         {showNotificationButton ? (
           <div ref={notificationBoxRef} className="relative">
@@ -641,6 +664,26 @@ export function AppTopNav({
           </button>
         ) : null}
       </div>
+      <SlideUpSheet
+        isOpen={isStoreSwitcherOpen}
+        onClose={() => setIsStoreSwitcherOpen(false)}
+        title={t(uiLocale, "settings.link.switchStore.title")}
+        description={t(uiLocale, "settings.link.switchStore.description")}
+        panelMaxWidthClass="min-[1200px]:max-w-3xl"
+        scrollToTopOnOpen
+      >
+        <StoresManagement
+          memberships={memberships}
+          activeStoreId={activeStoreId}
+          activeBranchId={activeBranchId}
+          uiLocale={uiLocale}
+          isSuperadmin={isSuperadmin}
+          canCreateStore={false}
+          createStoreBlockedReason={null}
+          storeQuotaSummary={null}
+          mode="quick"
+        />
+      </SlideUpSheet>
       {mobileNotificationPopover}
     </div>
   );

@@ -27,7 +27,11 @@ import { getSession } from "@/lib/auth/session";
 import { getUserSystemRole } from "@/lib/auth/system-admin";
 import { db } from "@/lib/db/client";
 import { fbConnections, stores, waConnections } from "@/lib/db/schema";
-import { DEFAULT_UI_LOCALE, type UiLocale } from "@/lib/i18n/locales";
+import {
+  DEFAULT_UI_LOCALE,
+  type UiLocale,
+  uiLocaleToDateLocale,
+} from "@/lib/i18n/locales";
 import { type MessageKey, t } from "@/lib/i18n/messages";
 import {
   getUserPermissionsForCurrentSession,
@@ -35,11 +39,11 @@ import {
 } from "@/lib/rbac/access";
 import { buildUserCapabilities } from "@/lib/settings/account-capabilities";
 
-const storeTypeLabels = {
-  ONLINE_RETAIL: "Online POS",
-  RESTAURANT: "Restaurant POS",
-  CAFE: "Cafe POS",
-  OTHER: "Other POS",
+const storeTypeLabelKeys = {
+  ONLINE_RETAIL: "storefront.shellTitle.onlineRetail",
+  RESTAURANT: "storefront.shellTitle.restaurant",
+  CAFE: "storefront.shellTitle.cafe",
+  OTHER: "storefront.shellTitle.other",
 } as const;
 
 type ChannelStatus = "DISCONNECTED" | "CONNECTED" | "ERROR";
@@ -106,6 +110,7 @@ export default async function SettingsPage() {
     getUserPermissionsForCurrentSession(),
   ]);
   const uiLocale = session?.uiLocale ?? DEFAULT_UI_LOCALE;
+  const numberLocale = uiLocaleToDateLocale(uiLocale);
   const systemRole = session ? await getUserSystemRole(session.userId) : "USER";
   const isSuperadmin = systemRole === "SUPERADMIN";
   const canViewSettings = isPermissionGranted(permissionKeys, "settings.view");
@@ -173,15 +178,7 @@ export default async function SettingsPage() {
   const waStatus: ChannelStatus = waConnection?.status ?? "DISCONNECTED";
 
   const formatGrantedCapabilities = (count: number) => {
-    if (uiLocale === "en") {
-      return `${count.toLocaleString("en-US")} items`;
-    }
-
-    if (uiLocale === "lo") {
-      return `ໃຊ້ໄດ້ ${count.toLocaleString("lo-LA")} ລາຍການ`;
-    }
-
-    return `ใช้งานได้ ${count.toLocaleString("th-TH")} รายการ`;
+    return `${t(uiLocale, "settings.link.accountPermissions.descriptionPrefix")} ${count.toLocaleString(numberLocale)} ${t(uiLocale, "settings.link.accountPermissions.descriptionSuffix")}`;
   };
 
   const managementLinks: SettingsLinkItem[] = [
@@ -333,16 +330,19 @@ export default async function SettingsPage() {
     {
       id: "superadmin-stores",
       href: "/settings/superadmin",
-      title: "Superadmin Center",
+      title: t(uiLocale, "settings.superadminHome.title"),
       description: t(uiLocale, "settings.superadminCenter.description"),
       icon: Shield,
       visible: isSuperadmin,
-      badgeText: "SUPERADMIN",
+      badgeText: t(uiLocale, "settings.superadminHome.badge"),
     },
   ];
 
   const storeTypeLabel = storeSummary
-    ? storeTypeLabels[storeSummary.storeType] ?? storeSummary.storeType
+    ? t(
+        uiLocale,
+        storeTypeLabelKeys[storeSummary.storeType] ?? "settings.value.notSpecified",
+      )
     : t(uiLocale, "settings.value.notSpecified");
 
   return (
@@ -414,7 +414,9 @@ export default async function SettingsPage() {
                       : t(uiLocale, "settings.value.notSpecified")}
                   </p>
                 </div>
-                <span className="shrink-0 text-xs font-medium text-slate-500">System: {systemRole}</span>
+                <span className="shrink-0 text-xs font-medium text-slate-500">
+                  {t(uiLocale, "settings.store.systemRolePrefix")} {systemRole}
+                </span>
               </li>
 
               <li className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
@@ -516,7 +518,9 @@ export default async function SettingsPage() {
               <ul className="divide-y divide-slate-100">
                 <li className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-900">Facebook Page</p>
+                    <p className="text-sm font-medium text-slate-900">
+                      {t(uiLocale, "orders.channelSummary.facebook")}
+                    </p>
                     <p className="truncate text-xs text-slate-500">
                       {fbConnection?.pageName?.trim()
                         ? fbConnection.pageName
@@ -527,7 +531,9 @@ export default async function SettingsPage() {
                 </li>
                 <li className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-900">WhatsApp</p>
+                    <p className="text-sm font-medium text-slate-900">
+                      {t(uiLocale, "orders.channelSummary.whatsapp")}
+                    </p>
                     <p className="truncate text-xs text-slate-500">
                       {waConnection?.phoneNumber?.trim()
                         ? waConnection.phoneNumber
