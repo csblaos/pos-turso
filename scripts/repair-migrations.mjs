@@ -1236,6 +1236,205 @@ async function ensureSchemaCompatForLatestAuthChanges() {
   );
   console.info("[db:repair] ensured table purchase_order_payments + indexes");
 
+  // ── operational cash flow foundation (migration 0039) ──
+
+  await client.execute(`
+    create table if not exists \`financial_accounts\` (
+      \`id\` text primary key not null,
+      \`store_id\` text not null references \`stores\`(\`id\`) on delete cascade,
+      \`display_name\` text not null,
+      \`account_type\` text not null,
+      \`store_payment_account_id\` text references \`store_payment_accounts\`(\`id\`) on delete set null,
+      \`is_system\` integer not null default 0,
+      \`is_active\` integer not null default 1,
+      \`created_at\` text not null default (CURRENT_TIMESTAMP),
+      \`updated_at\` text not null default (CURRENT_TIMESTAMP)
+    )
+  `);
+
+  if (!(await columnExists("financial_accounts", "store_payment_account_id"))) {
+    await client.execute(
+      "alter table `financial_accounts` add `store_payment_account_id` text references `store_payment_accounts`(`id`) on delete set null",
+    );
+    console.info("[db:repair] added column financial_accounts.store_payment_account_id");
+  }
+
+  if (!(await columnExists("financial_accounts", "is_system"))) {
+    await client.execute(
+      "alter table `financial_accounts` add `is_system` integer not null default 0",
+    );
+    console.info("[db:repair] added column financial_accounts.is_system");
+  }
+
+  if (!(await columnExists("financial_accounts", "is_active"))) {
+    await client.execute(
+      "alter table `financial_accounts` add `is_active` integer not null default 1",
+    );
+    console.info("[db:repair] added column financial_accounts.is_active");
+  }
+
+  if (!(await columnExists("financial_accounts", "created_at"))) {
+    await client.execute(
+      "alter table `financial_accounts` add `created_at` text not null default (CURRENT_TIMESTAMP)",
+    );
+    console.info("[db:repair] added column financial_accounts.created_at");
+  }
+
+  if (!(await columnExists("financial_accounts", "updated_at"))) {
+    await client.execute(
+      "alter table `financial_accounts` add `updated_at` text not null default (CURRENT_TIMESTAMP)",
+    );
+    console.info("[db:repair] added column financial_accounts.updated_at");
+  }
+
+  await client.execute(`
+    update \`financial_accounts\`
+    set \`is_system\` = 0
+    where \`is_system\` is null
+  `);
+  await client.execute(`
+    update \`financial_accounts\`
+    set \`is_active\` = 1
+    where \`is_active\` is null
+  `);
+  await client.execute(`
+    update \`financial_accounts\`
+    set \`created_at\` = CURRENT_TIMESTAMP
+    where \`created_at\` is null or trim(\`created_at\`) = ''
+  `);
+  await client.execute(`
+    update \`financial_accounts\`
+    set \`updated_at\` = coalesce(nullif(trim(\`updated_at\`), ''), \`created_at\`, CURRENT_TIMESTAMP)
+    where \`updated_at\` is null or trim(\`updated_at\`) = ''
+  `);
+
+  await client.execute(
+    "create index if not exists `financial_accounts_store_id_idx` on `financial_accounts` (`store_id`)",
+  );
+  await client.execute(
+    "create index if not exists `financial_accounts_store_type_idx` on `financial_accounts` (`store_id`, `account_type`)",
+  );
+  await client.execute(
+    "create index if not exists `financial_accounts_store_active_idx` on `financial_accounts` (`store_id`, `is_active`)",
+  );
+  await client.execute(
+    "create unique index if not exists `financial_accounts_payment_account_unique` on `financial_accounts` (`store_payment_account_id`) where `store_payment_account_id` is not null",
+  );
+  await client.execute(
+    "create unique index if not exists `financial_accounts_store_system_type_unique` on `financial_accounts` (`store_id`, `account_type`) where `is_system` = 1",
+  );
+  console.info("[db:repair] ensured table financial_accounts + indexes");
+
+  await client.execute(`
+    create table if not exists \`cash_flow_entries\` (
+      \`id\` text primary key not null,
+      \`store_id\` text not null references \`stores\`(\`id\`) on delete cascade,
+      \`account_id\` text references \`financial_accounts\`(\`id\`) on delete set null,
+      \`direction\` text not null,
+      \`entry_type\` text not null,
+      \`source_type\` text not null,
+      \`source_id\` text not null,
+      \`amount\` integer not null,
+      \`currency\` text not null default 'LAK',
+      \`reference\` text,
+      \`note\` text,
+      \`metadata\` text not null default '{}',
+      \`occurred_at\` text not null default (CURRENT_TIMESTAMP),
+      \`created_by\` text references \`users\`(\`id\`) on delete set null,
+      \`created_at\` text not null default (CURRENT_TIMESTAMP)
+    )
+  `);
+
+  if (!(await columnExists("cash_flow_entries", "account_id"))) {
+    await client.execute(
+      "alter table `cash_flow_entries` add `account_id` text references `financial_accounts`(`id`) on delete set null",
+    );
+    console.info("[db:repair] added column cash_flow_entries.account_id");
+  }
+
+  if (!(await columnExists("cash_flow_entries", "currency"))) {
+    await client.execute(
+      "alter table `cash_flow_entries` add `currency` text not null default 'LAK'",
+    );
+    console.info("[db:repair] added column cash_flow_entries.currency");
+  }
+
+  if (!(await columnExists("cash_flow_entries", "reference"))) {
+    await client.execute("alter table `cash_flow_entries` add `reference` text");
+    console.info("[db:repair] added column cash_flow_entries.reference");
+  }
+
+  if (!(await columnExists("cash_flow_entries", "note"))) {
+    await client.execute("alter table `cash_flow_entries` add `note` text");
+    console.info("[db:repair] added column cash_flow_entries.note");
+  }
+
+  if (!(await columnExists("cash_flow_entries", "metadata"))) {
+    await client.execute(
+      "alter table `cash_flow_entries` add `metadata` text not null default '{}'",
+    );
+    console.info("[db:repair] added column cash_flow_entries.metadata");
+  }
+
+  if (!(await columnExists("cash_flow_entries", "occurred_at"))) {
+    await client.execute(
+      "alter table `cash_flow_entries` add `occurred_at` text not null default (CURRENT_TIMESTAMP)",
+    );
+    console.info("[db:repair] added column cash_flow_entries.occurred_at");
+  }
+
+  if (!(await columnExists("cash_flow_entries", "created_by"))) {
+    await client.execute(
+      "alter table `cash_flow_entries` add `created_by` text references `users`(`id`) on delete set null",
+    );
+    console.info("[db:repair] added column cash_flow_entries.created_by");
+  }
+
+  if (!(await columnExists("cash_flow_entries", "created_at"))) {
+    await client.execute(
+      "alter table `cash_flow_entries` add `created_at` text not null default (CURRENT_TIMESTAMP)",
+    );
+    console.info("[db:repair] added column cash_flow_entries.created_at");
+  }
+
+  await client.execute(`
+    update \`cash_flow_entries\`
+    set \`currency\` = 'LAK'
+    where \`currency\` is null or trim(\`currency\`) = ''
+  `);
+  await client.execute(`
+    update \`cash_flow_entries\`
+    set \`metadata\` = '{}'
+    where \`metadata\` is null or trim(\`metadata\`) = ''
+  `);
+  await client.execute(`
+    update \`cash_flow_entries\`
+    set \`occurred_at\` = coalesce(nullif(trim(\`occurred_at\`), ''), \`created_at\`, CURRENT_TIMESTAMP)
+    where \`occurred_at\` is null or trim(\`occurred_at\`) = ''
+  `);
+  await client.execute(`
+    update \`cash_flow_entries\`
+    set \`created_at\` = CURRENT_TIMESTAMP
+    where \`created_at\` is null or trim(\`created_at\`) = ''
+  `);
+
+  await client.execute(
+    "create index if not exists `cash_flow_entries_store_occurred_at_idx` on `cash_flow_entries` (`store_id`, `occurred_at`)",
+  );
+  await client.execute(
+    "create index if not exists `cash_flow_entries_store_type_occurred_at_idx` on `cash_flow_entries` (`store_id`, `entry_type`, `occurred_at`)",
+  );
+  await client.execute(
+    "create index if not exists `cash_flow_entries_store_direction_occurred_at_idx` on `cash_flow_entries` (`store_id`, `direction`, `occurred_at`)",
+  );
+  await client.execute(
+    "create index if not exists `cash_flow_entries_account_occurred_at_idx` on `cash_flow_entries` (`account_id`, `occurred_at`)",
+  );
+  await client.execute(
+    "create unique index if not exists `cash_flow_entries_source_unique` on `cash_flow_entries` (`store_id`, `source_type`, `source_id`, `entry_type`)",
+  );
+  console.info("[db:repair] ensured table cash_flow_entries + indexes");
+
   await client.execute(`
     update \`purchase_orders\`
     set \`payment_status\` = (

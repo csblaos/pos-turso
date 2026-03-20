@@ -431,21 +431,31 @@ export async function listOrdersByTab(
           .from(orders)
           .where(scopedWhere),
       ),
-      Promise.all(
-        ORDER_LIST_TABS.map(async (queueTab) => {
-          const [row] = await timeDbQuery(`orders.list.count.${queueTab.toLowerCase()}`, async () =>
-            db
-              .select({ value: sql<number>`count(*)` })
-              .from(orders)
-              .where(buildOrderListWhere(storeId, queueTab)),
-          );
-          return [queueTab, Number(row?.value ?? 0)] as const;
-        }),
+      timeDbQuery("orders.list.queueCounts", async () =>
+        db
+          .select({
+            ALL: sql<number>`count(*)`,
+            PAYMENT_REVIEW: sql<number>`coalesce(sum(case when ${orders.paymentMethod} != 'COD' and ${orders.status} in ('PENDING_PAYMENT', 'READY_FOR_PICKUP', 'PICKED_UP_PENDING_PAYMENT') then 1 else 0 end), 0)`,
+            TO_PACK: sql<number>`coalesce(sum(case when ((${orders.status} = 'PAID' and ${orders.channel} != 'WALK_IN') or (${orders.paymentMethod} = 'COD' and ${orders.status} = 'PENDING_PAYMENT' and ${orders.paymentStatus} = 'COD_PENDING_SETTLEMENT')) then 1 else 0 end), 0)`,
+            TO_SHIP: sql<number>`coalesce(sum(case when ${orders.status} = 'PACKED' then 1 else 0 end), 0)`,
+            PICKUP_READY: sql<number>`coalesce(sum(case when ${orders.status} = 'READY_FOR_PICKUP' and ${orders.paymentStatus} in ('PAID', 'COD_SETTLED') then 1 else 0 end), 0)`,
+            COD_RECONCILE: sql<number>`coalesce(sum(case when ${orders.paymentMethod} = 'COD' and ${orders.status} = 'SHIPPED' and ${orders.paymentStatus} = 'COD_PENDING_SETTLEMENT' then 1 else 0 end), 0)`,
+          })
+          .from(orders)
+          .where(eq(orders.storeId, storeId)),
       ),
     ]);
     rows = queryRows;
     countRows = queryCountRows;
-    queueCounts = Object.fromEntries(queueCountEntries) as OrderListQueueCounts;
+    const queueCountRow = queueCountEntries[0];
+    queueCounts = {
+      ALL: Number(queueCountRow?.ALL ?? 0),
+      PAYMENT_REVIEW: Number(queueCountRow?.PAYMENT_REVIEW ?? 0),
+      TO_PACK: Number(queueCountRow?.TO_PACK ?? 0),
+      TO_SHIP: Number(queueCountRow?.TO_SHIP ?? 0),
+      PICKUP_READY: Number(queueCountRow?.PICKUP_READY ?? 0),
+      COD_RECONCILE: Number(queueCountRow?.COD_RECONCILE ?? 0),
+    };
   } catch {
     const [legacyRows, legacyCountRows, legacyAllCountRows] = await Promise.all([
       timeDbQuery("orders.list.rows.legacy", async () =>
@@ -1085,6 +1095,62 @@ export async function getOrderCatalogForStore(storeId: string): Promise<OrderCat
     requireSlipForLaoQr: globalPaymentPolicy.requireSlipForLaoQr,
     products: productsPayload,
     contacts: contactRows,
+  };
+}
+
+export async function getOrderManageCatalogForStore(storeId: string): Promise<OrderCatalog> {
+  const financial = await getStoreFinancialConfig(storeId);
+
+  let paymentAccountRows: Array<{
+    id: string;
+    displayName: string;
+    accountType: string;
+    bankName: string | null;
+    accountName: string;
+    accountNumber: string | null;
+    qrImageUrl: string | null;
+    isDefault: boolean;
+    isActive: boolean;
+  }> = [];
+
+  try {
+    paymentAccountRows = await timeDbQuery("orders.manage.paymentAccounts", async () =>
+      db
+        .select({
+          id: storePaymentAccounts.id,
+          displayName: storePaymentAccounts.displayName,
+          accountType: storePaymentAccounts.accountType,
+          bankName: storePaymentAccounts.bankName,
+          accountName: storePaymentAccounts.accountName,
+          accountNumber: storePaymentAccounts.accountNumber,
+          qrImageUrl: storePaymentAccounts.qrImageUrl,
+          isDefault: storePaymentAccounts.isDefault,
+          isActive: storePaymentAccounts.isActive,
+        })
+        .from(storePaymentAccounts)
+        .where(
+          and(
+            eq(storePaymentAccounts.storeId, storeId),
+            eq(storePaymentAccounts.isActive, true),
+          ),
+        )
+        .orderBy(desc(storePaymentAccounts.isDefault), asc(storePaymentAccounts.createdAt)),
+    );
+  } catch {
+    paymentAccountRows = [];
+  }
+
+  return {
+    storeCurrency: financial?.currency ?? "LAK",
+    supportedCurrencies: financial?.supportedCurrencies ?? ["LAK"],
+    vatEnabled: financial?.vatEnabled ?? false,
+    vatRate: financial?.vatRate ?? 0,
+    vatMode: financial?.vatMode ?? defaultStoreVatMode,
+    paymentAccounts: paymentAccountRows.map(mapOrderCatalogPaymentAccount),
+    shippingProviders: [],
+    requireSlipForLaoQr: false,
+    products: [],
+    contacts: [],
   };
 }
 

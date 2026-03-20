@@ -2,7 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -64,9 +65,11 @@ const demoAccounts = [
 ] as const;
 
 export function LoginForm() {
+  const router = useRouter();
   const uiLocale = useUiLocale();
   const [serverError, setServerError] = useState<string | null>(null);
   const [copiedAccountId, setCopiedAccountId] = useState<string | null>(null);
+  const [isNavigatingAfterLogin, startNavigation] = useTransition();
 
   const [isForceChangeOpen, setIsForceChangeOpen] = useState(false);
   const [forceChangeEmail, setForceChangeEmail] = useState("");
@@ -84,6 +87,8 @@ export function LoginForm() {
     },
   });
 
+  const isLoginBusy = form.formState.isSubmitting || isNavigatingAfterLogin;
+
   const completeLogin = (data: LoginResponse | null) => {
     if (data?.token) {
       setClientAuthToken(data.token);
@@ -91,7 +96,10 @@ export function LoginForm() {
       clearClientAuthToken();
     }
 
-    window.location.assign(data?.next ?? "/dashboard");
+    startNavigation(() => {
+      router.replace(data?.next ?? "/dashboard");
+      router.refresh();
+    });
   };
 
   const openForceChangeModal = (email: string, currentPassword: string, message?: string) => {
@@ -228,6 +236,7 @@ export function LoginForm() {
             type="email"
             autoComplete="email"
             className="h-10 w-full rounded-md border bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
+            disabled={isLoginBusy}
             {...form.register("email")}
           />
           <p className="text-xs text-red-600">{form.formState.errors.email?.message}</p>
@@ -242,6 +251,7 @@ export function LoginForm() {
             type="password"
             autoComplete="current-password"
             className="h-10 w-full rounded-md border bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
+            disabled={isLoginBusy}
             {...form.register("password")}
           />
           <p className="text-xs text-red-600">{form.formState.errors.password?.message}</p>
@@ -249,8 +259,15 @@ export function LoginForm() {
 
         {serverError ? <p className="text-sm text-red-600">{serverError}</p> : null}
 
-        <Button className="h-11 w-full" type="submit" disabled={form.formState.isSubmitting}>
-          {form.formState.isSubmitting ? t(uiLocale, "auth.form.signingIn") : t(uiLocale, "auth.form.signIn")}
+        <Button className="h-11 w-full" type="submit" disabled={isLoginBusy} aria-busy={isLoginBusy}>
+          {isLoginBusy ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {t(uiLocale, "auth.form.signingIn")}
+            </>
+          ) : (
+            t(uiLocale, "auth.form.signIn")
+          )}
         </Button>
 
         <section className="space-y-2 rounded-xl border bg-slate-50 p-3">
@@ -278,6 +295,7 @@ export function LoginForm() {
                     variant="outline"
                     className="h-8 px-2.5 text-xs"
                     onClick={() => fillDemoAccount(account)}
+                    disabled={isLoginBusy}
                   >
                     Fill
                   </Button>
@@ -287,6 +305,7 @@ export function LoginForm() {
                     variant="outline"
                     className="h-8 px-2.5 text-xs"
                     onClick={() => copyDemoAccount(account)}
+                    disabled={isLoginBusy}
                   >
                     {copiedAccountId === account.id ? "Copied" : "Copy"}
                   </Button>

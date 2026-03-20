@@ -58,9 +58,12 @@ npm run db:migrate
   - key กลุ่ม `settings.superadminHome.*` ใช้กับหน้า overview `/settings/superadmin`
 - `lib/db/schema/tables.ts` DB schema หลัก (Drizzle)
 - `server/services/` business service layer
+  - `server/services/cash-flow.service.ts` เป็น operational ledger helper สำหรับ cash flow phase แรก; ใช้ lazy mapping จาก `store_payment_accounts` -> `financial_accounts` และระบบจะสร้างบัญชีระบบ `CASH_DRAWER` / `COD_CLEARING` อัตโนมัติเมื่อมีรายการเงินจริง
+  - `server/services/cash-flow-report.service.ts` เป็น query layer ของหน้า `/reports/cash-flow`; รองรับ summary, daily trend, by-account totals, ledger feed และ filter `preset/dateFrom/dateTo/direction/entryType/account`
 - `server/repositories/` data access layer
 - `drizzle/` SQL migrations + meta
 - `scripts/repair-migrations.mjs` repair/compat script
+  - รอบล่าสุด `db:repair` รองรับสร้าง/เติม schema ของ `financial_accounts` และ `cash_flow_entries` แล้ว แต่ยังไม่ backfill cash flow entries ย้อนหลังให้ฐานเก่า เพื่อเลี่ยงการเดา source account ผิดความหมาย
 
 เอกสาร inventory:
 - `docs/CODEBASE_MAP.md` แผนที่โค้ดทั้งระบบ (domain ownership)
@@ -79,6 +82,10 @@ npm run db:migrate
   - `POST /api/orders/[orderId]/send-shipping`
   - `POST /api/orders/[orderId]/shipments/label`
   - `POST /api/orders/[orderId]/shipments/upload-label`
+  - orders/cash flow:
+    - `POST /api/orders` จะ auto-post cash inflow เมื่อเป็นออเดอร์ที่จ่ายทันทีตั้งแต่ตอนสร้าง (`Walk-in` ที่ไม่ใช่ `ON_CREDIT/COD`)
+    - `PATCH /api/orders/[orderId]` action `confirm_paid` จะ auto-post cash flow เฉพาะเคสที่มีการรับเงินจริงจริง (`confirm_paid`, in-store credit settlement, COD settle) และจะไม่ post ซ้ำในเคส `READY_FOR_PICKUP + PAID` ที่เป็นการยืนยันรับสินค้าอย่างเดียว
+    - `POST /api/orders/cod-reconcile` จะ auto-post `COD_SETTLEMENT_IN` ลงบัญชีระบบ `COD_CLEARING`
   - UX `/orders`:
     - หน้า `/orders` โฟกัสงานจัดการออเดอร์ที่สร้างแล้ว และใช้ CTA เดียว `เข้าโหมด POS` เพื่อไปหน้าเต็ม `/orders/new` (ถอดปุ่ม `สร้างด่วน` ออกจากหน้า manage)
     - ตารางรายการออเดอร์ใน `/orders` (desktop/tablet) คลิกได้ทั้งแถวเพื่อเข้า `/orders/[orderId]` แล้ว (ไม่จำกัดเฉพาะการกดเลข `SO-...`)
@@ -86,6 +93,10 @@ npm run db:migrate
     - หน้า `/orders` รองรับ multi-select ในหน้า list แล้ว พร้อม sticky bulk action bar สำหรับงาน routine ที่ทำจาก list ได้ (`confirm_paid`, `mark_packed`, `mark_shipped`, `submit_for_payment`) โดย bulk action รอบนี้ยิง action เดิมทีละออเดอร์และคงรายการที่ fail ไว้ให้ operator ตรวจต่อ
     - หน้า `/orders` เพิ่ม selection summary และ bulk print จากหน้า list แล้ว: พิมพ์ใบเสร็จ/ป้ายแบบหลายรายการในหน้าเดิมด้วย current-page print flow (`window.print()` + merged print document) โดย bulk label จะพิมพ์เฉพาะรายการที่มีข้อมูลจัดส่งพอ และถ้าไม่มีข้อมูลพอจะ block พร้อมข้อความอธิบาย
     - หน้า `/orders` ขยับเป็น work-queue tabs เต็มรูปแบบแล้ว โดย query `tab` ของหน้าและ `GET /api/orders` รองรับคิว `ALL`, `PAYMENT_REVIEW`, `TO_PACK`, `TO_SHIP`, `PICKUP_READY`, `COD_RECONCILE`; แต่ละ tab ใช้ server-side filter เดียวกันทั้ง list และ count badge เพื่อให้จำนวนงานกับรายการใน tab ตรงกัน
+    - ปรับ performance ตอนสลับ work-queue tab ของ `/orders` แล้ว: ฝั่ง query ลด `queueCounts` จากการนับแยกหลาย query ต่อ tab change มาเป็น aggregate query เดียว และฝั่ง client ใช้ optimistic active state + spinner บน tab ที่กด พร้อม `router.replace(..., { scroll: false })` เพื่อลดอาการค้างและไม่ดัน scroll กลับบนมือถือ
+    - ตอนสลับ tab หน้า `/orders` content area จะแสดง skeleton ทันทีทั้ง mobile card และ desktop table แทนการค้างที่รายการ tab เดิมระหว่างรอ server response
+    - หน้า `/orders` ไม่โหลด full order catalog ทั้งร้านแล้ว: route ใช้ helper เบา `getOrderManageCatalogForStore()` ที่คืนเฉพาะ financial basics + payment accounts สำหรับ review sheet/bulk summary ส่วน full catalog (`products/contacts/conversions/stock/shipping providers`) ยังโหลดเฉพาะหน้า `/orders/new`
+    - หน้า `/orders` แสดง checkbox หน้า row บน mobile ตามเดิม ส่วน desktop ซ่อน checkbox และปุ่ม `เลือกทั้งหน้า` ไว้จนกว่าจะกด `Bulk select` ใน header; เมื่อเข้าโหมดนี้คลิกทั้งแถวจะ toggle select/unselect และไม่พาเข้า detail, แต่ยังใช้ปุ่ม `เปิด` ในคอลัมน์ action เพื่อเข้า detail ได้ตามต้องการ; ออกจากโหมดแล้วจะล้าง selection และกลับไป click ทั้งแถวเพื่อเข้า detail ได้เหมือนเดิม
     - หน้า `/orders` รองรับ review sheet จาก list แล้วสำหรับเคสที่เดิมต้องเข้า detail:
       - `PAYMENT_REVIEW` บางเคส เช่น `Walk-in/Pickup + ON_CREDIT` สามารถเลือก `เงินสด/QR` และบัญชี QR จากหน้า list แล้วค่อยยิง `PATCH /api/orders/[orderId]` (`confirm_paid`) ได้ทันที
       - `COD_RECONCILE` สามารถกรอก `ยอดรับจริง + ค่าธรรมเนียม/ค่าหัก` จากหน้า list แล้วใช้ `POST /api/orders/cod-reconcile` แบบ 1 รายการได้ทันที
@@ -110,6 +121,8 @@ npm run db:migrate
     - Desktop (`>=1200px`) = centered modal (กดนอกกล่อง/กด X/Escape เพื่อปิด)
     - custom modal/sheet แบบ legacy ของ settings ถูก migrate เข้า `SlideUpSheet` กลางครบแล้ว:
       - migrate แล้ว: settings `categories`, `units`, `store payment accounts`, `users`, `stores`, และ force-change password modal ในหน้า `login`
+    - หน้า `/login` ปรับ UX loading แล้ว: ปุ่ม `เข้าสู่ระบบ` แสดง spinner จริง, ล็อก input/demo actions ระหว่าง submit, และหลัง login สำเร็จใช้ client-side transition (`router.replace + refresh`) แทน `window.location.assign` เพื่อลดความรู้สึกค้าง
+    - `POST /api/auth/login` ลดงานที่ไม่จำเป็นบางส่วนแล้ว: คำนวณ membership flags กับ session ควบกัน และจะ query permissions เฉพาะเมื่อ active store type เป็น `ONLINE_RETAIL` เท่านั้น; ร้านประเภทอื่นหลัง login จะเด้ง `/dashboard` ตรงโดยไม่ยิง permission lookup เพิ่ม
     - นโยบาย responsive ของ overlay ทั้งระบบ: mobile `<768` ยังเป็น bottom sheet, และเริ่ม centered mode ที่ `>=768`
     - มีปุ่มไอคอน `Full Screen` แบบ toggle ที่ navbar:
       - Desktop (`>=1200px`) แสดงเสมอเมื่อ browser รองรับ fullscreen
@@ -195,7 +208,7 @@ npm run db:migrate
       - เพิ่ม permission ใหม่ `orders.cod_return` สำหรับ action `mark_cod_returned` และบังคับใช้แบบ strict แล้ว (เลิก fallback `orders.ship`)
       - เพิ่มคอลัมน์ `orders.cod_returned_at` และบันทึกเวลาเมื่อ action `mark_cod_returned` สำเร็จ
       - เพิ่มคอลัมน์ `orders.cod_return_note` เพื่อใช้บันทึกเหตุผล/หมายเหตุตีกลับ
-    - หน้า `/reports` เพิ่มการ์ด `สรุป COD` (ค้างเก็บ, ปิดยอดวันนี้, ตีกลับวันนี้, COD สุทธิสะสม) และตารางย่อย `แยกตามขนส่ง` โดย metric รายวันของการตีกลับอ้างอิง `cod_returned_at`; เพิ่ม metric `ค่าตีกลับ (codFee)` ทั้งระดับรวมและแยกขนส่ง
+    - หน้า `/reports` redesign เป็น mobile-first analytics workspace แล้ว: มี filter bar สำหรับ preset/custom date range + channel, KPI `ยอดขาย/ออเดอร์/AOV/กำไรขั้นต้น/COD ค้างปิดยอด`, กราฟแนวโน้มยอดขายรายวันแบบ lightweight, section `ยอดขายตามช่องทาง` และ `สินค้าขายดี` ที่อิง filter เดียวกันทั้งหน้า, ส่วน `COD` และ `การเงินจัดซื้อ` คงเป็น operational snapshot แยกจากช่วงวันที่ที่เลือกเพื่อกันความหมายปะปน
     - การยืนยันชำระ (`confirm_paid`) ของออเดอร์ทั่วไปรองรับสถานะ `PENDING_PAYMENT`, `READY_FOR_PICKUP`, และ `PICKED_UP_PENDING_PAYMENT`
       - `READY_FOR_PICKUP + paymentStatus!=PAID` = ยืนยันรับชำระอย่างเดียว (ยังไม่ตัดสต็อก)
       - `READY_FOR_PICKUP + paymentStatus=PAID` = ยืนยันรับสินค้า (ปล่อยจอง+ตัดสต็อก)
@@ -386,6 +399,10 @@ npm run db:migrate
     - รองรับ `manual-first reconcile`: กรอก `ยอด statement` ได้ครั้งเดียวต่อรอบ แล้วระบบจะ auto-match ยอดลง PO ตาม `dueDate` เก่าสุดก่อน (oldest due first); ถ้าไม่กรอกยอด statement จะชำระเต็มยอดค้างของรายการที่เลือก
   - `purchase_orders` เก็บ baseline เรท (`exchangeRateInitial`) + due date (`dueDate`) + summary ชำระ (`paymentStatus/paidAt/paidBy/paymentReference/paymentNote`)
   - ledger การชำระอยู่ที่ `purchase_order_payments` (`PAYMENT`/`REVERSAL`) และคำนวณยอด `totalPaidBase/outstandingBase` จาก ledger
+  - cash flow phase แรกเพิ่มตาราง `financial_accounts` + `cash_flow_entries` แล้ว:
+    - order money-in จะผูกกับ `CASH_DRAWER`, หรือ map ไป `financial_accounts` จาก `store_payment_accounts`
+    - COD settle จะลง `COD_CLEARING`
+    - PO payment / reversal จะลง cash flow ด้วย แต่ `accountId` ยังเป็น `null` และ metadata ระบุ `accountResolution=UNASSIGNED` ไปก่อนจนกว่าจะมี UI เลือกบัญชีต้นทางจริง
   - แท็บ `สั่งซื้อ (PO)` ใช้ cache รายละเอียด PO ต่อ `poId` แบบ on-demand (ยกเลิก intent-driven prefetch hover/focus/touch) และยัง invalidate cache เมื่อมีการแก้ไข/เปลี่ยนสถานะ
   - หน้า `/stock` ใช้ `StockTabs` แบบ keep-mounted (mount ครั้งแรกตามแท็บที่เข้าแล้วคง state เดิมไว้) ลดการรีเซ็ตฟอร์ม/รายการเมื่อสลับแท็บ
   - ทั้ง 4 แท็บหลัก (`ดูสต็อก`, `สั่งซื้อ`, `บันทึกสต็อก`, `ประวัติ`) มี toolbar มาตรฐาน: `รีเฟรชแท็บนี้` + เวลา `อัปเดตล่าสุด HH:mm`
@@ -417,9 +434,13 @@ npm run db:migrate
   - เพื่อเลี่ยงตัวเลขชวนสับสนจากข้อมูลรายหน้า (pagination) filter chip ในแท็บ `ประวัติ` ปรับเป็น label-only (เอาจำนวนใน chip ออก)
   - รายการในแท็บ `ประวัติ` ใช้ windowed virtualization เพื่อลดภาระ render เมื่อจำนวนรายการต่อหน้าสูง
 - Reports:
+  - เพิ่มหน้า `/reports/cash-flow` เป็น mobile-first cash flow workspace ภายใต้ permission เดิม `reports.view`; หน้าอ่านข้อมูลจาก `getCashFlowViewData` โดยตรงและยังไม่มี API route ใหม่
+  - หน้า `/reports` เพิ่ม CTA เปิด cash flow report โดยตรง และหน้า `/settings` เพิ่มลิงก์ `กระแสเงินสด` ไป route เดียวกัน
   - `grossProfit` ใน reports มีทั้ง realized (`cogs` + `grossProfit`) และ current-cost preview (`currentCostCogs` + `currentCostGrossProfit` + `grossProfitDeltaVsCurrentCost`)
   - มีสรุป `FX delta (PO)` และ `AP Aging` (`0-30 / 31-60 / 61+`) พร้อม export CSV PO ค้างชำระ (`/api/stock/purchase-orders/outstanding/export-csv`)
   - แก้ query `getOutstandingPurchaseRows` ให้ `totalPaidBase` ปิดวงเล็บ SQL ครบแล้ว (ป้องกัน 500 ใน endpoint กลุ่ม AP supplier/aging/export)
+- Products:
+  - cost editor ใน product detail modal (`products-management.tsx`) เปลี่ยนเป็น blank-friendly input แล้ว: ถ้าต้นทุนเดิมเป็น `0` จะแสดงช่องว่างพร้อม placeholder `0`, ผู้ใช้ลบค่าว่างได้, และตอน save ระบบจะตีความค่าว่างเป็น `0` แทนการบังคับโชว์ `0` ในช่องตลอดเวลา
 - Dashboard:
   - ใช้ `getDashboardViewData` ฝั่ง server query (ไม่มี browser call ตรงไป `/api`)
   - เพิ่ม reminder งาน AP ค้างชำระใน dashboard (`overdue` / `due soon`) โดย reuse due-status logic เดียวกับ `purchase-ap.service`
@@ -437,6 +458,8 @@ npm run db:migrate
     - `PATCH /api/settings/notifications/rules` (mute/snooze/clear ราย PO)
   - เพิ่ม cron endpoint `GET /api/internal/cron/ap-reminders` (ใช้ `CRON_SECRET`) เพื่อ sync แจ้งเตือนจาก `getPurchaseApDueReminders`
   - เพิ่ม GitHub Actions workflow `.github/workflows/ap-reminders-cron.yml` เป็น external scheduler fallback (เหมาะกับ Vercel Free) โดยยิง endpoint เดิมด้วย secret
+- Auth:
+  - หน้า `/login` ไม่มี CTA `Sign up` สำหรับผู้ใช้ทั่วไปแล้ว เพราะ model ปัจจุบันเป็น admin-provisioned accounts; UI แสดง helper text ให้ติดต่อ `Superadmin / System Admin` แทน
   - sync ใช้ dedupe key ต่อ PO+dueStatus+dueDate และจะ resolve อัตโนมัติเมื่อ PO ไม่เข้าเงื่อนไขเตือนแล้ว
   - เพิ่มตาราง `notification_inbox` + `notification_rules` (รองรับ mute/snooze ต่อ PO)
 - Audit:

@@ -39,7 +39,12 @@ import type {
 } from "@/server/repositories/purchase.repo";
 import { db } from "@/lib/db/client";
 import { auditEvents } from "@/lib/db/schema";
+import { parseStoreCurrency } from "@/lib/finance/store-financial";
 import { buildAuditEventValues } from "@/server/services/audit.service";
+import {
+  recordPurchaseOrderPaymentCashFlow,
+  recordPurchaseOrderPaymentReversalCashFlow,
+} from "@/server/services/cash-flow.service";
 import { markIdempotencySucceeded } from "@/server/services/idempotency.service";
 
 export {
@@ -627,7 +632,7 @@ export async function settlePurchaseOrderPaymentFlow(params: {
       );
     }
 
-    await insertPurchaseOrderPayment(
+    const paymentEntry = await insertPurchaseOrderPayment(
       {
         purchaseOrderId: po.id,
         storeId,
@@ -657,6 +662,19 @@ export async function settlePurchaseOrderPaymentFlow(params: {
       },
       tx,
     );
+
+    await recordPurchaseOrderPaymentCashFlow({
+      storeId,
+      paymentId: paymentEntry.id,
+      poNumber: po.poNumber,
+      amount: amountBase,
+      currency: parseStoreCurrency(storeCurrency),
+      occurredAt: paidAt,
+      reference: payload.paymentReference?.trim() || null,
+      note: payload.paymentNote?.trim() || null,
+      createdBy: userId,
+      tx,
+    });
 
     if (audit) {
       await tx.insert(auditEvents).values(
@@ -844,11 +862,13 @@ export async function reversePurchaseOrderPaymentFlow(params: {
   paymentId: string;
   storeId: string;
   userId: string;
+  storeCurrency: string;
   payload: ReversePurchaseOrderPaymentInput;
   audit?: PurchaseAuditContext;
   idempotency?: PurchaseIdempotencyContext;
 }): Promise<PurchaseOrderView> {
-  const { poId, paymentId, storeId, userId, payload, audit, idempotency } = params;
+  const { poId, paymentId, storeId, userId, storeCurrency, payload, audit, idempotency } =
+    params;
   const now = new Date().toISOString();
 
   return db.transaction(async (tx) => {
@@ -875,7 +895,7 @@ export async function reversePurchaseOrderPaymentFlow(params: {
       throw new PurchaseServiceError(400, "ยอดชำระสะสมไม่พอสำหรับการย้อนรายการ");
     }
 
-    await insertPurchaseOrderPayment(
+    const reversalEntry = await insertPurchaseOrderPayment(
       {
         purchaseOrderId: po.id,
         storeId,
@@ -912,6 +932,19 @@ export async function reversePurchaseOrderPaymentFlow(params: {
       },
       tx,
     );
+
+    await recordPurchaseOrderPaymentReversalCashFlow({
+      storeId,
+      paymentId: reversalEntry.id,
+      poNumber: po.poNumber,
+      amount: targetPayment.amountBase,
+      currency: parseStoreCurrency(storeCurrency),
+      occurredAt: now,
+      reference: targetPayment.reference ?? null,
+      note: payload.note?.trim() || null,
+      createdBy: userId,
+      tx,
+    });
 
     if (audit) {
       await tx.insert(auditEvents).values(

@@ -24,6 +24,7 @@ import {
   safeMarkIdempotencyFailed,
 } from "@/server/services/idempotency.service";
 import { invalidateReportsOverviewCache } from "@/server/services/reports.service";
+import { recordOrderPaymentCashFlow } from "@/server/services/cash-flow.service";
 
 const invalidateOrderReadCaches = async (storeId: string) => {
   await Promise.all([
@@ -668,6 +669,21 @@ export async function POST(request: Request) {
             createdBy: session.userId,
           })),
         );
+      }
+
+      if (isPrepaidAtCreate) {
+        await recordOrderPaymentCashFlow({
+          storeId,
+          orderId,
+          orderNo,
+          paymentMethod: selectedPaymentMethod,
+          paymentAccountId: selectedPaymentAccountId,
+          amount: totals.total,
+          currency: selectedPaymentCurrency,
+          occurredAt: initialPaidAt,
+          createdBy: session.userId,
+          tx,
+        });
       }
 
       await tx.insert(auditEvents).values(

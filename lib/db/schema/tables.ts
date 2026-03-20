@@ -24,6 +24,18 @@ export const uiLocaleEnum = ["th", "lo", "en"] as const;
 export const storeCurrencyEnum = ["LAK", "THB", "USD"] as const;
 export const storeVatModeEnum = ["EXCLUSIVE", "INCLUSIVE"] as const;
 export const paymentAccountTypeEnum = ["BANK", "LAO_QR"] as const;
+export const financialAccountTypeEnum = ["CASH_DRAWER", "BANK", "QR", "COD_CLEARING"] as const;
+export const cashFlowDirectionEnum = ["IN", "OUT"] as const;
+export const cashFlowEntryTypeEnum = [
+  "SALE_CASH_IN",
+  "SALE_QR_IN",
+  "SALE_BANK_IN",
+  "AR_COLLECTION_IN",
+  "COD_SETTLEMENT_IN",
+  "PURCHASE_PAYMENT_OUT",
+  "PURCHASE_PAYMENT_REVERSAL_IN",
+] as const;
+export const cashFlowSourceTypeEnum = ["ORDER", "PURCHASE_ORDER_PAYMENT"] as const;
 export const memberStatusEnum = ["ACTIVE", "INVITED", "SUSPENDED"] as const;
 export const movementTypeEnum = [
   "IN",
@@ -294,6 +306,96 @@ export const storePaymentAccounts = sqliteTable(
     )
       .on(table.storeId)
       .where(sql`${table.isDefault} = 1 and ${table.isActive} = 1`),
+  }),
+);
+
+export const financialAccounts = sqliteTable(
+  "financial_accounts",
+  {
+    id: id(),
+    storeId: text("store_id")
+      .notNull()
+      .references(() => stores.id, { onDelete: "cascade" }),
+    displayName: text("display_name").notNull(),
+    accountType: text("account_type", { enum: financialAccountTypeEnum }).notNull(),
+    storePaymentAccountId: text("store_payment_account_id").references(
+      () => storePaymentAccounts.id,
+      { onDelete: "set null" },
+    ),
+    isSystem: integer("is_system", { mode: "boolean" }).notNull().default(false),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdAt: text("created_at").notNull().default(createdAtDefault),
+    updatedAt: text("updated_at").notNull().default(createdAtDefault),
+  },
+  (table) => ({
+    financialAccountsStoreIdIdx: index("financial_accounts_store_id_idx").on(table.storeId),
+    financialAccountsStoreTypeIdx: index("financial_accounts_store_type_idx").on(
+      table.storeId,
+      table.accountType,
+    ),
+    financialAccountsStoreActiveIdx: index("financial_accounts_store_active_idx").on(
+      table.storeId,
+      table.isActive,
+    ),
+    financialAccountsPaymentAccountUnique: uniqueIndex(
+      "financial_accounts_payment_account_unique",
+    )
+      .on(table.storePaymentAccountId)
+      .where(sql`${table.storePaymentAccountId} is not null`),
+    financialAccountsStoreSystemTypeUnique: uniqueIndex(
+      "financial_accounts_store_system_type_unique",
+    )
+      .on(table.storeId, table.accountType)
+      .where(sql`${table.isSystem} = 1`),
+  }),
+);
+
+export const cashFlowEntries = sqliteTable(
+  "cash_flow_entries",
+  {
+    id: id(),
+    storeId: text("store_id")
+      .notNull()
+      .references(() => stores.id, { onDelete: "cascade" }),
+    accountId: text("account_id").references(() => financialAccounts.id, {
+      onDelete: "set null",
+    }),
+    direction: text("direction", { enum: cashFlowDirectionEnum }).notNull(),
+    entryType: text("entry_type", { enum: cashFlowEntryTypeEnum }).notNull(),
+    sourceType: text("source_type", { enum: cashFlowSourceTypeEnum }).notNull(),
+    sourceId: text("source_id").notNull(),
+    amount: integer("amount").notNull(),
+    currency: text("currency", { enum: storeCurrencyEnum }).notNull().default("LAK"),
+    reference: text("reference"),
+    note: text("note"),
+    metadata: text("metadata").notNull().default("{}"),
+    occurredAt: text("occurred_at").notNull().default(createdAtDefault),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: text("created_at").notNull().default(createdAtDefault),
+  },
+  (table) => ({
+    cashFlowEntriesStoreOccurredAtIdx: index("cash_flow_entries_store_occurred_at_idx").on(
+      table.storeId,
+      table.occurredAt,
+    ),
+    cashFlowEntriesStoreTypeOccurredAtIdx: index(
+      "cash_flow_entries_store_type_occurred_at_idx",
+    ).on(table.storeId, table.entryType, table.occurredAt),
+    cashFlowEntriesStoreDirectionOccurredAtIdx: index(
+      "cash_flow_entries_store_direction_occurred_at_idx",
+    ).on(table.storeId, table.direction, table.occurredAt),
+    cashFlowEntriesAccountOccurredAtIdx: index("cash_flow_entries_account_occurred_at_idx").on(
+      table.accountId,
+      table.occurredAt,
+    ),
+    cashFlowEntriesSourceUnique: uniqueIndex("cash_flow_entries_source_unique").on(
+      table.storeId,
+      table.sourceType,
+      table.sourceId,
+      table.entryType,
+    ),
   }),
 );
 

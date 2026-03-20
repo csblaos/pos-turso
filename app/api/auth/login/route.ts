@@ -90,7 +90,15 @@ export async function POST(request: Request) {
       .where(eq(users.id, user.id));
   }
 
-  const membershipFlags = await getUserMembershipFlags(user.id);
+  const [membershipFlags, session] = await Promise.all([
+    getUserMembershipFlags(user.id),
+    buildSessionForUser({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      uiLocale: user.uiLocale,
+    }),
+  ]);
   const canAccessOnboarding = user.systemRole === "SUPERADMIN";
   const canAccessSystemAdmin = user.systemRole === "SYSTEM_ADMIN";
 
@@ -120,16 +128,41 @@ export async function POST(request: Request) {
     );
   }
 
-  const session = await buildSessionForUser({
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    uiLocale: user.uiLocale,
-  });
-
   let sessionCookie;
   try {
-    sessionCookie = await createSessionCookie(session);
+    const sessionCookiePromise = createSessionCookie(session);
+
+    let nextRoute = "/onboarding";
+    if (canAccessSystemAdmin) {
+      nextRoute = "/system-admin";
+    } else if (session.hasStoreMembership && session.activeStoreId) {
+      if (session.activeStoreType === "ONLINE_RETAIL") {
+        const permissionKeys = await getUserPermissions(
+          { userId: session.userId },
+          session.activeStoreId,
+        );
+        nextRoute = getStorefrontEntryRoute(session.activeStoreType, permissionKeys);
+      } else {
+        nextRoute = "/dashboard";
+      }
+    }
+
+    sessionCookie = await sessionCookiePromise;
+
+    const response = NextResponse.json({
+      ok: true,
+      token: sessionCookie.value,
+      next: nextRoute,
+    });
+
+    response.cookies.set(
+      sessionCookie.name,
+      sessionCookie.value,
+      sessionCookie.options,
+    );
+    response.cookies.set(UI_LOCALE_COOKIE_NAME, user.uiLocale, uiLocaleCookieOptions);
+
+    return response;
   } catch (error) {
     if (error instanceof SessionStoreUnavailableError) {
       return NextResponse.json(
@@ -139,30 +172,4 @@ export async function POST(request: Request) {
     }
     throw error;
   }
-
-  let nextRoute = "/onboarding";
-  if (canAccessSystemAdmin) {
-    nextRoute = "/system-admin";
-  } else if (session.hasStoreMembership && session.activeStoreId) {
-    const permissionKeys = await getUserPermissions(
-      { userId: session.userId },
-      session.activeStoreId,
-    );
-    nextRoute = getStorefrontEntryRoute(session.activeStoreType, permissionKeys);
-  }
-
-  const response = NextResponse.json({
-    ok: true,
-    token: sessionCookie.value,
-    next: nextRoute,
-  });
-
-  response.cookies.set(
-    sessionCookie.name,
-    sessionCookie.value,
-    sessionCookie.options,
-  );
-  response.cookies.set(UI_LOCALE_COOKIE_NAME, user.uiLocale, uiLocaleCookieOptions);
-
-  return response;
 }

@@ -20,7 +20,7 @@
 
 | Page | Main Component | API Calls |
 |---|---|---|
-| `/login` | `components/app/login-form.tsx` | `POST /api/auth/login` |
+| `/login` | `components/app/login-form.tsx` | `POST /api/auth/login` (spinner + disable state ระหว่าง submit, success ใช้ client-side transition แทน full reload; ไม่มี CTA `Sign up` แล้ว และแสดง helper text ให้ติดต่อ `Superadmin / System Admin` แทนเพราะบัญชีถูก provision โดยผู้ดูแลระบบ) |
 | `/signup` | `components/app/signup-form.tsx` | `POST /api/auth/signup` |
 | `/onboarding` | `components/app/onboarding-wizard.tsx` | `GET/POST /api/onboarding/channels`, `POST /api/onboarding/store`, `POST /api/auth/logout` |
 
@@ -57,7 +57,8 @@
 
 | Page | Main Component | API Calls |
 |---|---|---|
-| `/reports` | `app/(app)/reports/page.tsx` | page data query ฝั่ง server (`getReportsViewData`: sales/gross-profit/AP + COD overview + COD by shipping provider โดยรวม metric รายวันจาก `codSettledAt`/`codReturnedAt`) + ลิงก์ export `GET /api/stock/purchase-orders/outstanding/export-csv` |
+| `/reports` | `app/(app)/reports/page.tsx`, `components/app/reports-filters.tsx` | ไม่มี browser call ไป `/api/reports`; หน้าใช้ server query `getReportsViewData` โดยรับ query string `preset/dateFrom/dateTo/channel` สำหรับ filter sales overview + daily trend + top products + sales by channel, และมีลิงก์ export `GET /api/stock/purchase-orders/outstanding/export-csv`; ส่วน COD/purchase snapshot ยังเป็นข้อมูล current state จาก query layer ฝั่ง server |
+| `/reports/cash-flow` | `app/(app)/reports/cash-flow/page.tsx`, `components/app/cash-flow-filters.tsx` | ไม่มี browser call ไป `/api/finance`; หน้าใช้ server query `getCashFlowViewData` โดยรับ query string `preset/dateFrom/dateTo/direction/entryType/account` เพื่อสรุป `cash_flow_entries` เป็น summary cards, daily trend, by-account totals และ recent ledger feed; มีทางเข้าโดยตรงจาก `/reports` และ `/settings` |
 
 ## Settings
 

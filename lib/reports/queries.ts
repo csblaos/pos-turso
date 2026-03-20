@@ -12,6 +12,7 @@ import {
 } from "@/lib/db/schema";
 import { getLowStockProducts, getStoreStockThresholds } from "@/lib/inventory/queries";
 import { timeAsync, timeDbQuery } from "@/lib/perf/server";
+import type { ReportChannelFilter } from "@/lib/reports/filters";
 
 const paidStatuses = ["PAID", "PACKED", "SHIPPED"] as const;
 const pendingStatuses = [
@@ -27,9 +28,16 @@ export type DashboardMetrics = {
   lowStockCount: number;
 };
 
-export type SalesSummary = {
-  salesToday: number;
-  salesThisMonth: number;
+export type SalesOverviewSummary = {
+  salesTotal: number;
+  orderCount: number;
+  averageOrderValue: number;
+};
+
+export type SalesTrendPoint = {
+  bucketDate: string;
+  salesTotal: number;
+  orderCount: number;
 };
 
 export type TopProductRow = {
@@ -146,6 +154,12 @@ export type PurchaseApAgingSummary = {
 
 const DASHBOARD_METRICS_TTL_SECONDS = 20;
 
+export type ReportsQueryFilters = {
+  dateFrom: string;
+  dateTo: string;
+  channel: ReportChannelFilter;
+};
+
 function dashboardMetricsCacheKey(storeId: string) {
   const dayKey = new Date().toISOString().slice(0, 10);
   return `reports:dashboard_metrics:${storeId}:${dayKey}`;
@@ -217,48 +231,73 @@ export async function getDashboardMetrics(storeId: string): Promise<DashboardMet
   });
 }
 
-export async function getSalesSummary(storeId: string): Promise<SalesSummary> {
-  const [todayRow, monthRow] = await Promise.all([
-    timeDbQuery("reports.salesSummary.today", async () =>
-      db
-        .select({
-          value: sql<number>`coalesce(sum(${orders.total}), 0)`,
-        })
-        .from(orders)
-        .where(
-          and(
-            eq(orders.storeId, storeId),
-            inArray(orders.status, paidStatuses),
-            sql`${orders.paidAt} >= datetime('now', 'localtime', 'start of day', 'utc')`,
-            sql`${orders.paidAt} < datetime('now', 'localtime', 'start of day', '+1 day', 'utc')`,
-          ),
-        ),
-    ),
-    timeDbQuery("reports.salesSummary.month", async () =>
-      db
-        .select({
-          value: sql<number>`coalesce(sum(${orders.total}), 0)`,
-        })
-        .from(orders)
-        .where(
-          and(
-            eq(orders.storeId, storeId),
-            inArray(orders.status, paidStatuses),
-            sql`${orders.paidAt} >= datetime('now', 'localtime', 'start of month', 'utc')`,
-            sql`${orders.paidAt} < datetime('now', 'localtime', 'start of day', '+1 day', 'utc')`,
-          ),
-        ),
-    ),
-  ]);
+function buildPaidOrderFilters(storeId: string, filters: ReportsQueryFilters) {
+  const conditions = [
+    eq(orders.storeId, storeId),
+    inArray(orders.status, paidStatuses),
+    sql`${orders.paidAt} is not null`,
+    sql`date(${orders.paidAt}, 'localtime') >= ${filters.dateFrom}`,
+    sql`date(${orders.paidAt}, 'localtime') <= ${filters.dateTo}`,
+  ];
+
+  if (filters.channel !== "ALL") {
+    conditions.push(eq(orders.channel, filters.channel));
+  }
+
+  return and(...conditions);
+}
+
+export async function getSalesOverview(
+  storeId: string,
+  filters: ReportsQueryFilters,
+): Promise<SalesOverviewSummary> {
+  const rows = await timeDbQuery("reports.salesOverview.range", async () =>
+    db
+      .select({
+        salesTotal: sql<number>`coalesce(sum(${orders.total}), 0)`,
+        orderCount: sql<number>`count(*)`,
+      })
+      .from(orders)
+      .where(buildPaidOrderFilters(storeId, filters)),
+  );
+
+  const salesTotal = Number(rows[0]?.salesTotal ?? 0);
+  const orderCount = Number(rows[0]?.orderCount ?? 0);
 
   return {
-    salesToday: Number(todayRow[0]?.value ?? 0),
-    salesThisMonth: Number(monthRow[0]?.value ?? 0),
+    salesTotal,
+    orderCount,
+    averageOrderValue: orderCount > 0 ? salesTotal / orderCount : 0,
   };
+}
+
+export async function getSalesTrend(
+  storeId: string,
+  filters: ReportsQueryFilters,
+): Promise<SalesTrendPoint[]> {
+  const rows = await timeDbQuery("reports.salesTrend.range", async () =>
+    db
+      .select({
+        bucketDate: sql<string>`date(${orders.paidAt}, 'localtime')`,
+        salesTotal: sql<number>`coalesce(sum(${orders.total}), 0)`,
+        orderCount: sql<number>`count(*)`,
+      })
+      .from(orders)
+      .where(buildPaidOrderFilters(storeId, filters))
+      .groupBy(sql`date(${orders.paidAt}, 'localtime')`)
+      .orderBy(sql`date(${orders.paidAt}, 'localtime') asc`),
+  );
+
+  return rows.map((row) => ({
+    bucketDate: row.bucketDate,
+    salesTotal: Number(row.salesTotal ?? 0),
+    orderCount: Number(row.orderCount ?? 0),
+  }));
 }
 
 export async function getTopProducts(
   storeId: string,
+  filters: ReportsQueryFilters,
   limit = 10,
 ): Promise<TopProductRow[]> {
   const rows = await timeDbQuery("reports.topProducts", async () =>
@@ -274,7 +313,7 @@ export async function getTopProducts(
       .from(orderItems)
       .innerJoin(orders, eq(orderItems.orderId, orders.id))
       .innerJoin(products, eq(orderItems.productId, products.id))
-      .where(and(eq(orders.storeId, storeId), inArray(orders.status, paidStatuses)))
+      .where(buildPaidOrderFilters(storeId, filters))
       .groupBy(products.id, products.sku, products.name)
       .orderBy(sql`sum(${orderItems.lineTotal}) desc`)
       .limit(limit),
@@ -288,7 +327,10 @@ export async function getTopProducts(
   }));
 }
 
-export async function getSalesByChannel(storeId: string): Promise<SalesByChannelRow[]> {
+export async function getSalesByChannel(
+  storeId: string,
+  filters: ReportsQueryFilters,
+): Promise<SalesByChannelRow[]> {
   const rows = await timeDbQuery("reports.salesByChannel", async () =>
     db
       .select({
@@ -297,7 +339,7 @@ export async function getSalesByChannel(storeId: string): Promise<SalesByChannel
         salesTotal: sql<number>`coalesce(sum(${orders.total}), 0)`,
       })
       .from(orders)
-      .where(and(eq(orders.storeId, storeId), inArray(orders.status, paidStatuses)))
+      .where(buildPaidOrderFilters(storeId, filters))
       .groupBy(orders.channel)
       .orderBy(sql`sum(${orders.total}) desc`),
   );
@@ -311,13 +353,14 @@ export async function getSalesByChannel(storeId: string): Promise<SalesByChannel
 
 export async function getGrossProfitSummary(
   storeId: string,
+  filters: ReportsQueryFilters,
 ): Promise<GrossProfitSummary> {
   const [revenueRows, cogsRows, currentCostCogsRows, shippingRows] = await Promise.all([
     timeDbQuery("reports.grossProfit.revenue", async () =>
       db
         .select({ value: sql<number>`coalesce(sum(${orders.total}), 0)` })
         .from(orders)
-        .where(and(eq(orders.storeId, storeId), inArray(orders.status, paidStatuses))),
+        .where(buildPaidOrderFilters(storeId, filters)),
     ),
     timeDbQuery("reports.grossProfit.cogs", async () =>
       db
@@ -326,7 +369,7 @@ export async function getGrossProfitSummary(
         })
         .from(orderItems)
         .innerJoin(orders, eq(orderItems.orderId, orders.id))
-        .where(and(eq(orders.storeId, storeId), inArray(orders.status, paidStatuses))),
+        .where(buildPaidOrderFilters(storeId, filters)),
     ),
     timeDbQuery("reports.grossProfit.currentCostCogs", async () =>
       db
@@ -336,13 +379,13 @@ export async function getGrossProfitSummary(
         .from(orderItems)
         .innerJoin(orders, eq(orderItems.orderId, orders.id))
         .innerJoin(products, eq(orderItems.productId, products.id))
-        .where(and(eq(orders.storeId, storeId), inArray(orders.status, paidStatuses))),
+        .where(buildPaidOrderFilters(storeId, filters)),
     ),
     timeDbQuery("reports.grossProfit.shipping", async () =>
       db
         .select({ value: sql<number>`coalesce(sum(${orders.shippingCost}), 0)` })
         .from(orders)
-        .where(and(eq(orders.storeId, storeId), inArray(orders.status, paidStatuses))),
+        .where(buildPaidOrderFilters(storeId, filters)),
     ),
   ]);
 

@@ -2,9 +2,40 @@
 
 ## Snapshot Date
 
-- March 19, 2026
+- March 20, 2026
 
 ## Changed (ล่าสุด)
+
+- ปรับ UX ช่องแก้ต้นทุนใน product detail modal:
+  - ช่อง `ต้นทุน` ตอน edit ไม่ bind ค่า `0` แบบแข็งแล้ว
+  - ถ้าต้นทุนเดิมเป็น `0` จะโชว์ช่องว่างพร้อม placeholder `0`
+  - ผู้ใช้ลบจนว่างได้ และตอนกด save ระบบจะตีความค่าว่างเป็น `0`
+  - เพิ่ม validation ข้อความใหม่ `products.cost.validation.invalidValue` ครบ 3 ภาษา
+
+- ปรับหน้า `/login` ให้ตรงกับ policy ผู้ใช้ที่ถูกสร้างโดยผู้ดูแลระบบ:
+  - เอา CTA `Sign up` ออกจากหน้า login หลัก
+  - เปลี่ยนท้ายหน้าเป็น helper text ว่าบัญชีถูกสร้างโดย `Superadmin / System Admin` และให้ติดต่อผู้ดูแลถ้ายังไม่มีบัญชี
+  - เพิ่มข้อความ i18n ใหม่ใน `auth.login.accountProvisioned` และ `auth.login.contactAdmin` ครบ 3 ภาษา
+
+- เพิ่ม cash flow report UI แล้วที่ `/reports/cash-flow`:
+  - ใช้ `server/services/cash-flow-report.service.ts` query summary, trend, by-account totals และ recent ledger feed จาก `cash_flow_entries`
+  - เพิ่ม `components/app/cash-flow-filters.tsx` สำหรับ filter `preset/custom date range + direction + entry type + account` โดย reuse shared `DatePickerField`
+  - หน้า `/reports` เพิ่ม CTA เปิดรายงาน cash flow โดยตรง และหน้า `/settings` เพิ่มลิงก์ `กระแสเงินสด` ไป route เดียวกัน
+  - ใช้ permission เดิม `reports.view` และยังไม่มี API route ใหม่ เพราะหน้าอ่านข้อมูลจาก query layer ฝั่ง server โดยตรง
+
+- เพิ่ม cash flow foundation แบบ operational ledger โดยยังไม่กระโดดไปบัญชีเต็ม:
+  - เพิ่ม migration `0039_cultured_mattie_franklin` สร้างตาราง `financial_accounts` และ `cash_flow_entries`
+  - อัปเดต `scripts/repair-migrations.mjs` ให้ฐานเก่าที่ใช้ `npm run db:repair` สร้าง/เติม schema ของ `financial_accounts` และ `cash_flow_entries` ได้ด้วย
+  - เพิ่ม `server/services/cash-flow.service.ts` สำหรับ resolve/create บัญชีการเงินแบบ lazy:
+    - บัญชีระบบ `CASH_DRAWER` และ `COD_CLEARING`
+    - map `store_payment_accounts` -> `financial_accounts` เมื่อมีรายการเงินจริงครั้งแรก
+  - ผูก auto-post cash flow แล้วใน flow หลัก:
+    - `POST /api/orders` สำหรับออเดอร์ที่ชำระทันทีตั้งแต่ตอนสร้าง
+    - `PATCH /api/orders/[orderId]` action `confirm_paid` สำหรับการรับเงินจริง, in-store credit settlement, และ COD settle
+    - `POST /api/orders/cod-reconcile` สำหรับ bulk COD settle
+    - `settlePurchaseOrderPaymentFlow` / `reversePurchaseOrderPaymentFlow` สำหรับ PO payment ledger
+  - trade-off รอบนี้: PO payment/reversal ถูกเขียนลง `cash_flow_entries` แล้ว แต่ `accountId` ยังเป็น `null` พร้อม metadata `accountResolution=UNASSIGNED` ไปก่อน เพราะ UI ปัจจุบันยังไม่มี source-account selection; เลือกทางนี้เพื่อไม่เดาบัญชีต้นทางผิด
+  - repair script ยังไม่ backfill cash flow entries ย้อนหลังให้ข้อมูลเก่า เพราะ flow เดิมยังไม่มีข้อมูลบัญชีต้นทางครบพอสำหรับการสร้าง ledger ย้อนหลังแบบเชื่อถือได้
 
 - เพิ่มตั้งค่า “ภาษา” (ไทย/ລາວ/English) แบบผูกกับบัญชีผู้ใช้:
   - เพิ่มคอลัมน์ `users.ui_locale` (default `th`)
@@ -391,12 +422,24 @@
   - quick inbox threshold ฝั่ง navbar เปลี่ยนตามนิยามใหม่: non-desktop = `<1200px`
   - phase 2: migrate custom modal/sheet ที่ยังไม่ได้ใช้ `SlideUpSheet` (users, categories, units, store payment accounts, stores management, force-change password modal) ให้เริ่ม centered mode ที่ `>=768px` และใช้ drag/mobile behavior เฉพาะ `<768px` ตาม contract ใหม่
   - phase 3: ย้าย modal/sheet จาก custom implementation เข้า `SlideUpSheet` กลางครบแล้ว (`/settings/categories`, `/settings/units`, `/settings/store/payments`, `/settings/users`, `/settings/stores`, และ force-change password modal ใน `/login`) โดยคง behavior เดิมของฟอร์ม/validation/API
+  - รอบล่าสุดปรับ UX `/login` เพิ่ม quick wins ฝั่ง perceived performance:
+    - ปุ่ม `เข้าสู่ระบบ` แสดง spinner icon จริง และ disable input/demo buttons ระหว่าง submit/redirect
+    - หลัง login สำเร็จเปลี่ยนจาก `window.location.assign` เป็น `router.replace() + router.refresh()` เพื่อลด full reload และให้ transition เนียนขึ้น
+    - `POST /api/auth/login` ขนาน `getUserMembershipFlags` กับ `buildSessionForUser` และข้าม permission lookup สำหรับ store type ที่ไม่ใช่ `ONLINE_RETAIL`
 
 - ปรับ scanner ของหน้า `/orders` และ `/orders/new` ให้ใช้มาตรฐานเดียวกับหน้าอื่น:
   - ย้ายจาก scanner logic ที่ฝังใน `orders-management.tsx` มาใช้คอมโพเนนต์กลาง `components/app/barcode-scanner-panel.tsx`
   - เพิ่ม permission sheet ก่อนเปิดกล้อง (`ยกเลิก` + `อนุญาตและสแกน`) แบบเดียวกับ `/products` และ `/stock`
   - พฤติกรรมเปิด/ปิดกล้อง, เลือกกล้อง, manual barcode fallback, และ cleanup stream ตอนปิด ถูก unify กับหน้าที่ใช้ scanner อื่น ๆ แล้ว
   - policy สำหรับงานถัดไป: หากเพิ่มปุ่ม `สแกนบาร์โค้ด` ในหน้าใหม่ ให้ใช้ `BarcodeScannerPanel` + permission sheet มาตรฐานเดียวกัน (ไม่แยกเขียน logic กล้องใหม่ในหน้า)
+
+- ปรับ performance ของ work-queue tabs หน้า `/orders`:
+  - ลดงานฝั่ง server ตอนเปลี่ยน tab โดยรวม `queueCounts` จากหลาย count query ให้เหลือ aggregate query เดียว
+  - ฝั่ง client เปลี่ยน tab เป็น optimistic มากขึ้น: tab ที่กดจะ active ทันทีพร้อม spinner badge ระหว่างรอ response
+  - ใช้ `router.replace(..., { scroll: false })` สำหรับ tab change เพื่อลด jump/back-stack noise และคง scroll behavior ให้เนียนขึ้นบน mobile
+  - content area ใต้ tabs แสดง skeleton ทันทีระหว่าง transition ทั้ง mobile/desktop เพื่อไม่ค้างแสดงรายการของ tab เดิม
+  - route `/orders` เปลี่ยนมาใช้ `getOrderManageCatalogForStore()` แทน `getOrderCatalogForStore()` เพื่อตัด payload/query ที่ไม่จำเป็นกับหน้า manage ออก โดยคงข้อมูลขั้นต่ำที่หน้านี้ยังใช้จริง (`storeCurrency`, supported currencies, active payment accounts); full catalog ยังโหลดเฉพาะ `/orders/new`
+  - checkbox หน้า row ของ `/orders` แสดงบน mobile ตามเดิม ส่วน desktop ซ่อน checkbox และปุ่ม `เลือกทั้งหน้า` ไว้จนกว่าจะเข้า `Bulk select` mode ใน header; เมื่อเข้าโหมดนี้ click ทั้งแถวจะ select/unselect และไม่ open detail, แต่ยังเข้า detail ได้ผ่านปุ่ม `เปิด` ในคอลัมน์ action; ออกจากโหมดแล้วจะล้าง selection และ desktop กลับไป click แถวเพื่อ open detail ตามเดิม
 
 - ปรับค่าเริ่มต้นฟอร์มสร้างออเดอร์ให้ตะกร้าว่าง:
   - `defaultValues.items` ใน `orders-management.tsx` เปลี่ยนเป็น `[]` (ไม่ preload สินค้าตัวแรกอัตโนมัติ)
@@ -755,6 +798,8 @@
 - ปรับหน้า `/reports`:
   - เพิ่ม current-cost preview คู่กับ realized gross profit
   - แสดง `ต้นทุนสินค้า (ประเมิน)`, `กำไรขั้นต้น (ประเมิน)`, และส่วนต่างเทียบกับ realized
+  - redesign เป็น mobile-first analytics workspace: เพิ่ม filter bar (`preset/custom date range + channel`) ผ่าน query string, KPI `ยอดขาย/ออเดอร์/AOV/กำไรขั้นต้น/COD ค้างปิดยอด`, กราฟแนวโน้มยอดขายรายวันแบบ lightweight, และ section `ยอดขายตามช่องทาง` + `สินค้าขายดี` ที่อิง filter เดียวกัน
+  - `COD` และ `การเงินจัดซื้อ` คงเป็น operational snapshot ปัจจุบัน แยกจาก filter ช่วงวันที่ เพื่อให้ฝั่งวิเคราะห์ยอดขายกับ snapshot งานบัญชี/ขนส่งไม่ปะปนกัน
 - ปรับหน้า `/stock?tab=recording`:
   - เอา field `cost` ออกจาก payload `POST /api/stock/movements`
   - เอา UI ช่องต้นทุน optional ออกจากฟอร์มบันทึกสต็อกเพื่อลดความเข้าใจผิด

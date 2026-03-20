@@ -11,7 +11,7 @@ import {
   isPermissionGranted,
 } from "@/lib/rbac/access";
 import {
-  getOrderCatalogForStore,
+  getOrderManageCatalogForStore,
   type OrderListTab,
   listOrdersByTab,
   parseOrderListTab,
@@ -155,7 +155,7 @@ export default async function OrdersPage({
     }
 
     const [catalog, ordersPage] = await Promise.all([
-      getOrderCatalogForStore(session.activeStoreId),
+      getOrderManageCatalogForStore(session.activeStoreId),
       listOrdersByTab(session.activeStoreId, tab, { page, pageSize: 20 }),
     ]);
 

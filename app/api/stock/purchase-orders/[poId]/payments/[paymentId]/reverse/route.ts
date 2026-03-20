@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
 
+import { db } from "@/lib/db/client";
+import { stores } from "@/lib/db/schema";
 import { reversePurchaseOrderPaymentSchema } from "@/lib/purchases/validation";
 import { enforcePermission, toRBACErrorResponse } from "@/lib/rbac/access";
 import { safeLogAuditEvent } from "@/server/services/audit.service";
@@ -145,11 +148,18 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ message: firstError }, { status: 400 });
     }
 
+    const [storeRow] = await db
+      .select({ currency: stores.currency })
+      .from(stores)
+      .where(eq(stores.id, storeId))
+      .limit(1);
+
     const po = await reversePurchaseOrderPaymentFlow({
       poId,
       paymentId,
       storeId,
       userId: session.userId,
+      storeCurrency: storeRow?.currency ?? "LAK",
       payload: parsed.data,
       audit: {
         actorName: session.displayName,

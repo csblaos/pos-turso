@@ -16,6 +16,7 @@ import {
   safeMarkIdempotencyFailed,
 } from "@/server/services/idempotency.service";
 import { invalidateReportsOverviewCache } from "@/server/services/reports.service";
+import { recordCodSettlementCashFlow } from "@/server/services/cash-flow.service";
 
 const nowIso = () => new Date().toISOString();
 
@@ -203,6 +204,7 @@ export async function POST(request: Request) {
         status: orders.status,
         paymentStatus: orders.paymentStatus,
         paymentMethod: orders.paymentMethod,
+        paymentCurrency: orders.paymentCurrency,
         paidAt: orders.paidAt,
       })
       .from(orders)
@@ -297,6 +299,18 @@ export async function POST(request: Request) {
             request,
           }),
         );
+
+        await recordCodSettlementCashFlow({
+          storeId,
+          orderId: order.id,
+          orderNo: order.orderNo,
+          amount: codAmount,
+          currency: order.paymentCurrency,
+          codFee,
+          occurredAt: now,
+          createdBy: session.userId,
+          tx,
+        });
 
         successCount += 1;
         results.push({

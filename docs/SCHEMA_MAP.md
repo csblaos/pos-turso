@@ -4,9 +4,12 @@
 
 ## Migration Status
 
-- journal entries: `39`
-- latest migration tag: `0038_foamy_the_hood`
+- journal entries: `40`
+- latest migration tag: `0039_cultured_mattie_franklin`
 - latest focus:
+  - เพิ่ม operational cash flow foundation:
+    - ตาราง `financial_accounts`
+    - ตาราง `cash_flow_entries`
   - เพิ่มภาษา UI ต่อผู้ใช้:
     - `users.ui_locale` (`th|lo|en`, default `th`)
   - โครงสร้างสินค้าแบบ Variant (Phase 1):
@@ -37,6 +40,9 @@
   - เพิ่ม `orders.cod_returned_at` สำหรับ timestamp ตอน COD ตีกลับ
   - เพิ่ม `orders.cod_return_note` สำหรับหมายเหตุสาเหตุ COD ตีกลับ
   - เพิ่มตาราง master `shipping_providers` ต่อร้าน
+  - เพิ่ม operational cash flow foundation:
+    - `financial_accounts`
+    - `cash_flow_entries`
 
 ## Table Inventory (High-level)
 
@@ -71,6 +77,8 @@
 - `order_items`
 - `order_shipments`
 - `shipping_providers`
+- `financial_accounts`
+- `cash_flow_entries`
 - `purchase_orders`
 - `purchase_order_items`
 - `purchase_order_payments`
@@ -124,6 +132,13 @@
   - `cod_settled_at` (ตอนปิดยอด COD)
   - `cod_returned_at` (ตอนตีกลับ COD)
   - `cod_return_note` (บันทึกสาเหตุ/หมายเหตุการตีกลับ)
+- cash flow operational ledger:
+  - `financial_accounts.store_id -> stores.id`
+  - `financial_accounts.store_payment_account_id -> store_payment_accounts.id`
+  - `cash_flow_entries.store_id -> stores.id`
+  - `cash_flow_entries.account_id -> financial_accounts.id`
+  - `cash_flow_entries.created_by -> users.id`
+  - order cash-in ใช้ `cash_flow_entries.source_type = ORDER`
 
 ### Shipping
 
@@ -152,6 +167,7 @@
 - `purchase_order_payments.store_id -> stores.id`
 - `purchase_order_payments.created_by -> users.id`
 - `purchase_order_payments.reversed_payment_id -> purchase_order_payments.id`
+- PO payment/reversal จะเขียน operational cash flow ลง `cash_flow_entries` ด้วย โดยใช้ `source_type = PURCHASE_ORDER_PAYMENT`
 
 ### Reliability / Audit
 
@@ -199,6 +215,20 @@
 - PO status: `DRAFT | ORDERED | SHIPPED | RECEIVED | CANCELLED`
 - PO payment status: `UNPAID | PARTIAL | PAID`
 - PO payment entry type: `PAYMENT | REVERSAL`
+
+### Cash Flow
+
+- financial account type: `CASH_DRAWER | BANK | QR | COD_CLEARING`
+- cash flow direction: `IN | OUT`
+- cash flow entry type:
+  - `SALE_CASH_IN`
+  - `SALE_QR_IN`
+  - `SALE_BANK_IN`
+  - `AR_COLLECTION_IN`
+  - `COD_SETTLEMENT_IN`
+  - `PURCHASE_PAYMENT_OUT`
+  - `PURCHASE_PAYMENT_REVERSAL_IN`
+- cash flow source type: `ORDER | PURCHASE_ORDER_PAYMENT`
 
 ## Indexes Worth Knowing (Operational)
 

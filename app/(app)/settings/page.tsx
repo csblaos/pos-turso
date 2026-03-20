@@ -7,6 +7,7 @@ import {
   ClipboardList,
   FileText,
   Globe,
+  Landmark,
   Lock,
   Package,
   PackageCheck,
@@ -252,6 +253,14 @@ export default async function SettingsPage() {
       title: t(uiLocale, "settings.link.reports.title"),
       description: t(uiLocale, "settings.link.reports.description"),
       icon: PlugZap,
+      visible: canViewReports,
+    },
+    {
+      id: "cash-flow",
+      href: "/reports/cash-flow",
+      title: t(uiLocale, "settings.link.cashFlow.title"),
+      description: t(uiLocale, "settings.link.cashFlow.description"),
+      icon: Landmark,
       visible: canViewReports,
     },
   ];

@@ -41,6 +41,10 @@ import {
 } from "@/server/services/idempotency.service";
 import { invalidateReportsOverviewCache } from "@/server/services/reports.service";
 import { invalidateStockOverviewCache } from "@/server/services/stock.service";
+import {
+  recordCodSettlementCashFlow,
+  recordOrderPaymentCashFlow,
+} from "@/server/services/cash-flow.service";
 
 const nowIso = () => new Date().toISOString();
 const CANCEL_APPROVER_ROLES = new Set(["Owner", "Manager"]);
@@ -790,16 +794,30 @@ export async function PATCH(
               : order.codAmount > 0
                 ? order.codAmount
                 : order.total;
+          const effectivePaidAt = order.paidAt ?? now;
           await tx
             .update(orders)
             .set({
               paymentStatus: "COD_SETTLED",
               codSettledAt: now,
-              paidAt: order.paidAt ?? now,
+              paidAt: effectivePaidAt,
               codAmount: codAmountToSave,
             })
             .where(and(eq(orders.id, order.id), eq(orders.storeId, storeId)));
+
+          await recordCodSettlementCashFlow({
+            storeId,
+            orderId: order.id,
+            orderNo: order.orderNo,
+            amount: codAmountToSave,
+            currency: order.paymentCurrency,
+            codFee: order.codFee,
+            occurredAt: now,
+            createdBy: session.userId,
+            tx,
+          });
         } else if (isPickupPaymentConfirm) {
+          const effectivePaidAt = order.paidAt ?? nowIso();
           await tx
             .update(orders)
             .set({
@@ -810,10 +828,25 @@ export async function PATCH(
               paymentProofSubmittedAt: isInStoreCreditSettlement
                 ? null
                 : order.paymentProofSubmittedAt,
-              paidAt: order.paidAt ?? nowIso(),
+              paidAt: effectivePaidAt,
             })
             .where(and(eq(orders.id, order.id), eq(orders.storeId, storeId)));
+
+          await recordOrderPaymentCashFlow({
+            storeId,
+            orderId: order.id,
+            orderNo: order.orderNo,
+            paymentMethod: effectivePaymentMethod,
+            paymentAccountId: effectivePaymentAccountId,
+            amount: order.total,
+            currency: order.paymentCurrency,
+            occurredAt: effectivePaidAt,
+            createdBy: session.userId,
+            isArCollection: isInStoreCreditSettlement,
+            tx,
+          });
         } else if (shouldOnlyUpdatePaymentAfterReceived) {
+          const effectivePaidAt = order.paidAt ?? nowIso();
           await tx
             .update(orders)
             .set({
@@ -825,9 +858,23 @@ export async function PATCH(
               paymentProofSubmittedAt: isInStoreCreditSettlement
                 ? null
                 : order.paymentProofSubmittedAt,
-              paidAt: order.paidAt ?? nowIso(),
+              paidAt: effectivePaidAt,
             })
             .where(and(eq(orders.id, order.id), eq(orders.storeId, storeId)));
+
+          await recordOrderPaymentCashFlow({
+            storeId,
+            orderId: order.id,
+            orderNo: order.orderNo,
+            paymentMethod: effectivePaymentMethod,
+            paymentAccountId: effectivePaymentAccountId,
+            amount: order.total,
+            currency: order.paymentCurrency,
+            occurredAt: effectivePaidAt,
+            createdBy: session.userId,
+            isArCollection: isInStoreCreditSettlement,
+            tx,
+          });
         } else {
           if (orderItems.length > 0) {
             await tx.insert(inventoryMovements).values(
@@ -860,6 +907,7 @@ export async function PATCH(
             );
           }
 
+          const effectivePaidAt = order.paidAt ?? nowIso();
           await tx
             .update(orders)
             .set({
@@ -867,9 +915,25 @@ export async function PATCH(
               paymentStatus: "PAID",
               paymentMethod: effectivePaymentMethod,
               paymentAccountId: effectivePaymentAccountId,
-              paidAt: order.paidAt ?? nowIso(),
+              paidAt: effectivePaidAt,
             })
             .where(and(eq(orders.id, order.id), eq(orders.storeId, storeId)));
+
+          if (!isPickupCompleteAfterPrepaid) {
+            await recordOrderPaymentCashFlow({
+              storeId,
+              orderId: order.id,
+              orderNo: order.orderNo,
+              paymentMethod: effectivePaymentMethod,
+              paymentAccountId: effectivePaymentAccountId,
+              amount: order.total,
+              currency: order.paymentCurrency,
+              occurredAt: effectivePaidAt,
+              createdBy: session.userId,
+              isArCollection: isInStoreCreditSettlement,
+              tx,
+            });
+          }
         }
 
         await tx.insert(auditEvents).values(

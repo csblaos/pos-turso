@@ -358,7 +358,7 @@ export function ProductsManagement({
   const [detailProduct, setDetailProduct] = useState<ProductListItem | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("info");
   const [editingCost, setEditingCost] = useState(false);
-  const [costDraft, setCostDraft] = useState(0);
+  const [costDraftInput, setCostDraftInput] = useState("");
   const [costReasonDraft, setCostReasonDraft] = useState("");
   const [showDetailImagePreview, setShowDetailImagePreview] = useState(false);
   const [barcodePrintLoadingId, setBarcodePrintLoadingId] = useState<string | null>(null);
@@ -381,6 +381,21 @@ export function ProductsManagement({
         ? t(uiLocale, "products.stockThresholds.badge.override")
         : t(uiLocale, "products.stockThresholds.badge.storeDefault"),
     };
+  };
+
+  const formatCostDraftInput = (value: number) => (value > 0 ? String(value) : "");
+  const parseCostDraftInput = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return 0;
+    }
+
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+      return null;
+    }
+
+    return parsed;
   };
 
   /* ── Units lookup ── */
@@ -458,7 +473,7 @@ export function ProductsManagement({
     if (!detailContentRef.current) return;
     const nextHeight = detailContentRef.current.getBoundingClientRect().height;
     setDetailContentHeight(nextHeight);
-  }, [detailTab, detailProduct, editingCost, costDraft, costReasonDraft]);
+  }, [detailTab, detailProduct, editingCost, costDraftInput, costReasonDraft]);
 
   useEffect(() => {
     const seen = window.localStorage.getItem("scanner-permission-seen") === "1";
@@ -1217,8 +1232,10 @@ export function ProductsManagement({
 
   const hasUnsavedCostDraft = useMemo(() => {
     if (!showDetailSheet || !editingCost || !detailProduct) return false;
-    return costDraft !== detailProduct.costBase || costReasonDraft.trim().length > 0;
-  }, [costDraft, costReasonDraft, detailProduct, editingCost, showDetailSheet]);
+    const parsedCostDraft = parseCostDraftInput(costDraftInput);
+    const nextCostBase = parsedCostDraft ?? detailProduct.costBase;
+    return nextCostBase !== detailProduct.costBase || costReasonDraft.trim().length > 0;
+  }, [costDraftInput, costReasonDraft, detailProduct, editingCost, showDetailSheet]);
 
   /* ─── Actions ─── */
 
@@ -1320,7 +1337,7 @@ export function ProductsManagement({
     setDetailProduct(product);
     setDetailTab("info");
     setEditingCost(false);
-    setCostDraft(product.costBase);
+    setCostDraftInput(formatCostDraftInput(product.costBase));
     setCostReasonDraft("");
     setShowDetailSheet(true);
   };
@@ -1355,7 +1372,7 @@ export function ProductsManagement({
     setEditingCost(false);
     setCostReasonDraft("");
     if (detailProduct) {
-      setCostDraft(detailProduct.costBase);
+      setCostDraftInput(formatCostDraftInput(detailProduct.costBase));
     }
   }, [detailProduct]);
 
@@ -1399,7 +1416,7 @@ export function ProductsManagement({
 
   const discardCostDraft = useCallback(() => {
     if (detailProduct) {
-      setCostDraft(detailProduct.costBase);
+      setCostDraftInput(formatCostDraftInput(detailProduct.costBase));
     }
     setCostReasonDraft("");
     setEditingCost(false);
@@ -1996,6 +2013,11 @@ export function ProductsManagement({
   const saveCost = async () => {
     if (!detailProduct) return;
     const reason = costReasonDraft.trim();
+    const nextCostBase = parseCostDraftInput(costDraftInput);
+    if (nextCostBase === null) {
+      toast.error(t(uiLocale, "products.cost.validation.invalidValue"));
+      return;
+    }
     if (reason.length < 3) {
       toast.error(t(uiLocale, "products.cost.validation.reasonTooShort"));
       return;
@@ -2008,7 +2030,7 @@ export function ProductsManagement({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: "update_cost",
-        costBase: costDraft,
+        costBase: nextCostBase,
         reason,
       }),
     });
@@ -2034,7 +2056,7 @@ export function ProductsManagement({
           p.id === detailProduct.id
             ? {
                 ...p,
-                costBase: costDraft,
+                costBase: nextCostBase,
                 costTracking: {
                   source: "MANUAL",
                   updatedAt,
@@ -2050,7 +2072,7 @@ export function ProductsManagement({
         prev
           ? {
               ...prev,
-              costBase: costDraft,
+              costBase: nextCostBase,
               costTracking: {
                 source: "MANUAL",
                 updatedAt,
@@ -4369,7 +4391,7 @@ export function ProductsManagement({
                   onClick={() => {
                     setDetailTab(tab.key);
                     if (tab.key === "cost") {
-                      setCostDraft(detailProduct.costBase);
+                      setCostDraftInput(formatCostDraftInput(detailProduct.costBase));
                       setEditingCost(false);
                       setCostReasonDraft("");
                     }
@@ -4567,8 +4589,10 @@ export function ProductsManagement({
                           type="number"
                           min={0}
                           step={1}
-                          value={costDraft}
-                          onChange={(e) => setCostDraft(Number(e.target.value))}
+                          inputMode="numeric"
+                          value={costDraftInput}
+                          placeholder="0"
+                          onChange={(event) => setCostDraftInput(event.target.value)}
                           className="h-10 w-full rounded-lg border px-3 text-sm outline-none ring-blue-500 focus:ring-2"
                         />
                         <div className="space-y-1">

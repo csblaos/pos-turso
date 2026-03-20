@@ -5,35 +5,43 @@ import { eq } from "drizzle-orm";
 import { redisDelete, redisGetJson, redisSetJson } from "@/lib/cache/redis";
 import { db } from "@/lib/db/client";
 import { stores } from "@/lib/db/schema";
+import type { ReportsFilterState } from "@/lib/reports/filters";
 import {
   getCodOverviewSummary,
   getGrossProfitSummary,
   getOutstandingPurchaseRows,
   getPurchaseApAgingSummary,
   getPurchaseFxDeltaSummary,
+  getSalesOverview,
+  getSalesTrend,
   getSalesByChannel,
-  getSalesSummary,
   getTopProducts,
   type GrossProfitSummary,
   type CodOverviewSummary,
   type PurchaseApAgingSummary,
   type PurchaseFxDeltaSummary,
   type PurchaseOutstandingRow,
+  type SalesOverviewSummary,
+  type SalesTrendPoint,
   type SalesByChannelRow,
-  type SalesSummary,
   type TopProductRow,
 } from "@/lib/reports/queries";
 
 const REPORTS_OVERVIEW_TTL_SECONDS = 20;
 
-const reportsOverviewCacheKey = (storeId: string, topProductsLimit: number) => {
-  const dayKey = new Date().toISOString().slice(0, 10);
-  return `reports:overview:${storeId}:${topProductsLimit}:${dayKey}`;
+const reportsOverviewCacheKey = (
+  storeId: string,
+  topProductsLimit: number,
+  filters: ReportsFilterState,
+) => {
+  return `reports:overview:${storeId}:${topProductsLimit}:${filters.preset}:${filters.dateFrom}:${filters.dateTo}:${filters.channel}`;
 };
 
 export type ReportsViewData = {
   storeCurrency: string;
-  salesSummary: SalesSummary;
+  salesOverview: SalesOverviewSummary;
+  salesTrend: SalesTrendPoint[];
+  filters: ReportsFilterState;
   topProducts: TopProductRow[];
   salesByChannel: SalesByChannelRow[];
   grossProfit: GrossProfitSummary;
@@ -44,19 +52,24 @@ export type ReportsViewData = {
 
 export async function invalidateReportsOverviewCache(
   storeId: string,
+  filters?: ReportsFilterState,
   topProductsLimit = 10,
 ) {
-  await redisDelete(reportsOverviewCacheKey(storeId, topProductsLimit));
+  if (!filters) {
+    return;
+  }
+  await redisDelete(reportsOverviewCacheKey(storeId, topProductsLimit, filters));
 }
 
 export async function getReportsViewData(params: {
   storeId: string;
+  filters: ReportsFilterState;
   topProductsLimit?: number;
   useCache?: boolean;
 }): Promise<ReportsViewData> {
   const topProductsLimit = params.topProductsLimit ?? 10;
   const useCache = params.useCache ?? true;
-  const cacheKey = reportsOverviewCacheKey(params.storeId, topProductsLimit);
+  const cacheKey = reportsOverviewCacheKey(params.storeId, topProductsLimit, params.filters);
 
   if (useCache) {
     const cached = await redisGetJson<ReportsViewData>(cacheKey);
@@ -65,12 +78,13 @@ export async function getReportsViewData(params: {
     }
   }
 
-  const [salesSummary, topProducts, salesByChannel, grossProfit, codOverview, storeRow] =
+  const [salesOverview, salesTrend, topProducts, salesByChannel, grossProfit, codOverview, storeRow] =
     await Promise.all([
-      getSalesSummary(params.storeId),
-      getTopProducts(params.storeId, topProductsLimit),
-      getSalesByChannel(params.storeId),
-      getGrossProfitSummary(params.storeId),
+      getSalesOverview(params.storeId, params.filters),
+      getSalesTrend(params.storeId, params.filters),
+      getTopProducts(params.storeId, params.filters, topProductsLimit),
+      getSalesByChannel(params.storeId, params.filters),
+      getGrossProfitSummary(params.storeId, params.filters),
       getCodOverviewSummary(params.storeId),
       db
         .select({ currency: stores.currency })
@@ -87,7 +101,9 @@ export async function getReportsViewData(params: {
 
   const response: ReportsViewData = {
     storeCurrency,
-    salesSummary,
+    salesOverview,
+    salesTrend,
+    filters: params.filters,
     topProducts,
     salesByChannel,
     grossProfit,

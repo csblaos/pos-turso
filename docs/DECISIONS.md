@@ -2,6 +2,25 @@
 
 ไฟล์นี้บันทึก "ทำไม" ของการออกแบบสำคัญ เพื่อให้ AI/คนทำงานต่อไม่เดาเอง
 
+## ADR-030: Cash Flow Phase 1 ใช้ Operational Ledger แยกจาก GL และยอมให้ PO Payment เป็น Unassigned Account ชั่วคราว
+
+- Date: March 20, 2026
+- Status: Accepted
+- Decision:
+  - เพิ่มตาราง `financial_accounts` และ `cash_flow_entries` เป็น operational cash ledger ของร้าน แยกจากระบบบัญชีเต็ม/GL
+  - ระบบจะสร้างบัญชีระบบ `CASH_DRAWER` และ `COD_CLEARING` แบบ lazy เมื่อมีรายการเงินจริงครั้งแรก
+  - `store_payment_accounts` จะถูก map เป็น `financial_accounts` แบบ lazy เช่นกัน แทนการ migrate/backfill ทั้งร้านล่วงหน้า
+  - ผูก auto-post cash flow เข้ากับ order flows ที่มีการรับเงินจริงจริง (`order create ที่จ่ายทันที`, `confirm_paid`, `COD settle`, `bulk COD reconcile`)
+  - ผูก PO payment/reversal เข้ากับ `cash_flow_entries` ด้วย แต่ยอมให้ `accountId = null` พร้อม metadata `accountResolution=UNASSIGNED` ไปก่อน จนกว่าจะมี UI/source-account selection ที่ชัดเจน
+- Reason:
+  - เป้าหมายระยะสั้นคือให้ร้านตอบได้ว่าเงินเข้า/ออกจริงเมื่อไรและจาก flow ไหน โดยไม่ต้องรอระบบบัญชีเต็ม
+  - ถ้าเดา source account ของ PO payment เองจะสร้างข้อมูลผิดความหมายและแก้ย้อนหลังยากกว่าเก็บเป็น unresolved ชั่วคราว
+  - lazy account mapping ลดความเสี่ยงต่อ data backfill และไม่บังคับแก้ flow ตั้งค่าบัญชีเดิมทั้งหมดพร้อมกัน
+- Consequence:
+  - รายงาน cash flow phase แรกจะครอบคลุมเงินจริงจาก order/COD/PO ได้แล้ว แต่ยังต้องสื่อว่า PO payment บางรายการ “ยังไม่ระบุบัญชีต้นทาง”
+  - phase ถัดไปควรเพิ่ม UI สำหรับเลือก source account ใน PO settlement/manual cash movement เพื่อปิดช่อง `UNASSIGNED`
+  - การนับ cash available by account ต้องไม่นำรายการ `accountId = null` ไปปนกับยอดคงเหลือบัญชีจริง
+
 ## ADR-018: รูปที่เก็บใน R2 ใช้ Strict Server Optimization และเพิ่ม Client Compression เฉพาะ Flow ที่คุ้มค่า
 
 - Date: March 9, 2026

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { LoginForm } from "@/components/app/login-form";
@@ -38,12 +37,10 @@ export default async function LoginPage() {
         </p>
       </div>
       <LoginForm />
-      <p className="text-center text-sm text-muted-foreground">
-        {t(uiLocale, "auth.login.noAccount")}{" "}
-        <Link href="/signup" className="font-medium text-blue-700 hover:underline">
-          {t(uiLocale, "auth.login.signup")}
-        </Link>
-      </p>
+      <div className="space-y-1 text-center text-sm text-muted-foreground">
+        <p>{t(uiLocale, "auth.login.accountProvisioned")}</p>
+        <p>{t(uiLocale, "auth.login.contactAdmin")}</p>
+      </div>
     </div>
   );
 }
