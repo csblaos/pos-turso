@@ -41,10 +41,12 @@ export async function GET(request: Request) {
     const tab = parseOrderListTab(searchParams.get("tab"));
     const pageParam = Number(searchParams.get("page") ?? "1");
     const pageSizeParam = Number(searchParams.get("pageSize") ?? "20");
+    const q = searchParams.get("q")?.trim() ?? "";
 
     const pageData = await listOrdersByTab(storeId, tab, {
       page: Number.isFinite(pageParam) ? pageParam : 1,
       pageSize: Number.isFinite(pageSizeParam) ? pageSizeParam : 20,
+      q,
     });
 
     return NextResponse.json({ ok: true, orders: pageData.rows, page: pageData });

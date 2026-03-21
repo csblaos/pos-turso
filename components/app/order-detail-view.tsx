@@ -11,6 +11,7 @@ import {
   type ManagerCancelApprovalPayload,
   type ManagerCancelApprovalResult,
 } from "@/components/app/manager-cancel-approval-modal";
+import { OrderPackContent } from "@/components/app/order-pack-content";
 import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import {
@@ -24,6 +25,7 @@ import { t, type MessageKey } from "@/lib/i18n/messages";
 import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 import { compressRasterImageFile, validateRasterImageFile } from "@/lib/media/client-image";
 import { RASTER_IMAGE_ACCEPT } from "@/lib/media/image-upload";
+import { buildOrderQrSvgMarkup } from "@/lib/orders/print";
 import type { OrderCatalogPaymentAccount, OrderDetail } from "@/lib/orders/queries";
 import { maskAccountValue } from "@/lib/payments/store-payment";
 
@@ -126,9 +128,11 @@ export function OrderDetailView({
   const [messageText, setMessageText] = useState(messaging.template);
   const [receiptPrintLoading, setReceiptPrintLoading] = useState(false);
   const [labelPrintLoading, setLabelPrintLoading] = useState(false);
+  const [packPrintLoading, setPackPrintLoading] = useState(false);
   const [showConfirmPaidConfirmModal, setShowConfirmPaidConfirmModal] = useState(false);
   const [showConfirmPickupBeforePaidModal, setShowConfirmPickupBeforePaidModal] = useState(false);
   const [showCancelApprovalModal, setShowCancelApprovalModal] = useState(false);
+  const [showPackSheet, setShowPackSheet] = useState(false);
   const [showConfirmPaidQrImageViewer, setShowConfirmPaidQrImageViewer] = useState(false);
   const [showOrderQrImageViewer, setShowOrderQrImageViewer] = useState(false);
   const [showShippingLabelSourcePicker, setShowShippingLabelSourcePicker] = useState(false);
@@ -241,6 +245,7 @@ export function OrderDetailView({
   const showCustomerSection = !isWalkInPaidComplete || hasMeaningfulCustomerSection;
   const showCancelApprovalSummary =
     order.status === "CANCELLED" && Boolean(order.cancelApproval);
+  const isAnyPrintLoading = receiptPrintLoading || labelPrintLoading || packPrintLoading;
   const cancelApprovedAtLabel = order.cancelApproval
     ? new Date(order.cancelApproval.approvedAt).toLocaleString(numberLocale)
     : "";
@@ -264,6 +269,23 @@ export function OrderDetailView({
           ? -order.shippingCost
           : 0
       : 0;
+  const orderQrSvgMarkup = useMemo(
+    () =>
+      buildOrderQrSvgMarkup(order.orderNo, {
+        size: 120,
+        ariaLabel: `${t(uiLocale, "orders.print.label.orderQrTitle")} ${order.orderNo}`,
+      }),
+    [order.orderNo, uiLocale],
+  );
+  const printFontFamily = useMemo(() => {
+    if (uiLocale === "lo") {
+      return '"NotoSansLaoLooped", "GoogleSans", Sarabun, "Noto Sans Lao", "Segoe UI", sans-serif';
+    }
+    if (uiLocale === "th") {
+      return 'Sarabun, "GoogleSans", "Noto Sans Thai", "Segoe UI", sans-serif';
+    }
+    return 'ui-sans-serif, -apple-system, "Segoe UI", sans-serif';
+  }, [uiLocale]);
 
   const codSettlementAmountNumber = useMemo(
     () => Number(codSettlementAmount || "0"),
@@ -695,10 +717,18 @@ export function OrderDetailView({
   const buildLabelPrintMarkup = useCallback(() => {
     return `<section class="print-page print-label">
       <div style="border:1px solid #0f172a;padding:12px;min-height:136mm;display:flex;flex-direction:column;justify-content:space-between;">
-        <section>
-          <h1 style="margin:0;font-size:18px;font-weight:700;">${escapeHtml(t(uiLocale, "orders.print.label.title"))}</h1>
-          <p style="margin:4px 0 0;font-size:14px;">${escapeHtml(t(uiLocale, "orders.print.label.orderPrefix"))} ${escapeHtml(order.orderNo)}</p>
-          <p style="margin:2px 0 0;font-size:13px;">${escapeHtml(t(uiLocale, "orders.print.label.statusPrefix"))} ${escapeHtml(t(uiLocale, statusLabelKey[order.status]))}</p>
+        <section style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;">
+          <div>
+            <h1 style="margin:0;font-size:18px;font-weight:700;">${escapeHtml(t(uiLocale, "orders.print.label.title"))}</h1>
+            <p style="margin:4px 0 0;font-size:14px;">${escapeHtml(t(uiLocale, "orders.print.label.orderPrefix"))} ${escapeHtml(order.orderNo)}</p>
+            <p style="margin:2px 0 0;font-size:13px;">${escapeHtml(t(uiLocale, "orders.print.label.statusPrefix"))} ${escapeHtml(t(uiLocale, statusLabelKey[order.status]))}</p>
+            <p style="margin:4px 0 0;font-size:11px;color:#64748b;">${escapeHtml(t(uiLocale, "orders.print.label.createdAtPrefix"))} ${escapeHtml(new Date(order.createdAt).toLocaleString(numberLocale))}</p>
+          </div>
+          <div style="width:132px;border:1px solid #cbd5e1;border-radius:12px;padding:8px;text-align:center;">
+            <div style="width:120px;height:120px;margin:0 auto;">${orderQrSvgMarkup}</div>
+            <p style="margin:8px 0 0;font-size:10px;font-weight:700;">${escapeHtml(t(uiLocale, "orders.print.label.orderQrTitle"))}</p>
+            <p style="margin:4px 0 0;font-size:9px;line-height:1.35;color:#64748b;">${escapeHtml(t(uiLocale, "orders.print.label.orderQrHint"))}</p>
+          </div>
         </section>
         <section style="margin-top:10px;">
           <p style="margin:0 0 6px;font-size:12px;color:#475569;">${escapeHtml(t(uiLocale, "orders.print.label.receiverTitle"))}</p>
@@ -713,10 +743,72 @@ export function OrderDetailView({
         </section>
       </div>
     </section>`;
-  }, [numberLocale, order, storeCurrencyDisplay, uiLocale]);
+  }, [numberLocale, order, orderQrSvgMarkup, storeCurrencyDisplay, uiLocale]);
+
+  const buildPackPrintMarkup = useCallback(() => {
+    const totalQuantity = order.items.reduce((sum, item) => sum + item.qty, 0);
+    const rows = order.items
+      .map(
+        (item, index) => `<div style="display:flex;gap:8px;border-top:1px dashed #64748b;padding:6px 0;">
+          <div style="font-size:11px;color:#475569;flex-shrink:0;">${index + 1}.</div>
+          <div style="min-width:0;flex:1;">
+            <div style="font-size:11px;font-weight:700;color:#0f172a;line-height:1.35;word-break:break-word;">${escapeHtml(item.productName)}</div>
+            <div style="margin-top:2px;font-size:10px;color:#64748b;word-break:break-word;">${escapeHtml(t(uiLocale, "orders.pack.page.skuLabel"))}: ${escapeHtml(item.productSku || "-")}</div>
+          </div>
+          <div style="text-align:right;white-space:nowrap;flex-shrink:0;">
+            <div style="font-size:11px;font-weight:700;color:#0f172a;">${item.qty.toLocaleString(numberLocale)}</div>
+            <div style="font-size:10px;color:#64748b;">${escapeHtml(item.unitCode)}</div>
+          </div>
+        </div>`,
+      )
+      .join("");
+
+    const codSummary =
+      order.paymentMethod === "COD"
+        ? `<div style="margin-top:6px;font-size:11px;display:flex;justify-content:space-between;gap:8px;">
+            <span>${escapeHtml(t(uiLocale, "orders.pack.page.codAmountLabel"))}</span>
+            <span style="font-weight:700;">${(order.codAmount > 0 ? order.codAmount : order.total).toLocaleString(numberLocale)} ${escapeHtml(storeCurrencyDisplay)}</span>
+          </div>`
+        : "";
+
+    return `<section class="print-page print-pack">
+      <section>
+        <h1 style="margin:0;text-align:center;font-size:14px;font-weight:700;">${escapeHtml(t(uiLocale, "orders.pack.page.title"))}</h1>
+        <p style="margin:4px 0 0;text-align:center;font-size:13px;font-weight:700;">${escapeHtml(order.orderNo)}</p>
+        <p style="margin:4px 0 0;text-align:center;font-size:11px;color:#475569;">${escapeHtml(t(uiLocale, "orders.pack.page.flowLabel"))}: ${escapeHtml(orderFlowLabel)}</p>
+        <p style="margin:4px 0 0;text-align:center;font-size:10px;color:#64748b;">${escapeHtml(t(uiLocale, "orders.print.label.createdAtPrefix"))} ${escapeHtml(new Date(order.createdAt).toLocaleString(numberLocale))}</p>
+
+        <div style="margin:8px auto 0;width:72px;height:72px;">${buildOrderQrSvgMarkup(order.orderNo, {
+          size: 72,
+          ariaLabel: `${t(uiLocale, "orders.print.label.orderQrTitle")} ${order.orderNo}`,
+        })}</div>
+        <p style="margin:6px 0 0;text-align:center;font-size:9px;color:#64748b;">${escapeHtml(t(uiLocale, "orders.print.label.orderQrHint"))}</p>
+
+        <hr style="border:0;border-top:1px dashed #64748b;margin:8px 0;" />
+        <div style="font-size:11px;line-height:1.45;word-break:break-word;">
+          <div><strong>${escapeHtml(t(uiLocale, "orders.print.label.receiverTitle"))}:</strong> ${escapeHtml(order.customerName || order.contactDisplayName || t(uiLocale, "orders.customer.guest"))}</div>
+          <div><strong>${escapeHtml(t(uiLocale, "common.phone.prefix"))}</strong> ${escapeHtml(order.customerPhone || order.contactPhone || "-")}</div>
+          <div><strong>${escapeHtml(t(uiLocale, "orders.print.label.addressPrefix"))}</strong> ${escapeHtml(order.customerAddress || "-")}</div>
+          <div><strong>${escapeHtml(t(uiLocale, "orders.print.label.shippingPrefix"))}</strong> ${escapeHtml(order.shippingProvider || order.shippingCarrier || "-")}</div>
+          <div><strong>${escapeHtml(t(uiLocale, "orders.print.label.trackingPrefix"))}</strong> ${escapeHtml(order.trackingNo || "-")}</div>
+          <div style="display:flex;justify-content:space-between;gap:8px;">
+            <span>${escapeHtml(t(uiLocale, "orders.pack.page.itemsQtyTotal"))}</span>
+            <span style="font-weight:700;">${totalQuantity.toLocaleString(numberLocale)}</span>
+          </div>
+        </div>
+        ${codSummary}
+
+        <hr style="border:0;border-top:1px dashed #64748b;margin:8px 0;" />
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#475569;">${escapeHtml(t(uiLocale, "orders.pack.page.itemsTitle"))}</div>
+          <div style="margin-top:4px;">${rows}</div>
+        </div>
+      </section>
+    </section>`;
+  }, [numberLocale, order, orderFlowLabel, storeCurrencyDisplay, uiLocale]);
 
   const printViaWindow = useCallback(
-    (kind: "receipt" | "label") => {
+    (kind: "receipt" | "label" | "pack") => {
       if (typeof window === "undefined") {
         return;
       }
@@ -724,8 +816,10 @@ export function OrderDetailView({
       setErrorMessage(null);
       if (kind === "receipt") {
         setReceiptPrintLoading(true);
-      } else {
+      } else if (kind === "label") {
         setLabelPrintLoading(true);
+      } else {
+        setPackPrintLoading(true);
       }
 
       const printRootId = "order-detail-inline-print-root";
@@ -737,7 +831,12 @@ export function OrderDetailView({
       const printRoot = document.createElement("div");
       printRoot.id = printRootId;
       printRoot.setAttribute("aria-hidden", "true");
-      printRoot.innerHTML = kind === "receipt" ? buildReceiptPrintMarkup() : buildLabelPrintMarkup();
+      printRoot.innerHTML =
+        kind === "receipt"
+          ? buildReceiptPrintMarkup()
+          : kind === "label"
+            ? buildLabelPrintMarkup()
+            : buildPackPrintMarkup();
 
       const printStyle = document.createElement("style");
       printStyle.id = printStyleId;
@@ -761,7 +860,7 @@ export function OrderDetailView({
           }
           #${printRootId} .print-page {
             color: #000000;
-            font-family: ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+            font-family: ${printFontFamily};
           }
           #${printRootId} .print-receipt {
             width: 80mm;
@@ -775,6 +874,13 @@ export function OrderDetailView({
             margin: 0 auto;
             padding: 4mm;
             font-size: 14px;
+            line-height: 1.35;
+          }
+          #${printRootId} .print-pack {
+            width: 80mm;
+            margin: 0 auto;
+            padding: 2mm;
+            font-size: 12px;
             line-height: 1.35;
           }
         }
@@ -799,8 +905,10 @@ export function OrderDetailView({
         settled = true;
         if (kind === "receipt") {
           setReceiptPrintLoading(false);
-        } else {
+        } else if (kind === "label") {
           setLabelPrintLoading(false);
+        } else {
+          setPackPrintLoading(false);
         }
       };
 
@@ -828,7 +936,9 @@ export function OrderDetailView({
             setErrorMessage(
               kind === "receipt"
                 ? t(uiLocale, "orders.print.error.receiptPrintFailed")
-                : t(uiLocale, "orders.print.error.labelPrintFailed"),
+                : kind === "label"
+                  ? t(uiLocale, "orders.print.error.labelPrintFailed")
+                  : t(uiLocale, "orders.print.error.packPrintFailed"),
             );
             settleLoading();
             cleanup();
@@ -836,8 +946,18 @@ export function OrderDetailView({
         });
       });
     },
-    [buildLabelPrintMarkup, buildReceiptPrintMarkup, uiLocale],
+    [buildLabelPrintMarkup, buildPackPrintMarkup, buildReceiptPrintMarkup, printFontFamily, uiLocale],
   );
+
+  const handlePrintPackFromSheet = useCallback(() => {
+    if (isAnyPrintLoading) {
+      return;
+    }
+    setShowPackSheet(false);
+    window.setTimeout(() => {
+      printViaWindow("pack");
+    }, 280);
+  }, [isAnyPrintLoading, printViaWindow]);
 
   const isSlipPendingProof =
     isOnlineOrder && order.paymentMethod === "LAO_QR" && order.paymentStatus === "PENDING_PROOF";
@@ -1844,7 +1964,7 @@ export function OrderDetailView({
                   variant="outline"
                   className="h-10 w-full text-xs"
                   onClick={() => printViaWindow("receipt")}
-                  disabled={receiptPrintLoading || labelPrintLoading}
+                  disabled={isAnyPrintLoading}
                 >
                   {receiptPrintLoading
                     ? t(uiLocale, "orders.detail.actions.print.loading")
@@ -1966,7 +2086,7 @@ export function OrderDetailView({
                     variant="outline"
                     className="h-9 text-xs"
                     onClick={() => printViaWindow("receipt")}
-                    disabled={receiptPrintLoading || labelPrintLoading}
+                    disabled={isAnyPrintLoading}
                   >
                     {receiptPrintLoading
                       ? t(uiLocale, "orders.detail.actions.print.loading")
@@ -1978,7 +2098,7 @@ export function OrderDetailView({
                       variant="outline"
                       className="h-9 text-xs"
                       onClick={() => printViaWindow("label")}
-                      disabled={receiptPrintLoading || labelPrintLoading}
+                      disabled={isAnyPrintLoading}
                     >
                       {labelPrintLoading
                         ? t(uiLocale, "orders.detail.actions.print.loading")
@@ -1986,6 +2106,17 @@ export function OrderDetailView({
                     </Button>
                   ) : null}
                 </div>
+                {!isWalkInPaidComplete ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 w-full text-xs"
+                    onClick={() => setShowPackSheet(true)}
+                    disabled={isAnyPrintLoading}
+                  >
+                    {t(uiLocale, "orders.detail.actions.packView")}
+                  </Button>
+                ) : null}
 
                 {showExtraActionsHeader && extraActions.length > 0 ? (
                   <details className="rounded-md border border-slate-200 p-2">
@@ -2417,6 +2548,53 @@ export function OrderDetailView({
           </div>
         </div>
       ) : null}
+      <SlideUpSheet
+        isOpen={showPackSheet}
+        onClose={() => {
+          if (isAnyPrintLoading) {
+            return;
+          }
+          setShowPackSheet(false);
+        }}
+        title={t(uiLocale, "orders.pack.page.title")}
+        description={t(uiLocale, "orders.pack.page.subtitle")}
+        panelMaxWidthClass="min-[1200px]:max-w-5xl"
+        disabled={isAnyPrintLoading}
+        scrollToTopOnOpen
+        footer={
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 w-full rounded-xl"
+              onClick={() => setShowPackSheet(false)}
+              disabled={isAnyPrintLoading}
+            >
+              {t(uiLocale, "common.action.close")}
+            </Button>
+            <Button
+              type="button"
+              className="h-10 w-full rounded-xl"
+              onClick={handlePrintPackFromSheet}
+              disabled={isAnyPrintLoading}
+            >
+              {packPrintLoading
+                ? t(uiLocale, "orders.detail.actions.print.loading")
+                : t(uiLocale, "orders.detail.actions.print.pack")}
+            </Button>
+          </div>
+        }
+      >
+        <div className="pb-1">
+          <OrderPackContent
+            order={order}
+            uiLocale={uiLocale}
+            numberLocale={numberLocale}
+            storeCurrencyDisplay={storeCurrencyDisplay}
+            className="px-1"
+          />
+        </div>
+      </SlideUpSheet>
       <SlideUpSheet
         isOpen={showShippingLabelSourcePicker}
         onClose={closeShippingLabelSourcePicker}

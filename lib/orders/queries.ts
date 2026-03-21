@@ -375,15 +375,33 @@ const buildOrderListWhere = (storeId: string, tab: OrderListTab) => {
   return eq(orders.storeId, storeId);
 };
 
+const buildOrderListSearchCondition = (rawQuery?: string) => {
+  const q = rawQuery?.trim().toLowerCase() ?? "";
+  if (!q) {
+    return null;
+  }
+  const likePattern = `%${q}%`;
+  return sql`(
+    lower(${orders.orderNo}) like ${likePattern}
+    or lower(coalesce(${orders.customerName}, '')) like ${likePattern}
+    or lower(coalesce(${contacts.displayName}, '')) like ${likePattern}
+  )`;
+};
+
 export async function listOrdersByTab(
   storeId: string,
   tab: OrderListTab,
-  options?: { page?: number; pageSize?: number },
+  options?: { page?: number; pageSize?: number; q?: string },
 ): Promise<PaginatedOrderList> {
   const pageSize = Math.max(1, Math.min(options?.pageSize ?? 20, 100));
   const page = Math.max(1, options?.page ?? 1);
   const offset = (page - 1) * pageSize;
   const scopedWhere = buildOrderListWhere(storeId, tab);
+  const searchCondition = buildOrderListSearchCondition(options?.q);
+  const whereCondition = searchCondition ? and(scopedWhere, searchCondition) : scopedWhere;
+  const queueCountsWhere = searchCondition
+    ? and(eq(orders.storeId, storeId), searchCondition)
+    : eq(orders.storeId, storeId);
 
   let rows: OrderListItem[] = [];
   let countRows: Array<{ value: number }> = [];
@@ -420,7 +438,7 @@ export async function listOrdersByTab(
           })
           .from(orders)
           .leftJoin(contacts, eq(orders.contactId, contacts.id))
-          .where(scopedWhere)
+          .where(whereCondition)
           .orderBy(desc(orders.createdAt))
           .limit(pageSize)
           .offset(offset),
@@ -429,7 +447,8 @@ export async function listOrdersByTab(
         db
           .select({ value: sql<number>`count(*)` })
           .from(orders)
-          .where(scopedWhere),
+          .leftJoin(contacts, eq(orders.contactId, contacts.id))
+          .where(whereCondition),
       ),
       timeDbQuery("orders.list.queueCounts", async () =>
         db
@@ -442,7 +461,8 @@ export async function listOrdersByTab(
             COD_RECONCILE: sql<number>`coalesce(sum(case when ${orders.paymentMethod} = 'COD' and ${orders.status} = 'SHIPPED' and ${orders.paymentStatus} = 'COD_PENDING_SETTLEMENT' then 1 else 0 end), 0)`,
           })
           .from(orders)
-          .where(eq(orders.storeId, storeId)),
+          .leftJoin(contacts, eq(orders.contactId, contacts.id))
+          .where(queueCountsWhere),
       ),
     ]);
     rows = queryRows;
@@ -477,7 +497,7 @@ export async function listOrdersByTab(
           .from(orders)
           .innerJoin(stores, eq(orders.storeId, stores.id))
           .leftJoin(contacts, eq(orders.contactId, contacts.id))
-          .where(scopedWhere)
+          .where(whereCondition)
           .orderBy(desc(orders.createdAt))
           .limit(pageSize)
           .offset(offset),
@@ -486,13 +506,15 @@ export async function listOrdersByTab(
         db
           .select({ value: sql<number>`count(*)` })
           .from(orders)
-          .where(scopedWhere),
+          .leftJoin(contacts, eq(orders.contactId, contacts.id))
+          .where(whereCondition),
       ),
       timeDbQuery("orders.list.count.legacy.all", async () =>
         db
           .select({ value: sql<number>`count(*)` })
           .from(orders)
-          .where(eq(orders.storeId, storeId)),
+          .leftJoin(contacts, eq(orders.contactId, contacts.id))
+          .where(queueCountsWhere),
       ),
     ]);
 

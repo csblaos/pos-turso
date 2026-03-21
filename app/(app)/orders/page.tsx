@@ -83,7 +83,7 @@ const resolveDefaultOrdersTab = (params: {
 export default async function OrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; page?: string }>;
+  searchParams: Promise<{ tab?: string; page?: string; q?: string }>;
 }) {
   const finishRenderTimer = startServerRenderTimer("page.orders");
 
@@ -120,6 +120,7 @@ export default async function OrdersPage({
     const tab = parseOrderListTab(params.tab);
     const pageParam = Number(params.page ?? "1");
     const page = Number.isFinite(pageParam) ? pageParam : 1;
+    const q = params.q?.trim() ?? "";
 
     const canView = isPermissionGranted(permissionKeys, "orders.view");
     const canCreate = isPermissionGranted(permissionKeys, "orders.create");
@@ -151,12 +152,17 @@ export default async function OrdersPage({
     }
 
     if (!params.tab && defaultTab !== "ALL") {
-      redirect(`/orders?tab=${defaultTab}`);
+      const nextParams = new URLSearchParams();
+      nextParams.set("tab", defaultTab);
+      if (q) {
+        nextParams.set("q", q);
+      }
+      redirect(`/orders?${nextParams.toString()}`);
     }
 
     const [catalog, ordersPage] = await Promise.all([
       getOrderManageCatalogForStore(session.activeStoreId),
-      listOrdersByTab(session.activeStoreId, tab, { page, pageSize: 20 }),
+      listOrdersByTab(session.activeStoreId, tab, { page, pageSize: 20, q }),
     ]);
 
     return (
@@ -181,6 +187,7 @@ export default async function OrdersPage({
         <OrdersManagement
           ordersPage={ordersPage}
           activeTab={tab}
+          searchQuery={q}
           catalog={catalog}
           canCreate={canCreate}
           canUpdate={canUpdate}

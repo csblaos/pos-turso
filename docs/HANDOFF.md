@@ -6,6 +6,23 @@
 
 ## Changed (ล่าสุด)
 
+- เพิ่ม `scan to search` ให้หน้า `/orders`:
+  - `GET /api/orders` และ query `listOrdersByTab()` รองรับ query `q` แล้วสำหรับค้นหา `orderNo`, `customerName`, และ `contactDisplayName`
+  - หน้า `/orders` เพิ่มช่องค้นหาแบบ server-backed พร้อมปุ่มสแกนในหน้า list
+  - scanner เดิมของ `OrdersManagement` ถูก reuse เป็น 2 โหมด: ฝั่ง create ยังสแกนสินค้าเหมือนเดิม, ฝั่ง manage จะ parse `QR ออเดอร์` รูปแบบ `ORDER:${orderNo}` แล้ว apply เป็น search query ให้อัตโนมัติ
+  - ผลค้นหาผูกกับ URL (`?q=`) และ clear/search ใหม่ได้จากหน้าเดียว โดยคง flow work queue/tab เดิม
+
+- เพิ่ม pack workflow สำหรับออเดอร์ออนไลน์/จัดส่ง:
+  - หน้า detail ใช้ `SlideUpSheet` เป็น pack view หลักแล้ว โดยเปิดจากปุ่ม `หน้าแพ็ก` บนหน้าเดิม, reuse pack content เดียวกัน และมีปุ่ม `พิมพ์ใบแพ็ก` ที่พิมพ์ผ่าน `window.print()` บนหน้าเดิม
+  - pack modal ปรับเป็น receipt-style บนจอแล้ว: ใช้แถวข้อมูลแบบบิล + ตาราง `รายการ | จำนวน` เป็นแกนหลัก, ย้าย QR/ผู้รับ/ขนส่งให้อยู่ในจังหวะการอ่านเดียวกับบิลเพื่อให้พนักงานแพ็กเช็กของเร็วขึ้น
+  - ใบแพ็กที่พิมพ์จากหน้า detail ถูกย่อเป็นขนาด `80mm` แบบเดียวกับใบเสร็จแล้ว และเปลี่ยนเป็น receipt-style layout แบบเรียบ (ลด card/box ใหญ่, บังคับ word-break ใน field ยาว) เพื่อให้พิมพ์บนกระดาษม้วนได้เสถียรกว่าเดิม
+  - แก้ปัญหา mobile print ของ pack modal ที่บางครั้งขึ้นหน้าพิมพ์ว่าง: ปุ่ม `พิมพ์ใบแพ็ก` ใน sheet จะปิด modal ก่อน แล้วค่อยเรียก `window.print()` หลัง body scroll lock ถูกปลด
+  - แก้ปัญหาฟอนต์ลาวไม่ขึ้นตอนพิมพ์ในหน้า order detail: เพิ่ม `@font-face` ของ `NotoSansLaoLooped-Regular.ttf` ใน global CSS และให้ inline print CSS เลือก `font-family` ตาม `uiLocale` (`lo` ใช้ `NotoSansLaoLooped` ก่อน) แทนการ fix เป็น `ui-sans-serif`
+  - route เก่า `/orders/[orderId]/pack` ถูกเปลี่ยนเป็น legacy redirect กลับ `/orders/[orderId]` เพื่อปิด flow pack page แยก แต่ยังกันลิงก์เก่า/บุ๊กมาร์กไม่พัง
+  - เพิ่ม helper `lib/orders/print.ts` เพื่อสร้าง `QR ออเดอร์` แบบ stable (`ORDER:${orderNo}`) และ reuse ร่วมกันทั้งหน้า pack กับ shipping label
+  - ป้ายจัดส่งทั้ง route `/orders/[orderId]/print/label` และ current-page print จาก detail แสดง QR ประจำออเดอร์แล้ว
+  - `components/app/receipt-print-actions.tsx` รองรับ label ปุ่มแบบส่ง props เพื่อให้หน้า print แต่ละแบบใช้ข้อความ/ปลายทางกลับต่างกันได้
+
 - ปรับ UX ช่องแก้ต้นทุนใน product detail modal:
   - ช่อง `ต้นทุน` ตอน edit ไม่ bind ค่า `0` แบบแข็งแล้ว
   - ถ้าต้นทุนเดิมเป็น `0` จะโชว์ช่องว่างพร้อม placeholder `0`

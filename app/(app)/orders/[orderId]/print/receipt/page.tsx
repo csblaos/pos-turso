@@ -148,7 +148,12 @@ export default async function PrintReceiptPage({
 
         <hr className="my-2 border-dashed" />
         <p className="text-center text-[11px]">{t(uiLocale, "orders.print.receipt.thanks")}</p>
-        <ReceiptPrintActions autoPrint={autoPrint} returnTo={returnTo} />
+        <ReceiptPrintActions
+          autoPrint={autoPrint}
+          returnTo={returnTo}
+          printLabel={t(uiLocale, "common.action.printAgain")}
+          returnLabel={t(uiLocale, "nav.backToOrderDetail")}
+        />
       </main>
     </>
   );

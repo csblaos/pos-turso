@@ -46,6 +46,7 @@ import {
   setNewOrderDraftPayload,
   type NewOrderDraftPayload,
 } from "@/lib/orders/new-order-draft";
+import { parseOrderSearchValue } from "@/lib/orders/print";
 import type {
   OrderCatalog,
   OrderListItem,
@@ -64,6 +65,7 @@ type OrdersManagementProps =
       mode?: "manage";
       ordersPage: PaginatedOrderList;
       activeTab: OrderListTab;
+      searchQuery: string;
       catalog: OrderCatalog;
       canCreate: boolean;
       canUpdate?: boolean;
@@ -711,6 +713,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
   const canSelfApproveCancel = props.canSelfApproveCancel ?? false;
   const isCreateOnlyMode = props.mode === "create-only";
   const activeTab: OrderListTab = isCreateOnlyMode ? "ALL" : props.activeTab;
+  const activeSearchQuery = isCreateOnlyMode ? "" : props.searchQuery;
   const ordersPage = isCreateOnlyMode ? null : props.ordersPage;
   const uiLocale = useUiLocale();
   const numberLocale = uiLocaleToDateLocale(uiLocale);
@@ -722,6 +725,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
   const [hasSeenScannerPermission, setHasSeenScannerPermission] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pendingTab, setPendingTab] = useState<OrderListTab | null>(null);
+  const [isManageSearchPending, setIsManageSearchPending] = useState(false);
   const [isDesktopBulkSelectMode, setIsDesktopBulkSelectMode] = useState(false);
   const [quickActionLoadingKey, setQuickActionLoadingKey] = useState<string | null>(null);
   const [bulkActionLoadingKey, setBulkActionLoadingKey] = useState<OrderBulkActionKey | null>(null);
@@ -738,6 +742,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [notFoundBarcode, setNotFoundBarcode] = useState<string | null>(null);
+  const [manageSearchInput, setManageSearchInput] = useState(activeSearchQuery);
   const [manualSearchKeyword, setManualSearchKeyword] = useState("");
   const [quickAddKeyword, setQuickAddKeyword] = useState("");
   const [quickAddCategoryId, setQuickAddCategoryId] = useState<string>("ALL");
@@ -1020,7 +1025,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
     [pendingTab],
   );
   const isOrdersTabTransitioning =
-    !isCreateOnlyMode && isTabPending && pendingTab !== null && pendingTab !== activeTab;
+    !isCreateOnlyMode &&
+    (isManageSearchPending || (isTabPending && pendingTab !== null && pendingTab !== activeTab));
   const visibleOrderIds = useMemo(() => visibleOrders.map((order) => order.id), [visibleOrders]);
   const selectedOrderIdSet = useMemo(() => new Set(selectedOrderIds), [selectedOrderIds]);
   const selectedOrders = useMemo(
@@ -1997,6 +2003,20 @@ export function OrdersManagement(props: OrdersManagementProps) {
       return;
     }
 
+    if (!isCreateOnlyMode) {
+      const nextSearchValue = parseOrderSearchValue(barcode);
+      if (!nextSearchValue) {
+        return;
+      }
+      setManageSearchInput(nextSearchValue);
+      setShowScannerSheet(false);
+      setIsManageSearchPending(true);
+      startTabTransition(() => {
+        router.replace(buildOrdersUrl(activeTab, 1, nextSearchValue), { scroll: false });
+      });
+      return;
+    }
+
     const keyword = barcode.toLowerCase();
     const matched = catalog.products.find(
       (product) =>
@@ -2035,28 +2055,46 @@ export function OrdersManagement(props: OrdersManagementProps) {
     setManualSearchKeyword("");
   };
 
-  const buildOrdersUrl = (tab: TabKey, page: number) => {
-    const nextParams = new URLSearchParams(searchParams.toString());
+  const buildOrdersUrl = useCallback(
+    (tab: TabKey, page: number, rawSearchQuery?: string) => {
+      const nextParams = new URLSearchParams(searchParams.toString());
+      const nextSearchQuery = parseOrderSearchValue(rawSearchQuery ?? activeSearchQuery);
 
-    if (tab === "ALL") {
-      nextParams.delete("tab");
-    } else {
-      nextParams.set("tab", tab);
-    }
+      if (tab === "ALL") {
+        nextParams.delete("tab");
+      } else {
+        nextParams.set("tab", tab);
+      }
 
-    if (page <= 1) {
-      nextParams.delete("page");
-    } else {
-      nextParams.set("page", String(page));
-    }
+      if (page <= 1) {
+        nextParams.delete("page");
+      } else {
+        nextParams.set("page", String(page));
+      }
 
-    const query = nextParams.toString();
-    return query ? `/orders?${query}` : "/orders";
-  };
+      if (nextSearchQuery) {
+        nextParams.set("q", nextSearchQuery);
+      } else {
+        nextParams.delete("q");
+      }
+
+      const query = nextParams.toString();
+      return query ? `/orders?${query}` : "/orders";
+    },
+    [activeSearchQuery, searchParams],
+  );
 
   useEffect(() => {
     setPendingTab(null);
   }, [activeTab, ordersPage?.page]);
+
+  useEffect(() => {
+    if (isCreateOnlyMode) {
+      return;
+    }
+    setManageSearchInput(activeSearchQuery);
+    setIsManageSearchPending(false);
+  }, [activeSearchQuery, activeTab, isCreateOnlyMode, ordersPage?.page]);
 
   const handleTabChange = (tab: TabKey) => {
     if (isCreateOnlyMode) {
@@ -2072,6 +2110,26 @@ export function OrdersManagement(props: OrdersManagementProps) {
       router.replace(buildOrdersUrl(tab, 1), { scroll: false });
     });
   };
+
+  const applyManageSearch = useCallback(
+    (rawValue: string) => {
+      if (isCreateOnlyMode) {
+        return;
+      }
+
+      const nextSearchValue = parseOrderSearchValue(rawValue);
+      if (nextSearchValue === activeSearchQuery && (ordersPage?.page ?? 1) === 1) {
+        return;
+      }
+
+      setManageSearchInput(nextSearchValue);
+      setIsManageSearchPending(true);
+      startTabTransition(() => {
+        router.replace(buildOrdersUrl(activeTab, 1, nextSearchValue), { scroll: false });
+      });
+    },
+    [activeSearchQuery, activeTab, buildOrdersUrl, isCreateOnlyMode, ordersPage?.page, router],
+  );
 
   const tableColumns = useMemo<ColumnDef<OrderListItem>[]>(
     () => {
@@ -5308,6 +5366,79 @@ export function OrdersManagement(props: OrdersManagementProps) {
               </div>
             </div>
 
+            <form
+              className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                applyManageSearch(manageSearchInput);
+              }}
+            >
+              <input
+                type="text"
+                className="h-10 min-w-0 rounded-md border bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
+                placeholder={t(uiLocale, "orders.management.search.placeholder")}
+                value={manageSearchInput}
+                onChange={(event) => setManageSearchInput(event.target.value)}
+                disabled={
+                  quickActionLoadingKey !== null ||
+                  bulkActionLoadingKey !== null ||
+                  bulkPrintLoadingKind !== null
+                }
+                aria-label={t(uiLocale, "orders.management.search.placeholder")}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 w-10 p-0"
+                disabled={
+                  quickActionLoadingKey !== null ||
+                  bulkActionLoadingKey !== null ||
+                  bulkPrintLoadingKind !== null
+                }
+                onClick={openScannerSheet}
+                aria-label={t(uiLocale, "orders.management.search.scan")}
+                title={t(uiLocale, "orders.management.search.scan")}
+              >
+                <ScanLine className="h-4 w-4" />
+              </Button>
+              <Button
+                type="submit"
+                className="h-10 px-3 text-xs sm:text-sm"
+                disabled={
+                  isManageSearchPending ||
+                  quickActionLoadingKey !== null ||
+                  bulkActionLoadingKey !== null ||
+                  bulkPrintLoadingKind !== null
+                }
+              >
+                {isManageSearchPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  t(uiLocale, "orders.management.search.submit")
+                )}
+              </Button>
+            </form>
+
+            {activeSearchQuery ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                <p>
+                  {t(uiLocale, "orders.management.search.activePrefix")}{" "}
+                  <span className="font-medium text-slate-800">{activeSearchQuery}</span> •{" "}
+                  {(ordersPage?.total ?? 0).toLocaleString(numberLocale)}{" "}
+                  {t(uiLocale, "orders.management.search.resultCountSuffix")}
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-8 px-2 text-xs"
+                  onClick={() => applyManageSearch("")}
+                  disabled={isManageSearchPending}
+                >
+                  {t(uiLocale, "orders.management.search.clear")}
+                </Button>
+              </div>
+            ) : null}
+
             <div className="-mx-1 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <div className="flex min-w-max gap-2 px-1">
                 {tabOptions.map((tab) => {
@@ -5414,7 +5545,11 @@ export function OrdersManagement(props: OrdersManagementProps) {
             ) : visibleOrders.length === 0 ? (
               <article className="rounded-xl border bg-white p-4 text-sm text-muted-foreground shadow-sm">
                 <p className="font-medium text-slate-700">{t(uiLocale, activeTabOption.labelKey)}</p>
-                <p className="mt-1">{t(uiLocale, "orders.page.emptyTab")}</p>
+                <p className="mt-1">
+                  {activeSearchQuery
+                    ? t(uiLocale, "orders.management.search.empty")
+                    : t(uiLocale, "orders.page.emptyTab")}
+                </p>
               </article>
             ) : (
               <>
@@ -5716,7 +5851,12 @@ export function OrdersManagement(props: OrdersManagementProps) {
         isOpen={showScannerSheet}
         onClose={() => setShowScannerSheet(false)}
         title={t(uiLocale, "products.scanner.title")}
-        description={t(uiLocale, "orders.create.scanner.description")}
+        description={t(
+          uiLocale,
+          isCreateOnlyMode
+            ? "orders.create.scanner.description"
+            : "orders.management.search.scannerDescription",
+        )}
         disabled={loading}
       >
         <div className="p-4">

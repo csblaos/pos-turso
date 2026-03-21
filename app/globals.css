@@ -26,6 +26,22 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: "Sarabun";
+  src: url("/fonts/Sarabun-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "NotoSansLaoLooped";
+  src: url("/fonts/NotoSansLaoLooped-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   :root {
     --background: 210 40% 98%;
@@ -57,7 +73,7 @@
 }
 
 html[lang="lo"] body {
-  font-family: "GoogleSans", Sarabun, "Noto Sans Thai", "Segoe UI", sans-serif;
+  font-family: "NotoSansLaoLooped", "GoogleSans", Sarabun, "Noto Sans Lao", "Segoe UI", sans-serif;
 }
 
 /* iOS Safari zooms focused inputs below 16px; keep mobile form controls at 16px. */

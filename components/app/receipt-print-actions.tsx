@@ -8,9 +8,16 @@ import { Button } from "@/components/ui/button";
 type ReceiptPrintActionsProps = {
   autoPrint: boolean;
   returnTo: string | null;
+  printLabel?: string;
+  returnLabel?: string;
 };
 
-export function ReceiptPrintActions({ autoPrint, returnTo }: ReceiptPrintActionsProps) {
+export function ReceiptPrintActions({
+  autoPrint,
+  returnTo,
+  printLabel = "พิมพ์อีกครั้ง",
+  returnLabel = "กลับ POS",
+}: ReceiptPrintActionsProps) {
   const router = useRouter();
 
   useEffect(() => {
@@ -30,7 +37,7 @@ export function ReceiptPrintActions({ autoPrint, returnTo }: ReceiptPrintActions
   return (
     <div className="mt-3 flex flex-wrap gap-2 print:hidden">
       <Button type="button" variant="outline" className="h-9 px-3 text-xs" onClick={() => window.print()}>
-        พิมพ์อีกครั้ง
+        {printLabel}
       </Button>
       {returnTo ? (
         <Button
@@ -40,7 +47,7 @@ export function ReceiptPrintActions({ autoPrint, returnTo }: ReceiptPrintActions
             router.push(returnTo);
           }}
         >
-          กลับ POS
+          {returnLabel}
         </Button>
       ) : null}
     </div>

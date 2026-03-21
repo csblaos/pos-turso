@@ -64,6 +64,8 @@ npm run db:migrate
 - `drizzle/` SQL migrations + meta
 - `scripts/repair-migrations.mjs` repair/compat script
   - รอบล่าสุด `db:repair` รองรับสร้าง/เติม schema ของ `financial_accounts` และ `cash_flow_entries` แล้ว แต่ยังไม่ backfill cash flow entries ย้อนหลังให้ฐานเก่า เพื่อเลี่ยงการเดา source account ผิดความหมาย
+- `public/fonts/`
+  - มี `NotoSansLaoLooped-Regular.ttf` สำหรับ UI/print ภาษาลาว; ตอนนี้ global CSS ลง `@font-face` แล้วและ print ของ order detail/pack/receipt/label จะเลือก font stack ตาม locale แทน `ui-sans-serif` ตรง ๆ เพื่อกัน glyph ลาวหายตอนพิมพ์
 
 เอกสาร inventory:
 - `docs/CODEBASE_MAP.md` แผนที่โค้ดทั้งระบบ (domain ownership)
@@ -93,6 +95,7 @@ npm run db:migrate
     - หน้า `/orders` รองรับ multi-select ในหน้า list แล้ว พร้อม sticky bulk action bar สำหรับงาน routine ที่ทำจาก list ได้ (`confirm_paid`, `mark_packed`, `mark_shipped`, `submit_for_payment`) โดย bulk action รอบนี้ยิง action เดิมทีละออเดอร์และคงรายการที่ fail ไว้ให้ operator ตรวจต่อ
     - หน้า `/orders` เพิ่ม selection summary และ bulk print จากหน้า list แล้ว: พิมพ์ใบเสร็จ/ป้ายแบบหลายรายการในหน้าเดิมด้วย current-page print flow (`window.print()` + merged print document) โดย bulk label จะพิมพ์เฉพาะรายการที่มีข้อมูลจัดส่งพอ และถ้าไม่มีข้อมูลพอจะ block พร้อมข้อความอธิบาย
     - หน้า `/orders` ขยับเป็น work-queue tabs เต็มรูปแบบแล้ว โดย query `tab` ของหน้าและ `GET /api/orders` รองรับคิว `ALL`, `PAYMENT_REVIEW`, `TO_PACK`, `TO_SHIP`, `PICKUP_READY`, `COD_RECONCILE`; แต่ละ tab ใช้ server-side filter เดียวกันทั้ง list และ count badge เพื่อให้จำนวนงานกับรายการใน tab ตรงกัน
+    - หน้า `/orders` รองรับ search แบบ server-backed แล้วผ่าน query `q`: ค้นหาได้ทั้ง `orderNo`, `customerName`, และ `contactDisplayName`; UI มีช่องค้นหา + ปุ่มสแกนในหน้า list และ scanner จะ parse `QR ออเดอร์` รูปแบบ `ORDER:${orderNo}` กลับเป็นคำค้นให้อัตโนมัติ
     - ปรับ performance ตอนสลับ work-queue tab ของ `/orders` แล้ว: ฝั่ง query ลด `queueCounts` จากการนับแยกหลาย query ต่อ tab change มาเป็น aggregate query เดียว และฝั่ง client ใช้ optimistic active state + spinner บน tab ที่กด พร้อม `router.replace(..., { scroll: false })` เพื่อลดอาการค้างและไม่ดัน scroll กลับบนมือถือ
     - ตอนสลับ tab หน้า `/orders` content area จะแสดง skeleton ทันทีทั้ง mobile card และ desktop table แทนการค้างที่รายการ tab เดิมระหว่างรอ server response
     - หน้า `/orders` ไม่โหลด full order catalog ทั้งร้านแล้ว: route ใช้ helper เบา `getOrderManageCatalogForStore()` ที่คืนเฉพาะ financial basics + payment accounts สำหรับ review sheet/bulk summary ส่วน full catalog (`products/contacts/conversions/stock/shipping providers`) ยังโหลดเฉพาะหน้า `/orders/new`
@@ -253,6 +256,7 @@ npm run db:migrate
       - บนจอกว้าง (`lg+`, รวม tablet แนวนอน) แสดงเป็นตารางแนวบิล `รายการ | จำนวน | รวม` เพื่อให้ desktop/tablet landscape อ่านแบบเดียวกัน
     - หน้า `/orders/[orderId]` ปรับ breakpoint layout หลักให้โหมด 2 คอลัมน์ (เนื้อหา + action rail) เริ่มที่ `lg` เพื่อให้ tablet แนวนอนใช้งานเหมือน desktop
     - หน้า `/orders/[orderId]` รวม action พิมพ์ใบเสร็จให้เหลือจุดเดียวใน action rail (ตัดปุ่มซ้ำบน header) และใช้ `window.print()` บนหน้าเดิม โดย inject print-root เฉพาะเอกสาร (`ใบเสร็จ`/`ป้ายจัดส่ง`) พร้อม print CSS ซ่อนคอนเทนต์อื่นทั้งหน้า (ไม่เปิดแท็บใหม่)
+    - หน้า `/orders/[orderId]` เพิ่มปุ่ม `หน้าแพ็ก` แล้ว: primary UX คือเปิด `SlideUpSheet` บนหน้า detail เดิม (ไม่ push route/ไม่เปิดแท็บใหม่) สำหรับพนักงานแพ็กโดยเฉพาะ, โฟกัสรายการสินค้า/จำนวน/ข้อมูลผู้รับ/ขนส่ง, มี QR ประจำออเดอร์, และพิมพ์ใบแพ็กผ่าน `window.print()` บนหน้าเดิมได้; modal pack ถูกปรับเป็น receipt-style บนหน้าจอแล้ว โดยใช้เส้นคั่น/แถวข้อมูลแบบบิลและตาราง `รายการ | จำนวน` เป็นแกนหลักเพื่อให้หยิบของและเช็กจำนวนได้เร็วขึ้น, ส่วนใบแพ็กที่พิมพ์ถูกย่อเป็นหน้ากว้าง 80mm เท่าบิลและใช้ receipt-style layout แบบเรียบกว่าเดิมเพื่อลดปัญหา layout เพี้ยนบนเครื่องพิมพ์กระดาษม้วน; สำหรับ mobile ปุ่ม `พิมพ์ใบแพ็ก` จะปิด sheet ก่อนแล้วค่อยเรียก print เพื่อเลี่ยงเคสข้อมูลไม่ขึ้นเพราะ body ยังถูก lock จาก modal; route เก่า `/orders/[orderId]/pack` ถูกลดบทบาทเป็น legacy redirect กลับหน้า detail เพื่อไม่ให้มี pack page แยก
     - บล็อก `ชำระด้วย QR โอนเงิน` ในหน้า `/orders/[orderId]` ปรับตาม workflow ใช้งานจริงในลาว:
       - ตัด field `ลิงก์หลักฐานการชำระ`, placeholder `https://...`, และปุ่ม `แนบหลักฐาน / ส่งรอตรวจสอบ` ออกจากหน้า detail แล้ว
       - `Walk-in + ชำระแล้ว` ยังคงเป็น read-only summary (รูป QR + ชื่อบัญชี + ธนาคาร + เลขบัญชี)
@@ -261,6 +265,7 @@ npm run db:migrate
     - section `การส่งข้อความ` ในหน้า `/orders/[orderId]` สำหรับ `LAO_QR + Online` ลดเหลือ manual messaging tools เท่านั้น: ตัดปุ่ม `Send QR`/ข้อความอ้างว่า `ส่งอัตโนมัติได้` ออก, เปลี่ยนหัวข้อเป็น `ข้อความสำหรับส่งลูกค้า`, และแสดง action แบบ contextual ตาม channel จริงของออเดอร์ (`คัดลอกข้อความ` เสมอ, `เปิด WhatsApp` เฉพาะออเดอร์ WhatsApp ที่มี deep link, `เปิด Facebook` เฉพาะออเดอร์ Facebook) เพื่อไม่โชว์ปุ่มที่ใช้ไม่ได้
     - หน้า `/orders/[orderId]` เอา text link `กลับไปหน้ารายการขาย` ออกแล้ว เพื่อลด action ซ้ำกับ navigation หลักของแอป
     - หน้า print (`/orders/[orderId]/print/receipt` และ `/orders/[orderId]/print/label`) ยังรองรับ query `autoprint=1` สำหรับการเปิดพิมพ์ตรงจาก URL
+    - ป้ายจัดส่ง (`/orders/[orderId]/print/label` และ inline label print จาก detail) ใส่ `QR ออเดอร์` แล้ว โดย encode เป็น `ORDER:${orderNo}` เพื่อให้ใช้ค้นหา/สแกนต่อใน phase ถัดไปได้แบบ stable โดยไม่ผูกกับ full URL
     - ปรับการแสดงสกุลเงินในหน้ารายละเอียด/หน้าพิมพ์ออเดอร์ให้ใช้สัญลักษณ์แล้ว (`LAK -> ₭`, `THB -> ฿`, `USD -> $`) โดยเฉพาะยอดเงินที่เคยต่อท้ายด้วยรหัส `LAK`
     - flow เป็น `เลือกสินค้าในหน้า POS` -> `เปิดตะกร้า/กดชำระเงิน` -> `Checkout sheet` เพื่อกรอกลูกค้า/ชำระเงิน/ที่อยู่ แล้วค่อยบันทึก
     - เพิ่มหน้า `/orders/cod-reconcile` สำหรับ `COD Reconcile Panel (MVP)`:
