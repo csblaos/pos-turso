@@ -25,6 +25,9 @@ export type POPdfData = {
     productName: string;
     productSku: string;
     qtyOrdered: number;
+    purchaseUnitCode: string;
+    qtyBaseOrdered: number;
+    baseUnitCode: string;
     unitCostBase: number;
   }[];
 };
@@ -429,9 +432,13 @@ export async function generatePoPdf(
     String(idx + 1),
     item.productName,
     item.productSku,
-    item.qtyOrdered.toLocaleString("th-TH"),
+    `${item.qtyOrdered.toLocaleString("th-TH")} ${item.purchaseUnitCode}${
+      item.purchaseUnitCode !== item.baseUnitCode
+        ? ` (= ${item.qtyBaseOrdered.toLocaleString("th-TH")} ${item.baseUnitCode})`
+        : ""
+    }`,
     fmtMoney(item.unitCostBase, storeCurrency),
-    fmtMoney(item.unitCostBase * item.qtyOrdered, storeCurrency),
+    fmtMoney(item.unitCostBase * item.qtyBaseOrdered, storeCurrency),
   ]);
 
   // Parse header color from config

@@ -73,13 +73,13 @@
 | `/api/stock/movements` | `GET` | `Permission:inventory.view` | default: คืน `products + movements` สำหรับ stock overview; รองรับโหมด history (`view=history`) พร้อม query `page`,`pageSize`,`type`,`q`,`productId`,`dateFrom`,`dateTo` เพื่อ list movement แบบ server-side pagination/filter |
 | `/api/stock/movements` | `POST` | `Permission:inventory.create` | create movement (payload ใช้เฉพาะ `qty/unit/movementType/adjustMode/note`; ถ้าส่ง field กลุ่มต้นทุน/เรท เช่น `cost`,`costBase`,`rate`,`exchangeRate` จะถูก reject 400) |
 | `/api/stock/purchase-orders` | `GET` | `Permission:inventory.view` | list PO |
-| `/api/stock/purchase-orders` | `POST` | `Permission:inventory.create` | create PO (foreign currency รองรับสร้างแบบยังไม่ปิดเรทได้ โดยไม่ส่ง `exchangeRate`) |
+| `/api/stock/purchase-orders` | `POST` | `Permission:inventory.create` | create PO (foreign currency รองรับสร้างแบบยังไม่ปิดเรทได้ โดยไม่ส่ง `exchangeRate`; item payload ต้องส่ง `unitId`,`qtyOrdered`,`unitCostPurchase` และ backend จะ snapshot `multiplier_to_base`,`qty_base_*`) |
 | `/api/stock/purchase-orders/ap-by-supplier` | `GET` | `Permission:inventory.view` | summary เจ้าหนี้ค้างจ่ายราย supplier (รองรับ `q`,`limit`) |
 | `/api/stock/purchase-orders/ap-by-supplier/statement` | `GET` | `Permission:inventory.view` | statement AP ราย supplier (ต้องส่ง `supplierKey`; รองรับ `paymentStatus`,`dueFilter`,`dueFrom`,`dueTo`,`q`,`limit`) |
 | `/api/stock/purchase-orders/ap-by-supplier/export-csv` | `GET` | `Permission:inventory.view` | export CSV statement ราย supplier ตาม filter |
 | `/api/stock/purchase-orders/pending-rate` | `GET` | `Permission:inventory.view` | คิว PO ที่ `RECEIVED` และยัง `รอปิดเรท` รองรับ filter `supplier`,`receivedFrom`,`receivedTo`,`limit` |
-| `/api/stock/purchase-orders/[poId]` | `GET` | `Permission:inventory.view` | PO detail |
-| `/api/stock/purchase-orders/[poId]` | `PATCH,PUT` | `Permission:inventory.create` | update PO / status flow |
+| `/api/stock/purchase-orders/[poId]` | `GET` | `Permission:inventory.view` | PO detail (item row คืน `unitId`,`purchaseUnitCode`,`multiplierToBase`,`qtyBaseOrdered`,`qtyBaseReceived`,`baseUnitCode`) |
+| `/api/stock/purchase-orders/[poId]` | `PATCH,PUT` | `Permission:inventory.create` | update PO / status flow (draft edit ของ `items[]` ต้องส่ง `unitId`; receive/status flow จะคำนวณ `qty_base_received` จาก `qtyReceived x multiplierToBase`) |
 | `/api/stock/purchase-orders/[poId]/finalize-rate` | `POST` | `Permission:inventory.create` | ปิดเรทจริงหลังรับสินค้าแล้ว (รองรับ idempotency) |
 | `/api/stock/purchase-orders/[poId]/settle` | `POST` | `Permission:inventory.create` | บันทึกชำระ PO แบบจ่ายบางส่วน/เต็มจำนวน (`amountBase`) และบังคับปิดเรทก่อนสำหรับ PO ต่างสกุลเงิน (รองรับ idempotency) |
 | `/api/stock/purchase-orders/[poId]/apply-extra-cost` | `POST` | `Permission:inventory.create` | อัปเดต `shippingCost/otherCost` หลังรับสินค้า (เฉพาะ PO `RECEIVED` ที่ยังไม่ `PAID`) และ recalculation landed cost ในรายการ PO (รองรับ idempotency) |

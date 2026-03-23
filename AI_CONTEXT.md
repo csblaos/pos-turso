@@ -315,6 +315,16 @@ npm run db:migrate
   - ตอนสร้างสินค้าใหม่ หาก `SKU` ซ้ำ ระบบจะเติม suffix (`-2`, `-3`, ...) แล้วลองบันทึกใหม่อัตโนมัติจนได้ SKU ที่ไม่ซ้ำ (ภายในจำนวนครั้งที่กำหนด)
   - ส่วน `การแปลงหน่วย` ใน create/edit product มีปุ่มลัดเพิ่มหน่วย (`PACK(12)` / `BOX(60)` เมื่อมีหน่วยนั้นในระบบ), ปุ่ม `+ เพิ่มหน่วย` จะเลือกหน่วยที่ยังไม่ถูกใช้ก่อน และมี helper text ย้ำว่าตัวคูณต้องเทียบหน่วยหลักเสมอ
   - หน่วยแปลงรองรับ `ราคาขายต่อหน่วยแปลง` แบบ optional (เช่น EA=1,000 แต่ PACK(12)=10,000 ได้) โดยถ้าไม่กรอกจะใช้สูตรอัตโนมัติจากหน่วยหลัก
+  - Product sales units phase แรกเพิ่ม flag ใหม่แล้ว:
+    - `products.allow_base_unit_sale` คุมว่าหน่วยหลักจะโผล่ขายใน POS หรือไม่
+    - `product_units.enabled_for_sale` คุมว่าหน่วยแปลงใดเปิดขายใน POS
+    - ฝั่ง admin จะยังเห็นทุกหน่วยใน `/products` แต่ `getOrderCatalogForStore()` จะส่งไปหน้า `/orders/new` เฉพาะหน่วยที่เปิดขาย และถ้าสินค้าไม่มีหน่วยที่ขายได้เลยจะถูกซ่อนจาก POS ทั้งตัว
+  - PO units phase แรกเพิ่ม snapshot ฝั่ง `purchase_order_items` แล้ว:
+    - `unit_id` = หน่วยซื้อที่เลือกใน PO
+    - `multiplier_to_base` = ตัวคูณเทียบหน่วยสต็อก ณ วันที่สร้าง PO
+    - `qty_base_ordered` / `qty_base_received` = จำนวนฐานเป็นหน่วยสต็อกเพื่อใช้รับของ, ตัดสต็อก, และคำนวณต้นทุน
+    - หน้า `/stock?tab=purchase` เลือกหน่วยซื้อได้ต่อสินค้าและแสดง preview ว่าเท่ากับกี่ชิ้นในสต็อก
+    - ฝั่ง `purchase.service` จะคำนวณ `unit_cost_base` จาก `unit_cost_purchase / multiplier_to_base` และใช้ `qty_base_*` เป็น source of truth สำหรับ stock-in และ weighted average cost
   - UI ส่วน `การแปลงหน่วย` ปรับ mobile-first เป็น 2 แถวต่อรายการบนมือถือ (`หน่วย+ลบ` / `ตัวคูณ+ราคา`) และคงแถวเดียวบน tablet/desktop
   - `scripts/repair-migrations.mjs` รองรับ fallback สำหรับโครงสร้าง Variant Phase 1 แล้ว (ใช้ได้กับฐานที่ขาดบาง migration)
   - `scripts/repair-migrations.mjs` รองรับเติมคอลัมน์ `product_units.price_per_unit` (ราคาหน่วยแปลงแบบกำหนดเอง) สำหรับฐานเก่าที่ข้าม migration ล่าสุด

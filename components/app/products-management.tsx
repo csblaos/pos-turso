@@ -231,6 +231,7 @@ const defaultValues = (baseUnitId: string): ProductUpsertFormInput => ({
   name: "",
   barcode: "",
   baseUnitId,
+  allowBaseUnitSale: true,
   priceBase: "",
   costBase: 0,
   outStockThreshold: "",
@@ -1296,6 +1297,7 @@ export function ProductsManagement({
       name: product.name,
       barcode: product.barcode ?? "",
       baseUnitId: product.baseUnitId,
+      allowBaseUnitSale: product.allowBaseUnitSale,
       priceBase: product.priceBase,
       costBase: product.costBase,
       outStockThreshold: product.outStockThreshold ?? "",
@@ -1304,6 +1306,7 @@ export function ProductsManagement({
       conversions: product.conversions.map((c) => ({
         unitId: c.unitId,
         multiplierToBase: c.multiplierToBase,
+        enabledForSale: c.enabledForSale,
         pricePerUnit: c.pricePerUnit ?? "",
       })),
       variant: hasVariantMeta
@@ -1513,6 +1516,7 @@ export function ProductsManagement({
       name: `${product.name} ${t(uiLocale, "products.duplicate.nameSuffix")}`,
       barcode: "",
       baseUnitId: product.baseUnitId,
+      allowBaseUnitSale: product.allowBaseUnitSale,
       priceBase: product.priceBase,
       costBase: product.costBase,
       outStockThreshold: product.outStockThreshold ?? "",
@@ -1521,6 +1525,7 @@ export function ProductsManagement({
       conversions: product.conversions.map((c) => ({
         unitId: c.unitId,
         multiplierToBase: c.multiplierToBase,
+        enabledForSale: c.enabledForSale,
         pricePerUnit: c.pricePerUnit ?? "",
       })),
       variant: hasVariantMeta
@@ -1641,6 +1646,7 @@ export function ProductsManagement({
                   unitCode: u.code,
                   unitNameTh: u.nameTh,
                   multiplierToBase: c.multiplierToBase,
+                  enabledForSale: c.enabledForSale,
                   pricePerUnit: c.pricePerUnit ?? null,
                 },
               ]
@@ -1675,6 +1681,7 @@ export function ProductsManagement({
                 baseUnitId: values.baseUnitId,
                 baseUnitCode: selBaseUnit?.code ?? item.baseUnitCode,
                 baseUnitNameTh: selBaseUnit?.nameTh ?? item.baseUnitNameTh,
+                allowBaseUnitSale: values.allowBaseUnitSale,
                 priceBase: values.priceBase,
                 costBase: values.costBase,
                 outStockThreshold: values.outStockThreshold ?? null,
@@ -2728,6 +2735,7 @@ export function ProductsManagement({
     append({
       unitId,
       multiplierToBase: Math.max(2, Math.trunc(multiplierToBase)),
+      enabledForSale: true,
       pricePerUnit: undefined,
     });
   };
@@ -4008,6 +4016,27 @@ export function ProductsManagement({
                   </option>
                 ))}
               </select>
+              <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  disabled={loadingKey !== null}
+                  {...form.register("allowBaseUnitSale")}
+                />
+                <span className="space-y-0.5">
+                  <span className="block text-xs font-medium text-slate-700">
+                    {t(uiLocale, "products.form.baseUnit.allowSale.label")}
+                  </span>
+                  <span className="block text-[11px] text-slate-500">
+                    {t(uiLocale, "products.form.baseUnit.allowSale.hint")}
+                  </span>
+                </span>
+              </label>
+              {form.formState.errors.allowBaseUnitSale && (
+                <p className="text-xs text-red-600">
+                  {form.formState.errors.allowBaseUnitSale.message}
+                </p>
+              )}
             </div>
             <div className="space-y-1">
               <label
@@ -4228,6 +4257,22 @@ export function ProductsManagement({
                       <Minus className="h-4 w-4" />
                     </button>
                   </div>
+                  <label className="flex items-start gap-2 rounded-md bg-slate-50 px-2 py-2">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      disabled={loadingKey !== null}
+                      {...form.register(`conversions.${idx}.enabledForSale`)}
+                    />
+                    <span className="space-y-0.5">
+                      <span className="block text-xs font-medium text-slate-700">
+                        {t(uiLocale, "products.form.conversions.field.enabledForSale.label")}
+                      </span>
+                      <span className="block text-[11px] text-slate-500">
+                        {t(uiLocale, "products.form.conversions.field.enabledForSale.hint")}
+                      </span>
+                    </span>
+                  </label>
 
                   {selUnit && baseUnit && mult > 0 ? (
                     <>
@@ -4547,6 +4592,11 @@ export function ProductsManagement({
                         {t(uiLocale, "products.detail.price.pricePerBaseUnit")} /{" "}
                         {detailProduct.baseUnitCode}
                       </p>
+                      <p className="mt-1 text-[11px] text-blue-500">
+                        {detailProduct.allowBaseUnitSale
+                          ? t(uiLocale, "products.detail.salesAvailability.baseUnitEnabled")
+                          : t(uiLocale, "products.detail.salesAvailability.baseUnitDisabled")}
+                      </p>
                     </div>
                     {detailProduct.conversions.length > 0 && (
                       <div className="space-y-1">
@@ -4561,14 +4611,21 @@ export function ProductsManagement({
                             <span className="text-xs text-slate-600">
                               {c.unitCode} ({c.unitNameTh})
                             </span>
-                            <span className="text-sm font-semibold">
-                              {fmtPrice(
-                                c.pricePerUnit ??
-                                  detailProduct.priceBase * c.multiplierToBase,
-                                currency,
-                                numberLocale,
-                              )}
-                            </span>
+                            <div className="text-right">
+                              <span className="block text-sm font-semibold">
+                                {fmtPrice(
+                                  c.pricePerUnit ??
+                                    detailProduct.priceBase * c.multiplierToBase,
+                                  currency,
+                                  numberLocale,
+                                )}
+                              </span>
+                              <span className="block text-[11px] text-emerald-700">
+                                {c.enabledForSale
+                                  ? t(uiLocale, "products.detail.salesAvailability.saleEnabledShort")
+                                  : t(uiLocale, "products.detail.salesAvailability.saleDisabledShort")}
+                              </span>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -4751,32 +4808,62 @@ export function ProductsManagement({
                 {/* Tab — หน่วยแปลง */}
                 {detailTab === "conversions" && (
                   <div className="space-y-2">
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm font-medium">
+                          {detailProduct.baseUnitCode} ({detailProduct.baseUnitNameTh})
+                        </span>
+                        <span className="text-xs font-medium text-slate-700">
+                          {fmtPrice(detailProduct.priceBase, currency)}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {detailProduct.allowBaseUnitSale
+                          ? t(uiLocale, "products.detail.salesAvailability.baseUnitEnabled")
+                          : t(uiLocale, "products.detail.salesAvailability.baseUnitDisabled")}
+                      </p>
+                    </div>
                     {detailProduct.conversions.length === 0 ? (
                       <p className="py-6 text-center text-xs text-muted-foreground">
                         {t(uiLocale, "products.detail.conversions.empty")}
                       </p>
                     ) : (
-                      detailProduct.conversions.map((c) => (
-                        <div
-                          key={c.unitId}
-                          className="flex items-center justify-between rounded-lg border px-3 py-2.5"
-                        >
-                          <span className="text-sm font-medium">
-                            {c.unitCode} ({c.unitNameTh})
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            1 {c.unitCode} = {fmtNumber(c.multiplierToBase, numberLocale)}{" "}
-                            {detailProduct.baseUnitCode}
-                          </span>
-                          <span className="text-xs font-medium text-slate-700">
-                            {fmtPrice(
-                              c.pricePerUnit ??
-                                detailProduct.priceBase * c.multiplierToBase,
-                              currency,
-                            )}
-                          </span>
-                        </div>
-                      ))
+                      <>
+                        {detailProduct.conversions.map((c) => (
+                          <div
+                            key={c.unitId}
+                            className="space-y-1 rounded-lg border px-3 py-2.5"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-sm font-medium">
+                                {c.unitCode} ({c.unitNameTh})
+                              </span>
+                              <span className="text-xs font-medium text-slate-700">
+                                {fmtPrice(
+                                  c.pricePerUnit ??
+                                    detailProduct.priceBase * c.multiplierToBase,
+                                  currency,
+                                )}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3 text-xs">
+                              <span className="text-muted-foreground">
+                                1 {c.unitCode} = {fmtNumber(c.multiplierToBase, numberLocale)}{" "}
+                                {detailProduct.baseUnitCode}
+                              </span>
+                              <span
+                                className={
+                                  c.enabledForSale ? "font-medium text-emerald-700" : "font-medium text-slate-500"
+                                }
+                              >
+                                {c.enabledForSale
+                                  ? t(uiLocale, "products.detail.salesAvailability.saleEnabled")
+                                  : t(uiLocale, "products.detail.salesAvailability.saleDisabled")}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </>
                     )}
                   </div>
                 )}

@@ -48,6 +48,20 @@ async function ensureSchemaCompatForLatestAuthChanges() {
     console.info("[db:repair] added column orders.shipping_carrier");
   }
 
+  if (!(await columnExists("products", "allow_base_unit_sale"))) {
+    await client.execute(
+      "alter table `products` add `allow_base_unit_sale` integer not null default 1",
+    );
+    console.info("[db:repair] added column products.allow_base_unit_sale");
+  }
+
+  if (!(await columnExists("product_units", "enabled_for_sale"))) {
+    await client.execute(
+      "alter table `product_units` add `enabled_for_sale` integer not null default 1",
+    );
+    console.info("[db:repair] added column product_units.enabled_for_sale");
+  }
+
   if (!(await columnExists("orders", "tracking_no"))) {
     await client.execute("alter table `orders` add `tracking_no` text");
     console.info("[db:repair] added column orders.tracking_no");
@@ -1195,13 +1209,72 @@ async function ensureSchemaCompatForLatestAuthChanges() {
       \`id\` text primary key not null,
       \`purchase_order_id\` text not null references \`purchase_orders\`(\`id\`) on delete cascade,
       \`product_id\` text not null references \`products\`(\`id\`) on delete restrict,
+      \`unit_id\` text references \`units\`(\`id\`) on delete restrict,
+      \`multiplier_to_base\` integer not null default 1,
       \`qty_ordered\` integer not null,
       \`qty_received\` integer not null default 0,
+      \`qty_base_ordered\` integer not null default 0,
+      \`qty_base_received\` integer not null default 0,
       \`unit_cost_purchase\` integer not null default 0,
       \`unit_cost_base\` integer not null default 0,
       \`landed_cost_per_unit\` integer not null default 0
     )
   `);
+  if (!(await columnExists("purchase_order_items", "unit_id"))) {
+    await client.execute(
+      "alter table `purchase_order_items` add `unit_id` text references `units`(`id`) on delete restrict",
+    );
+    console.info("[db:repair] added column purchase_order_items.unit_id");
+  }
+  if (!(await columnExists("purchase_order_items", "multiplier_to_base"))) {
+    await client.execute(
+      "alter table `purchase_order_items` add `multiplier_to_base` integer not null default 1",
+    );
+    console.info("[db:repair] added column purchase_order_items.multiplier_to_base");
+  }
+  if (!(await columnExists("purchase_order_items", "qty_base_ordered"))) {
+    await client.execute(
+      "alter table `purchase_order_items` add `qty_base_ordered` integer not null default 0",
+    );
+    console.info("[db:repair] added column purchase_order_items.qty_base_ordered");
+  }
+  if (!(await columnExists("purchase_order_items", "qty_base_received"))) {
+    await client.execute(
+      "alter table `purchase_order_items` add `qty_base_received` integer not null default 0",
+    );
+    console.info("[db:repair] added column purchase_order_items.qty_base_received");
+  }
+  await client.execute(`
+    update \`purchase_order_items\`
+    set \`unit_id\` = (
+      select \`products\`.\`base_unit_id\`
+      from \`products\`
+      where \`products\`.\`id\` = \`purchase_order_items\`.\`product_id\`
+      limit 1
+    )
+    where \`unit_id\` is null or trim(\`unit_id\`) = ''
+  `);
+  console.info("[db:repair] backfilled purchase_order_items.unit_id from products.base_unit_id");
+  await client.execute(`
+    update \`purchase_order_items\`
+    set \`multiplier_to_base\` = 1
+    where \`multiplier_to_base\` is null or \`multiplier_to_base\` <= 0
+  `);
+  console.info("[db:repair] normalized purchase_order_items.multiplier_to_base");
+  await client.execute(`
+    update \`purchase_order_items\`
+    set \`qty_base_ordered\` = coalesce(\`qty_ordered\`, 0) * coalesce(\`multiplier_to_base\`, 1)
+    where \`qty_base_ordered\` is null
+      or \`qty_base_ordered\` <> coalesce(\`qty_ordered\`, 0) * coalesce(\`multiplier_to_base\`, 1)
+  `);
+  console.info("[db:repair] backfilled purchase_order_items.qty_base_ordered");
+  await client.execute(`
+    update \`purchase_order_items\`
+    set \`qty_base_received\` = coalesce(\`qty_received\`, 0) * coalesce(\`multiplier_to_base\`, 1)
+    where \`qty_base_received\` is null
+      or \`qty_base_received\` <> coalesce(\`qty_received\`, 0) * coalesce(\`multiplier_to_base\`, 1)
+  `);
+  console.info("[db:repair] backfilled purchase_order_items.qty_base_received");
   await client.execute(
     "create index if not exists `po_items_po_id_idx` on `purchase_order_items` (`purchase_order_id`)",
   );

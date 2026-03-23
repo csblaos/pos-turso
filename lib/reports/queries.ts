@@ -686,7 +686,7 @@ export async function getOutstandingPurchaseRows(
         exchangeRateLockedAt: purchaseOrders.exchangeRateLockedAt,
         grandTotalBase: sql<number>`(
           coalesce((
-            SELECT sum(${purchaseOrderItems.unitCostBase} * ${purchaseOrderItems.qtyOrdered})
+            SELECT sum(${purchaseOrderItems.unitCostBase} * ${purchaseOrderItems.qtyBaseOrdered})
             FROM ${purchaseOrderItems}
             WHERE ${purchaseOrderItems.purchaseOrderId} = ${purchaseOrders.id}
           ), 0) + ${purchaseOrders.shippingCost} + ${purchaseOrders.otherCost}
@@ -705,7 +705,7 @@ export async function getOutstandingPurchaseRows(
         outstandingBase: sql<number>`(
           (
             coalesce((
-              SELECT sum(${purchaseOrderItems.unitCostBase} * ${purchaseOrderItems.qtyOrdered})
+              SELECT sum(${purchaseOrderItems.unitCostBase} * ${purchaseOrderItems.qtyBaseOrdered})
               FROM ${purchaseOrderItems}
               WHERE ${purchaseOrderItems.purchaseOrderId} = ${purchaseOrders.id}
             ), 0) + ${purchaseOrders.shippingCost} + ${purchaseOrders.otherCost}
@@ -750,7 +750,7 @@ export async function getOutstandingPurchaseRows(
           sql`(
             (
               coalesce((
-                SELECT sum(${purchaseOrderItems.unitCostBase} * ${purchaseOrderItems.qtyOrdered})
+                SELECT sum(${purchaseOrderItems.unitCostBase} * ${purchaseOrderItems.qtyBaseOrdered})
                 FROM ${purchaseOrderItems}
                 WHERE ${purchaseOrderItems.purchaseOrderId} = ${purchaseOrders.id}
               ), 0) + ${purchaseOrders.shippingCost} + ${purchaseOrders.otherCost}

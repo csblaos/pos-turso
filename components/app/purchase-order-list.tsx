@@ -207,10 +207,18 @@ type PurchaseOrderDetail = {
   items: {
     id: string;
     productId: string;
+    unitId: string;
+    purchaseUnitCode: string;
+    purchaseUnitNameTh: string;
+    baseUnitCode: string;
+    baseUnitNameTh: string;
+    multiplierToBase: number;
     productName: string;
     productSku: string;
     qtyOrdered: number;
     qtyReceived: number;
+    qtyBaseOrdered: number;
+    qtyBaseReceived: number;
     unitCostPurchase: number;
     unitCostBase: number;
     landedCostPerUnit: number;
@@ -250,8 +258,41 @@ type PendingRateQueueItem = {
   outstandingBase: number;
 };
 
+type PurchaseProductOption = {
+  id: string;
+  name: string;
+  sku: string;
+  baseUnitId: string;
+  baseUnitCode: string;
+  baseUnitNameTh: string;
+  unitOptions: {
+    unitId: string;
+    unitCode: string;
+    unitNameTh: string;
+    multiplierToBase: number;
+  }[];
+};
+
+type DraftPurchaseItem = {
+  productId: string;
+  productName: string;
+  productSku: string;
+  unitId: string;
+  unitCode: string;
+  unitNameTh: string;
+  baseUnitCode: string;
+  baseUnitNameTh: string;
+  multiplierToBase: number;
+  qtyOrdered: string;
+  unitCostPurchase: string;
+};
+
 function fmtPrice(amount: number, currency: StoreCurrency, numberLocale?: string): string {
   return `${currencySymbol(currency)}${amount.toLocaleString(numberLocale)}`;
+}
+
+function getPurchaseUnitLabel(unitCode: string, unitNameTh: string): string {
+  return unitCode.trim() || unitNameTh.trim();
 }
 
 function daysUntil(dateStr: string): number {
@@ -618,9 +659,7 @@ export function PurchaseOrderList({
   const [purchaseCurrency, setPurchaseCurrency] =
     useState<StoreCurrency>(storeCurrency);
   const [exchangeRate, setExchangeRate] = useState("");
-  const [items, setItems] = useState<
-    { productId: string; productName: string; qtyOrdered: string; unitCostPurchase: string }[]
-  >([]);
+  const [items, setItems] = useState<DraftPurchaseItem[]>([]);
   const [shippingCost, setShippingCost] = useState("");
   const [otherCost, setOtherCost] = useState("");
   const [otherCostNote, setOtherCostNote] = useState("");
@@ -632,9 +671,7 @@ export function PurchaseOrderList({
   /* ── Product search for item picker ── */
   const [productSearch, setProductSearch] = useState("");
   const [isProductPickerOpen, setIsProductPickerOpen] = useState(false);
-  const [productOptions, setProductOptions] = useState<
-    { id: string; name: string; sku: string }[]
-  >([]);
+  const [productOptions, setProductOptions] = useState<PurchaseProductOption[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [isSupplierPickerOpen, setIsSupplierPickerOpen] = useState(false);
 
@@ -1558,11 +1595,30 @@ export function PurchaseOrderList({
       const data = await res.json();
       if (data.ok && data.products) {
         setProductOptions(
-          data.products.map((p: { productId: string; name: string; sku: string }) => ({
-            id: p.productId,
-            name: p.name,
-            sku: p.sku,
-          })),
+          data.products.map(
+            (p: {
+              productId: string;
+              name: string;
+              sku: string;
+              baseUnitId: string;
+              baseUnitCode: string;
+              baseUnitNameTh: string;
+              unitOptions?: {
+                unitId: string;
+                unitCode: string;
+                unitNameTh: string;
+                multiplierToBase: number;
+              }[];
+            }) => ({
+              id: p.productId,
+              name: p.name,
+              sku: p.sku,
+              baseUnitId: p.baseUnitId,
+              baseUnitCode: p.baseUnitCode,
+              baseUnitNameTh: p.baseUnitNameTh,
+              unitOptions: Array.isArray(p.unitOptions) ? p.unitOptions : [],
+            }),
+          ),
         );
       }
     } catch {
@@ -1610,16 +1666,32 @@ export function PurchaseOrderList({
   }, [forceCloseCreateSheet, hasCreateDraftChanges, isSubmitting]);
 
   /* ── Add item ── */
-  const addItem = (product: { id: string; name: string }) => {
+  const addItem = (product: PurchaseProductOption) => {
     if (items.some((i) => i.productId === product.id)) {
       toast.error(t(uiLocale, "purchase.items.error.duplicateProduct"));
       return;
     }
+    const defaultUnit =
+      product.unitOptions.find((option) => option.unitId === product.baseUnitId) ??
+      product.unitOptions[0] ??
+      {
+        unitId: product.baseUnitId,
+        unitCode: product.baseUnitCode,
+        unitNameTh: product.baseUnitNameTh,
+        multiplierToBase: 1,
+      };
     setItems((prev) => [
       ...prev,
       {
         productId: product.id,
         productName: product.name,
+        productSku: product.sku,
+        unitId: defaultUnit.unitId,
+        unitCode: defaultUnit.unitCode,
+        unitNameTh: defaultUnit.unitNameTh,
+        baseUnitCode: product.baseUnitCode,
+        baseUnitNameTh: product.baseUnitNameTh,
+        multiplierToBase: defaultUnit.multiplierToBase,
         qtyOrdered: "1",
         unitCostPurchase: "",
       },
@@ -1634,11 +1706,32 @@ export function PurchaseOrderList({
 
   const updateItem = (
     productId: string,
-    field: "qtyOrdered" | "unitCostPurchase",
+    field: "qtyOrdered" | "unitCostPurchase" | "unitId",
     value: string,
   ) => {
     setItems((prev) =>
-      prev.map((i) => (i.productId === productId ? { ...i, [field]: value } : i)),
+      prev.map((item) => {
+        if (item.productId !== productId) {
+          return item;
+        }
+        if (field !== "unitId") {
+          return { ...item, [field]: value };
+        }
+        const product = productOptions.find((option) => option.id === productId);
+        const nextUnit =
+          product?.unitOptions.find((option) => option.unitId === value) ??
+          null;
+        if (!nextUnit) {
+          return item;
+        }
+        return {
+          ...item,
+          unitId: nextUnit.unitId,
+          unitCode: nextUnit.unitCode,
+          unitNameTh: nextUnit.unitNameTh,
+          multiplierToBase: nextUnit.multiplierToBase,
+        };
+      }),
     );
   };
 
@@ -1687,6 +1780,7 @@ export function PurchaseOrderList({
           receiveImmediately,
           items: items.map((i) => ({
             productId: i.productId,
+            unitId: i.unitId,
             qtyOrdered: Number(i.qtyOrdered) || 1,
             unitCostPurchase: Number(i.unitCostPurchase) || 0,
           })),
@@ -1763,6 +1857,10 @@ export function PurchaseOrderList({
   const visibleProductPickerOptions = useMemo(
     () => filteredProductOptions.slice(0, productSearch ? 10 : 20),
     [filteredProductOptions, productSearch],
+  );
+  const productOptionMap = useMemo(
+    () => new Map(productOptions.map((product) => [product.id, product])),
+    [productOptions],
   );
   const supplierNameOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -3047,13 +3145,11 @@ export function PurchaseOrderList({
 	                        </p>
 	                      ) : (
 	                        visibleProductPickerOptions.map((p) => (
-	                          <button
-	                            key={p.id}
+                          <button
+                            key={p.id}
                             type="button"
                             className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
-                            onClick={() =>
-                              addItem({ id: p.id, name: p.name })
-                            }
+                            onClick={() => addItem(p)}
                           >
                             <span className="font-medium">{p.name}</span>
                             <span className="ml-2 text-xs text-slate-400">
@@ -3079,9 +3175,14 @@ export function PurchaseOrderList({
                         className="rounded-xl border border-slate-200 bg-white p-3"
                       >
                         <div className="flex items-start justify-between">
-                          <p className="text-sm font-medium text-slate-900">
-                            {item.productName}
-                          </p>
+                          <div>
+                            <p className="text-sm font-medium text-slate-900">
+                              {item.productName}
+                            </p>
+                            <p className="text-[11px] text-slate-500">
+                              {item.productSku}
+                            </p>
+                          </div>
                           <button
                             type="button"
                             className="rounded-full p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
@@ -3090,7 +3191,35 @@ export function PurchaseOrderList({
                             <X className="h-3.5 w-3.5" />
                           </button>
                         </div>
-                        <div className="mt-2 grid grid-cols-2 gap-2">
+                        <div className="mt-2 space-y-2">
+                          <div>
+                            <label className="text-[11px] text-slate-500">
+                              {t(uiLocale, "purchase.field.purchaseUnit")}
+                            </label>
+                            <select
+                              className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
+                              value={item.unitId}
+                              onChange={(e) =>
+                                updateItem(
+                                  item.productId,
+                                  "unitId",
+                                  e.target.value,
+                                )
+                              }
+                            >
+                              {(productOptionMap.get(item.productId)?.unitOptions ?? []).map(
+                                (option) => (
+                                  <option key={option.unitId} value={option.unitId}>
+                                    {getPurchaseUnitLabel(
+                                      option.unitCode,
+                                      option.unitNameTh,
+                                    )}
+                                  </option>
+                                ),
+                              )}
+                            </select>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
 	                          <div>
 	                            <label className="text-[11px] text-slate-500">
 	                              {t(uiLocale, "purchase.field.qty")}
@@ -3130,6 +3259,14 @@ export function PurchaseOrderList({
                             />
                           </div>
                         </div>
+                        </div>
+                        <p className="mt-2 text-[11px] text-slate-500">
+                          {t(uiLocale, "purchase.field.baseQty")} ={" "}
+                          {(
+                            (Number(item.qtyOrdered) || 0) * item.multiplierToBase
+                          ).toLocaleString(numberLocale)}{" "}
+                          {item.baseUnitCode}
+                        </p>
                         <p className="mt-1 text-right text-xs text-slate-500">
                           ={" "}
                           {fmtPrice(
@@ -3424,6 +3561,7 @@ export function PurchaseOrderList({
                           receiveImmediately: false,
                           items: items.map((i) => ({
                             productId: i.productId,
+                            unitId: i.unitId,
                             qtyOrdered: Number(i.qtyOrdered) || 1,
                             unitCostPurchase: Number(i.unitCostPurchase) || 0,
                           })),
@@ -3513,6 +3651,8 @@ export function PurchaseOrderList({
         storeCurrency={storeCurrency}
         storeLogoUrl={storeLogoUrl}
         pdfConfig={pdfConfig}
+        productOptions={productOptions}
+        loadProducts={loadProducts}
         getCachedPoDetail={getCachedPoDetail}
         loadPoDetail={loadPoDetail}
         onCacheUpdate={upsertPoDetailCache}
@@ -3530,6 +3670,8 @@ function PODetailSheet({
   storeCurrency,
   storeLogoUrl,
   pdfConfig,
+  productOptions,
+  loadProducts,
   getCachedPoDetail,
   loadPoDetail,
   onCacheUpdate,
@@ -3541,6 +3683,8 @@ function PODetailSheet({
   storeCurrency: StoreCurrency;
   storeLogoUrl?: string | null;
   pdfConfig?: Partial<PoPdfConfig>;
+  productOptions: PurchaseProductOption[];
+  loadProducts: () => Promise<void>;
   getCachedPoDetail: (poId: string) => PurchaseOrderDetail | null;
   loadPoDetail: (
     poId: string,
@@ -3561,6 +3705,10 @@ function PODetailSheet({
   const dateLocale = uiLocaleToDateLocale(uiLocale);
   const numberLocale = dateLocale;
   const statusConfig = useMemo(() => getPurchaseStatusConfig(uiLocale), [uiLocale]);
+  const productOptionMap = useMemo(
+    () => new Map(productOptions.map((product) => [product.id, product])),
+    [productOptions],
+  );
 
   const [po, setPo] = useState<PurchaseOrderDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -3597,7 +3745,7 @@ function PODetailSheet({
     expectedAt: "",
     dueDate: "",
     trackingInfo: "",
-    items: [] as { productId: string; productName: string; qtyOrdered: string; unitCostPurchase: string }[],
+    items: [] as DraftPurchaseItem[],
   });
 
   const getEditDateShortcutValue = useCallback(
@@ -4017,6 +4165,7 @@ function PODetailSheet({
 
   const startEdit = () => {
     if (!po) return;
+    void loadProducts();
     setEditForm({
       supplierName: po.supplierName ?? "",
       supplierContact: po.supplierContact ?? "",
@@ -4032,6 +4181,13 @@ function PODetailSheet({
       items: po.items.map((item) => ({
         productId: item.productId,
         productName: item.productName,
+        productSku: item.productSku,
+        unitId: item.unitId,
+        unitCode: item.purchaseUnitCode,
+        unitNameTh: item.purchaseUnitNameTh,
+        baseUnitCode: item.baseUnitCode,
+        baseUnitNameTh: item.baseUnitNameTh,
+        multiplierToBase: item.multiplierToBase,
         qtyOrdered: String(item.qtyOrdered),
         unitCostPurchase: String(item.unitCostPurchase),
       })),
@@ -4071,6 +4227,7 @@ function PODetailSheet({
             trackingInfo: editForm.trackingInfo || undefined,
             items: editForm.items.map((item) => ({
               productId: item.productId,
+              unitId: item.unitId,
               qtyOrdered: Number(item.qtyOrdered) || 1,
               unitCostPurchase: Number(item.unitCostPurchase) || 0,
             })),
@@ -4260,6 +4417,9 @@ function PODetailSheet({
                             productName: item.productName,
                             productSku: item.productSku,
                             qtyOrdered: item.qtyOrdered,
+                            purchaseUnitCode: item.purchaseUnitCode,
+                            qtyBaseOrdered: item.qtyBaseOrdered,
+                            baseUnitCode: item.baseUnitCode,
                             unitCostBase: item.unitCostBase,
                           })),
                         };
@@ -4315,6 +4475,9 @@ function PODetailSheet({
                               productName: item.productName,
                               productSku: item.productSku,
                               qtyOrdered: item.qtyOrdered,
+                              purchaseUnitCode: item.purchaseUnitCode,
+                              qtyBaseOrdered: item.qtyBaseOrdered,
+                              baseUnitCode: item.baseUnitCode,
                               unitCostBase: item.unitCostBase,
                             })),
                           };
@@ -4870,7 +5033,47 @@ function PODetailSheet({
                             <p className="text-xs font-medium text-slate-700">
                               {item.productName}
                             </p>
-                            <div className="mt-1 grid grid-cols-2 gap-2">
+                            <p className="text-[10px] text-slate-500">
+                              {item.productSku}
+                            </p>
+                            <div className="mt-1 space-y-2">
+                              <select
+                                className="h-8 w-full rounded-md border border-slate-200 px-2 text-xs outline-none focus:ring-2 focus:ring-primary"
+                                value={item.unitId}
+                                onChange={(e) =>
+                                  setEditForm((prev) => ({
+                                    ...prev,
+                                    items: prev.items.map((x, i) => {
+                                      if (i !== index) return x;
+                                      const product = productOptionMap.get(x.productId);
+                                      const nextUnit =
+                                        product?.unitOptions.find(
+                                          (option) => option.unitId === e.target.value,
+                                        ) ?? null;
+                                      if (!nextUnit) return x;
+                                      return {
+                                        ...x,
+                                        unitId: nextUnit.unitId,
+                                        unitCode: nextUnit.unitCode,
+                                        unitNameTh: nextUnit.unitNameTh,
+                                        multiplierToBase: nextUnit.multiplierToBase,
+                                      };
+                                    }),
+                                  }))
+                                }
+                              >
+                                {(productOptionMap.get(item.productId)?.unitOptions ?? []).map(
+                                  (option) => (
+                                    <option key={option.unitId} value={option.unitId}>
+                                      {getPurchaseUnitLabel(
+                                        option.unitCode,
+                                        option.unitNameTh,
+                                      )}
+                                    </option>
+                                  ),
+                                )}
+                              </select>
+                              <div className="grid grid-cols-2 gap-2">
                               <input
                                 type="number"
                                 className="h-8 w-full rounded-md border border-slate-200 px-2 text-xs outline-none focus:ring-2 focus:ring-primary"
@@ -4902,6 +5105,14 @@ function PODetailSheet({
                                 }
                               />
                             </div>
+                            </div>
+                            <p className="mt-1 text-[10px] text-slate-500">
+                              {t(uiLocale, "purchase.field.baseQty")} ={" "}
+                              {(
+                                (Number(item.qtyOrdered) || 0) * item.multiplierToBase
+                              ).toLocaleString(numberLocale)}{" "}
+                              {item.baseUnitCode}
+                            </p>
                           </div>
                         ))}
                       </div>
@@ -5131,21 +5342,36 @@ function PODetailSheet({
                         {item.productName}
                       </p>
                       <p className="text-xs text-slate-500">
-                        {item.qtyOrdered} ×{" "}
-	                        {fmtPrice(item.unitCostBase, storeCurrency, numberLocale)}
-	                        {item.qtyReceived > 0 &&
-	                          item.qtyReceived !== item.qtyOrdered && (
-	                            <span className="ml-1 text-amber-600">
-	                              {t(uiLocale, "purchase.detail.items.receivedQty.prefix")}{" "}
-	                              {item.qtyReceived}
-	                              {t(uiLocale, "purchase.detail.items.receivedQty.suffix")}
-	                            </span>
-	                          )}
-	                      </p>
+                        {item.qtyOrdered}{" "}
+                        {getPurchaseUnitLabel(
+                          item.purchaseUnitCode,
+                          item.purchaseUnitNameTh,
+                        )}{" "}
+                        · {fmtPrice(item.unitCostBase, storeCurrency, numberLocale)}/
+                        {item.baseUnitCode}
+                        <span className="ml-1">
+                          ({item.qtyBaseOrdered.toLocaleString(numberLocale)}{" "}
+                          {item.baseUnitCode})
+                        </span>
+                        {item.qtyReceived > 0 &&
+                          item.qtyReceived !== item.qtyOrdered && (
+                            <span className="ml-1 text-amber-600">
+                              {t(uiLocale, "purchase.detail.items.receivedQty.prefix")}{" "}
+                              {item.qtyReceived}{" "}
+                              {getPurchaseUnitLabel(
+                                item.purchaseUnitCode,
+                                item.purchaseUnitNameTh,
+                              )}{" "}
+                              / {item.qtyBaseReceived.toLocaleString(numberLocale)}{" "}
+                              {item.baseUnitCode}
+                              {t(uiLocale, "purchase.detail.items.receivedQty.suffix")}
+                            </span>
+                          )}
+                      </p>
                     </div>
                     <span className="text-sm font-medium text-slate-900">
                       {fmtPrice(
-                        item.unitCostBase * item.qtyOrdered,
+                        item.unitCostBase * item.qtyBaseOrdered,
                         storeCurrency,
                         numberLocale,
                       )}

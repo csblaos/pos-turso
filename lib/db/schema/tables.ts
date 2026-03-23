@@ -637,6 +637,9 @@ export const products = sqliteTable(
     baseUnitId: text("base_unit_id")
       .notNull()
       .references(() => units.id),
+    allowBaseUnitSale: integer("allow_base_unit_sale", { mode: "boolean" })
+      .notNull()
+      .default(true),
     priceBase: integer("price_base").notNull(),
     costBase: integer("cost_base").notNull().default(0),
     outStockThreshold: integer("out_stock_threshold"),
@@ -671,6 +674,9 @@ export const productUnits = sqliteTable(
       .notNull()
       .references(() => units.id, { onDelete: "restrict" }),
     multiplierToBase: integer("multiplier_to_base").notNull(),
+    enabledForSale: integer("enabled_for_sale", { mode: "boolean" })
+      .notNull()
+      .default(true),
     pricePerUnit: integer("price_per_unit"),
   },
   (table) => ({
@@ -1022,8 +1028,14 @@ export const purchaseOrderItems = sqliteTable(
     productId: text("product_id")
       .notNull()
       .references(() => products.id, { onDelete: "restrict" }),
+    unitId: text("unit_id")
+      .notNull()
+      .references(() => units.id, { onDelete: "restrict" }),
+    multiplierToBase: integer("multiplier_to_base").notNull().default(1),
     qtyOrdered: integer("qty_ordered").notNull(),
     qtyReceived: integer("qty_received").notNull().default(0),
+    qtyBaseOrdered: integer("qty_base_ordered").notNull().default(0),
+    qtyBaseReceived: integer("qty_base_received").notNull().default(0),
     unitCostPurchase: integer("unit_cost_purchase").notNull().default(0),
     unitCostBase: integer("unit_cost_base").notNull().default(0),
     landedCostPerUnit: integer("landed_cost_per_unit").notNull().default(0),

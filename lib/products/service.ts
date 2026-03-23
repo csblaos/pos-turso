@@ -30,6 +30,7 @@ export type ProductConversionView = {
   unitCode: string;
   unitNameTh: string;
   multiplierToBase: number;
+  enabledForSale: boolean;
   pricePerUnit: number | null;
 };
 
@@ -60,6 +61,7 @@ export type ProductListItem = {
   baseUnitId: string;
   baseUnitCode: string;
   baseUnitNameTh: string;
+  allowBaseUnitSale: boolean;
   priceBase: number;
   costBase: number;
   outStockThreshold: number | null;
@@ -105,6 +107,7 @@ type ProductRowWithConversion = {
   baseUnitId: string;
   baseUnitCode: string;
   baseUnitNameTh: string;
+  allowBaseUnitSale: boolean;
   priceBase: number;
   costBase: number;
   outStockThreshold: number | null;
@@ -115,6 +118,7 @@ type ProductRowWithConversion = {
   conversionUnitCode: string | null;
   conversionUnitNameTh: string | null;
   multiplierToBase: number | null;
+  conversionEnabledForSale: boolean | null;
   conversionPricePerUnit: number | null;
 };
 
@@ -162,6 +166,7 @@ const mapProductRows = (rows: ProductRowWithConversion[]): ProductListItem[] => 
         baseUnitId: row.baseUnitId,
         baseUnitCode: row.baseUnitCode,
         baseUnitNameTh: row.baseUnitNameTh,
+        allowBaseUnitSale: Boolean(row.allowBaseUnitSale),
         priceBase: row.priceBase,
         costBase: row.costBase,
         outStockThreshold: row.outStockThreshold ?? null,
@@ -195,6 +200,7 @@ const mapProductRows = (rows: ProductRowWithConversion[]): ProductListItem[] => 
           unitCode: row.conversionUnitCode,
           unitNameTh: row.conversionUnitNameTh,
           multiplierToBase: row.multiplierToBase,
+          enabledForSale: Boolean(row.conversionEnabledForSale),
           pricePerUnit: row.conversionPricePerUnit ?? null,
         });
       }
@@ -350,6 +356,7 @@ async function listStoreProductsByIds(
       baseUnitId: products.baseUnitId,
       baseUnitCode: baseUnits.code,
       baseUnitNameTh: baseUnits.nameTh,
+      allowBaseUnitSale: products.allowBaseUnitSale,
       priceBase: products.priceBase,
       costBase: products.costBase,
       outStockThreshold: products.outStockThreshold,
@@ -360,6 +367,7 @@ async function listStoreProductsByIds(
       conversionUnitCode: conversionUnits.code,
       conversionUnitNameTh: conversionUnits.nameTh,
       multiplierToBase: productUnits.multiplierToBase,
+      conversionEnabledForSale: productUnits.enabledForSale,
       conversionPricePerUnit: productUnits.pricePerUnit,
     })
     .from(products)

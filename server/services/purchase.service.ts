@@ -1,5 +1,8 @@
 import "server-only";
 
+import { and, eq, inArray } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
+
 import type {
   ApplyPurchaseOrderExtraCostInput,
   CreatePurchaseOrderInput,
@@ -38,7 +41,7 @@ import type {
   PurchaseOrderView,
 } from "@/server/repositories/purchase.repo";
 import { db } from "@/lib/db/client";
-import { auditEvents } from "@/lib/db/schema";
+import { auditEvents, productUnits, products, units } from "@/lib/db/schema";
 import { parseStoreCurrency } from "@/lib/finance/store-financial";
 import { buildAuditEventValues } from "@/server/services/audit.service";
 import {
@@ -61,6 +64,27 @@ type PurchaseAuditContext = {
 
 type PurchaseIdempotencyContext = {
   recordId: string;
+};
+
+type PurchaseDraftItemInput = {
+  productId: string;
+  unitId: string;
+  qtyOrdered: number;
+  unitCostPurchase: number;
+};
+
+type PurchaseOrderItemSnapshot = {
+  purchaseOrderId: string;
+  productId: string;
+  unitId: string;
+  multiplierToBase: number;
+  qtyOrdered: number;
+  qtyReceived: number;
+  qtyBaseOrdered: number;
+  qtyBaseReceived: number;
+  unitCostPurchase: number;
+  unitCostBase: number;
+  landedCostPerUnit: number;
 };
 
 export class PurchaseServiceError extends Error {
@@ -92,6 +116,146 @@ function derivePoPaymentStatus(
     return "PAID";
   }
   return "PARTIAL";
+}
+
+async function resolvePurchaseUnitCatalog(
+  storeId: string,
+  productIds: string[],
+  tx: PurchaseRepoTx,
+) {
+  if (productIds.length === 0) {
+    return new Map<
+      string,
+      {
+        baseUnitId: string;
+        units: Map<string, { multiplierToBase: number }>;
+      }
+    >();
+  }
+
+  const baseUnits = alias(units, "purchase_base_units");
+  const [productRows, conversionRows] = await Promise.all([
+    tx
+      .select({
+        productId: products.id,
+        baseUnitId: products.baseUnitId,
+      })
+      .from(products)
+      .innerJoin(baseUnits, eq(products.baseUnitId, baseUnits.id))
+      .where(and(eq(products.storeId, storeId), inArray(products.id, productIds))),
+    tx
+      .select({
+        productId: productUnits.productId,
+        unitId: productUnits.unitId,
+        multiplierToBase: productUnits.multiplierToBase,
+      })
+      .from(productUnits)
+      .innerJoin(products, eq(productUnits.productId, products.id))
+      .where(and(eq(products.storeId, storeId), inArray(products.id, productIds))),
+  ]);
+
+  const catalog = new Map<
+    string,
+    {
+      baseUnitId: string;
+      units: Map<string, { multiplierToBase: number }>;
+    }
+  >();
+
+  for (const product of productRows) {
+    catalog.set(product.productId, {
+      baseUnitId: product.baseUnitId,
+      units: new Map([[product.baseUnitId, { multiplierToBase: 1 }]]),
+    });
+  }
+
+  for (const row of conversionRows) {
+    const current = catalog.get(row.productId);
+    if (!current) continue;
+    current.units.set(row.unitId, {
+      multiplierToBase: row.multiplierToBase,
+    });
+  }
+
+  return catalog;
+}
+
+function applyLandedCostPerBaseUnit<T extends {
+  unitCostBase: number;
+  landedCostPerUnit: number;
+}>(
+  items: T[],
+  totalExtraCost: number,
+  getQtyBaseForCost: (item: T) => number,
+) {
+  if (totalExtraCost > 0) {
+    const totalItemsCostBase = items.reduce(
+      (sum, item) => sum + item.unitCostBase * getQtyBaseForCost(item),
+      0,
+    );
+
+    for (const item of items) {
+      const qtyBaseForCost = getQtyBaseForCost(item);
+      const itemTotalCostBase = item.unitCostBase * qtyBaseForCost;
+      const proportion =
+        totalItemsCostBase > 0 ? itemTotalCostBase / totalItemsCostBase : 0;
+      const allocatedExtra = Math.round(totalExtraCost * proportion);
+      item.landedCostPerUnit =
+        qtyBaseForCost > 0
+          ? Math.round((itemTotalCostBase + allocatedExtra) / qtyBaseForCost)
+          : 0;
+    }
+    return;
+  }
+
+  for (const item of items) {
+    item.landedCostPerUnit = item.unitCostBase;
+  }
+}
+
+async function buildPurchaseOrderItemSnapshots(params: {
+  storeId: string;
+  purchaseOrderId: string;
+  items: PurchaseDraftItemInput[];
+  exchangeRate: number;
+  receiveImmediately: boolean;
+  tx: PurchaseRepoTx;
+}): Promise<PurchaseOrderItemSnapshot[]> {
+  const { storeId, purchaseOrderId, items, exchangeRate, receiveImmediately, tx } = params;
+  const productIds = [...new Set(items.map((item) => item.productId))];
+  const unitCatalog = await resolvePurchaseUnitCatalog(storeId, productIds, tx);
+
+  return items.map((item) => {
+    const product = unitCatalog.get(item.productId);
+    if (!product) {
+      throw new PurchaseServiceError(400, "พบสินค้าที่ไม่อยู่ในร้านหรือไม่พร้อมใช้งาน");
+    }
+
+    const unit = product.units.get(item.unitId);
+    if (!unit) {
+      throw new PurchaseServiceError(400, "หน่วยซื้อที่เลือกไม่ถูกต้องสำหรับสินค้านี้");
+    }
+
+    const qtyBaseOrdered = item.qtyOrdered * unit.multiplierToBase;
+    const qtyReceived = receiveImmediately ? item.qtyOrdered : 0;
+    const qtyBaseReceived = receiveImmediately ? qtyBaseOrdered : 0;
+
+    return {
+      purchaseOrderId,
+      productId: item.productId,
+      unitId: item.unitId,
+      multiplierToBase: unit.multiplierToBase,
+      qtyOrdered: item.qtyOrdered,
+      qtyReceived,
+      qtyBaseOrdered,
+      qtyBaseReceived,
+      unitCostPurchase: item.unitCostPurchase,
+      unitCostBase: Math.round(
+        (item.unitCostPurchase * exchangeRate) / unit.multiplierToBase,
+      ),
+      landedCostPerUnit: 0,
+    };
+  });
 }
 
 /* ────────────────────────────────────────────────
@@ -197,39 +361,18 @@ export async function createPurchaseOrder(params: {
       tx,
     );
 
-    // Compute unitCostBase for each item
-    const items = payload.items.map((item) => ({
+    const items = await buildPurchaseOrderItemSnapshots({
+      storeId,
       purchaseOrderId: po.id,
-      productId: item.productId,
-      qtyOrdered: item.qtyOrdered,
-      qtyReceived: payload.receiveImmediately ? item.qtyOrdered : 0,
-      unitCostPurchase: item.unitCostPurchase,
-      unitCostBase: Math.round(item.unitCostPurchase * exchangeRate),
-      landedCostPerUnit: 0, // will calculate below
-    }));
+      items: payload.items,
+      exchangeRate,
+      receiveImmediately: payload.receiveImmediately,
+      tx,
+    });
 
     // Calculate landed cost per unit (proportional allocation of shipping + other)
     const totalExtraCost = payload.shippingCost + payload.otherCost;
-    if (totalExtraCost > 0) {
-      const totalItemsCostBase = items.reduce(
-        (sum, it) => sum + it.unitCostBase * it.qtyOrdered,
-        0,
-      );
-
-      for (const item of items) {
-        const itemTotalCostBase = item.unitCostBase * item.qtyOrdered;
-        const proportion =
-          totalItemsCostBase > 0 ? itemTotalCostBase / totalItemsCostBase : 0;
-        const allocatedExtra = Math.round(totalExtraCost * proportion);
-        item.landedCostPerUnit = Math.round(
-          (itemTotalCostBase + allocatedExtra) / item.qtyOrdered,
-        );
-      }
-    } else {
-      for (const item of items) {
-        item.landedCostPerUnit = item.unitCostBase;
-      }
-    }
+    applyLandedCostPerBaseUnit(items, totalExtraCost, (item) => item.qtyBaseOrdered);
 
     await insertPurchaseOrderItems(items, tx);
 
@@ -354,35 +497,34 @@ export async function updatePurchaseOrderStatusFlow(params: {
       const totalExtraCost = po.shippingCost + po.otherCost;
       const itemsToReceive = po.items.map((item) => {
         const qtyReceived = receivedMap.get(item.id) ?? item.qtyOrdered;
-        return { ...item, qtyReceived };
+        if (qtyReceived > item.qtyOrdered) {
+          throw new PurchaseServiceError(400, "จำนวนรับต้องไม่มากกว่าจำนวนที่สั่งซื้อ");
+        }
+        return {
+          ...item,
+          qtyReceived,
+          qtyBaseReceived: qtyReceived * item.multiplierToBase,
+        };
       });
 
-      const totalReceivedCostBase = itemsToReceive.reduce(
-        (sum, it) => sum + it.unitCostBase * it.qtyReceived,
-        0,
+      applyLandedCostPerBaseUnit(
+        itemsToReceive,
+        totalExtraCost,
+        (item) => item.qtyBaseReceived,
       );
 
       for (const item of itemsToReceive) {
         const qtyReceived = item.qtyReceived;
         if (qtyReceived <= 0) {
-          await updatePurchaseOrderItemReceived(item.id, 0, 0, tx);
+          await updatePurchaseOrderItemReceived(item.id, 0, 0, 0, tx);
           continue;
-        }
-
-        let landedCostPerUnit = item.unitCostBase;
-        if (totalExtraCost > 0 && totalReceivedCostBase > 0) {
-          const itemTotalCostBase = item.unitCostBase * qtyReceived;
-          const proportion = itemTotalCostBase / totalReceivedCostBase;
-          const allocatedExtra = Math.round(totalExtraCost * proportion);
-          landedCostPerUnit = Math.round(
-            (itemTotalCostBase + allocatedExtra) / qtyReceived,
-          );
         }
 
         await updatePurchaseOrderItemReceived(
           item.id,
           qtyReceived,
-          landedCostPerUnit,
+          item.qtyBaseReceived,
+          item.landedCostPerUnit,
           tx,
         );
       }
@@ -391,23 +533,18 @@ export async function updatePurchaseOrderStatusFlow(params: {
       const finalItems = itemsToReceive
         .filter((it) => it.qtyReceived > 0)
         .map((it) => {
-          let landedCostPerUnit = it.unitCostBase;
-          if (totalExtraCost > 0 && totalReceivedCostBase > 0) {
-            const itemTotalCostBase = it.unitCostBase * it.qtyReceived;
-            const proportion = itemTotalCostBase / totalReceivedCostBase;
-            const allocatedExtra = Math.round(totalExtraCost * proportion);
-            landedCostPerUnit = Math.round(
-              (itemTotalCostBase + allocatedExtra) / it.qtyReceived,
-            );
-          }
           return {
             purchaseOrderId: poId,
             productId: it.productId,
+            unitId: it.unitId,
+            multiplierToBase: it.multiplierToBase,
             qtyOrdered: it.qtyOrdered,
             qtyReceived: it.qtyReceived,
+            qtyBaseOrdered: it.qtyBaseOrdered,
+            qtyBaseReceived: it.qtyBaseReceived,
             unitCostPurchase: it.unitCostPurchase,
             unitCostBase: it.unitCostBase,
-            landedCostPerUnit,
+            landedCostPerUnit: it.landedCostPerUnit,
           };
         });
 
@@ -501,12 +638,16 @@ export async function finalizePurchaseOrderExchangeRateFlow(params: {
     const totalExtraCost = po.shippingCost + po.otherCost;
     const itemsWithBaseCost = po.items.map((item) => ({
       ...item,
-      qtyForCalc: Math.max(item.qtyReceived, 0),
-      unitCostBase: Math.round(item.unitCostPurchase * nextRate),
+      qtyForCalc: Math.max(item.qtyBaseReceived, 0),
+      unitCostBase: Math.round(
+        (item.unitCostPurchase * nextRate) / item.multiplierToBase,
+      ),
     }));
-    const totalReceivedCostBase = itemsWithBaseCost.reduce(
-      (sum, item) => sum + item.unitCostBase * item.qtyForCalc,
-      0,
+
+    applyLandedCostPerBaseUnit(
+      itemsWithBaseCost,
+      totalExtraCost,
+      (item) => item.qtyForCalc,
     );
 
     for (const item of itemsWithBaseCost) {
@@ -514,21 +655,10 @@ export async function finalizePurchaseOrderExchangeRateFlow(params: {
         await updatePurchaseOrderItemCostFields(item.id, item.unitCostBase, 0, tx);
         continue;
       }
-
-      let landedCostPerUnit = item.unitCostBase;
-      if (totalExtraCost > 0 && totalReceivedCostBase > 0) {
-        const itemTotalCostBase = item.unitCostBase * item.qtyForCalc;
-        const proportion = itemTotalCostBase / totalReceivedCostBase;
-        const allocatedExtra = Math.round(totalExtraCost * proportion);
-        landedCostPerUnit = Math.round(
-          (itemTotalCostBase + allocatedExtra) / item.qtyForCalc,
-        );
-      }
-
       await updatePurchaseOrderItemCostFields(
         item.id,
         item.unitCostBase,
-        landedCostPerUnit,
+        item.landedCostPerUnit,
         tx,
       );
     }
@@ -761,32 +891,28 @@ export async function applyPurchaseOrderExtraCostFlow(params: {
     }
 
     const totalExtraCost = shippingCost + otherCost;
-    const totalReceivedCostBase = po.items.reduce(
-      (sum, item) => sum + item.unitCostBase * Math.max(item.qtyReceived, 0),
-      0,
+    const itemsForCost = po.items.map((item) => ({
+      ...item,
+      qtyForCalc: Math.max(item.qtyBaseReceived, 0),
+    }));
+
+    applyLandedCostPerBaseUnit(
+      itemsForCost,
+      totalExtraCost,
+      (item) => item.qtyForCalc,
     );
 
-    for (const item of po.items) {
-      const qtyReceived = Math.max(item.qtyReceived, 0);
+    for (const item of itemsForCost) {
+      const qtyReceived = Math.max(item.qtyBaseReceived, 0);
       if (qtyReceived <= 0) {
         await updatePurchaseOrderItemCostFields(item.id, item.unitCostBase, 0, tx);
         continue;
       }
 
-      let landedCostPerUnit = item.unitCostBase;
-      if (totalExtraCost > 0 && totalReceivedCostBase > 0) {
-        const itemTotalCostBase = item.unitCostBase * qtyReceived;
-        const proportion = itemTotalCostBase / totalReceivedCostBase;
-        const allocatedExtra = Math.round(totalExtraCost * proportion);
-        landedCostPerUnit = Math.round(
-          (itemTotalCostBase + allocatedExtra) / qtyReceived,
-        );
-      }
-
       await updatePurchaseOrderItemCostFields(
         item.id,
         item.unitCostBase,
-        landedCostPerUnit,
+        item.landedCostPerUnit,
         tx,
       );
     }
@@ -1112,6 +1238,7 @@ export async function updatePurchaseOrderFlow(params: {
           payload.items ??
           po.items.map((item) => ({
             productId: item.productId,
+            unitId: item.unitId,
             qtyOrdered: item.qtyOrdered,
             unitCostPurchase: item.unitCostPurchase,
           }));
@@ -1120,36 +1247,16 @@ export async function updatePurchaseOrderFlow(params: {
         const otherCost = payload.otherCost ?? po.otherCost;
         const totalExtraCost = shippingCost + otherCost;
 
-        const items = sourceItems.map((item) => ({
+        const items = await buildPurchaseOrderItemSnapshots({
+          storeId,
           purchaseOrderId: po.id,
-          productId: item.productId,
-          qtyOrdered: item.qtyOrdered,
-          qtyReceived: 0,
-          unitCostPurchase: item.unitCostPurchase,
-          unitCostBase: Math.round(item.unitCostPurchase * nextRate),
-          landedCostPerUnit: 0,
-        }));
+          items: sourceItems,
+          exchangeRate: nextRate,
+          receiveImmediately: false,
+          tx,
+        });
 
-        if (totalExtraCost > 0) {
-          const totalItemsCostBase = items.reduce(
-            (sum, it) => sum + it.unitCostBase * it.qtyOrdered,
-            0,
-          );
-
-          for (const item of items) {
-            const itemTotalCostBase = item.unitCostBase * item.qtyOrdered;
-            const proportion =
-              totalItemsCostBase > 0 ? itemTotalCostBase / totalItemsCostBase : 0;
-            const allocatedExtra = Math.round(totalExtraCost * proportion);
-            item.landedCostPerUnit = Math.round(
-              (itemTotalCostBase + allocatedExtra) / item.qtyOrdered,
-            );
-          }
-        } else {
-          for (const item of items) {
-            item.landedCostPerUnit = item.unitCostBase;
-          }
-        }
+        applyLandedCostPerBaseUnit(items, totalExtraCost, (item) => item.qtyBaseOrdered);
 
         await replacePurchaseOrderItems(po.id, items, tx);
       }
@@ -1211,6 +1318,8 @@ async function receiveStockAndUpdateCost(
     productId: string;
     qtyReceived?: number;
     qtyOrdered: number;
+    qtyBaseReceived?: number;
+    qtyBaseOrdered: number;
     landedCostPerUnit: number;
   }[],
   tx: PurchaseRepoTx,
@@ -1220,7 +1329,7 @@ async function receiveStockAndUpdateCost(
     storeId,
     productId: item.productId,
     type: "IN" as const,
-    qtyBase: item.qtyReceived ?? item.qtyOrdered,
+    qtyBase: item.qtyBaseReceived ?? item.qtyBaseOrdered,
     refType: "PURCHASE" as const,
     refId: poId,
     note: `รับสินค้าจากใบสั่งซื้อ`,
@@ -1231,16 +1340,16 @@ async function receiveStockAndUpdateCost(
 
   // Update weighted average cost for each product
   for (const item of items) {
-    const qtyReceived = item.qtyReceived ?? item.qtyOrdered;
-    if (qtyReceived <= 0) continue;
+    const qtyReceivedBase = item.qtyBaseReceived ?? item.qtyBaseOrdered;
+    if (qtyReceivedBase <= 0) continue;
 
     const currentOnHand = await getProductCurrentStock(storeId, item.productId, tx);
     const currentCostBase = await getProductCostBase(item.productId, tx);
 
     // Stock BEFORE this receipt (subtract just-added qty)
-    const previousOnHand = currentOnHand - qtyReceived;
+    const previousOnHand = currentOnHand - qtyReceivedBase;
     const previousTotalCost = previousOnHand * currentCostBase;
-    const newTotalCost = qtyReceived * item.landedCostPerUnit;
+    const newTotalCost = qtyReceivedBase * item.landedCostPerUnit;
 
     let newCostBase: number;
     if (previousOnHand <= 0) {
@@ -1249,7 +1358,7 @@ async function receiveStockAndUpdateCost(
     } else {
       // Weighted average
       newCostBase = Math.round(
-        (previousTotalCost + newTotalCost) / (previousOnHand + qtyReceived),
+        (previousTotalCost + newTotalCost) / (previousOnHand + qtyReceivedBase),
       );
     }
 
@@ -1270,7 +1379,7 @@ async function receiveStockAndUpdateCost(
             source: "PURCHASE_ORDER",
             poId,
             poNumber,
-            qtyReceived,
+            qtyReceivedBase,
             landedCostPerUnit: item.landedCostPerUnit,
             previousOnHand,
             previousCostBase: currentCostBase,

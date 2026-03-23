@@ -4,8 +4,8 @@
 
 ## Migration Status
 
-- journal entries: `40`
-- latest migration tag: `0039_cultured_mattie_franklin`
+- journal entries: `42`
+- latest migration tag: `0041_purchase_order_units`
 - latest focus:
   - เพิ่ม operational cash flow foundation:
     - ตาราง `financial_accounts`
@@ -43,6 +43,14 @@
   - เพิ่ม operational cash flow foundation:
     - `financial_accounts`
     - `cash_flow_entries`
+  - เพิ่ม sales-unit controls:
+    - `products.allow_base_unit_sale`
+    - `product_units.enabled_for_sale`
+  - เพิ่ม PO unit snapshot:
+    - `purchase_order_items.unit_id`
+    - `purchase_order_items.multiplier_to_base`
+    - `purchase_order_items.qty_base_ordered`
+    - `purchase_order_items.qty_base_received`
 
 ## Table Inventory (High-level)
 
@@ -116,6 +124,11 @@
 - `product_units.product_id -> products.id`
 - `product_units.unit_id -> units.id`
 - `product_units.price_per_unit` = ราคาขายต่อหน่วยแปลงแบบ optional (ถ้า `null` ให้ใช้ราคาหน่วยหลักคูณตัวคูณ)
+- `products.allow_base_unit_sale` = คุมว่าหน่วยหลักโผล่ขายใน POS หรือไม่
+- `product_units.enabled_for_sale` = คุมว่าหน่วยแปลงใดเปิดขายใน POS
+- `purchase_order_items.unit_id` = หน่วยซื้อที่เลือกตอนสร้าง PO
+- `purchase_order_items.multiplier_to_base` = snapshot ตัวคูณของหน่วยซื้อเทียบหน่วยสต็อก
+- `purchase_order_items.qty_base_ordered` / `qty_base_received` = จำนวนฐานเป็นหน่วยสต็อก ใช้สำหรับรับของและคำนวณต้นทุนจริง
 - `inventory_movements.store_id -> stores.id`
 - `inventory_movements.product_id -> products.id`
 
@@ -163,6 +176,7 @@
 - `purchase_orders.paid_by -> users.id`
 - `purchase_order_items.purchase_order_id -> purchase_orders.id`
 - `purchase_order_items.product_id -> products.id`
+- `purchase_order_items.unit_id -> units.id`
 - `purchase_order_payments.purchase_order_id -> purchase_orders.id`
 - `purchase_order_payments.store_id -> stores.id`
 - `purchase_order_payments.created_by -> users.id`

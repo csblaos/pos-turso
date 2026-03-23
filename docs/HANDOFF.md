@@ -2,9 +2,17 @@
 
 ## Snapshot Date
 
-- March 20, 2026
+- March 23, 2026
 
 ## Changed (ล่าสุด)
+
+- เพิ่ม PO purchase units phase แรก:
+  - schema `purchase_order_items` เพิ่ม `unit_id`, `multiplier_to_base`, `qty_base_ordered`, `qty_base_received`
+  - flow `create/update/receive/finalize-rate/apply-extra-cost` ของ `server/services/purchase.service.ts` ใช้หน่วยซื้อที่เลือกเป็น source input แต่แปลงกลับเป็น `qty_base_*` ก่อนลงสต็อกและคำนวณต้นทุน
+  - หน้า `/stock?tab=purchase` เลือกหน่วยซื้อได้ต่อรายการใน create/edit draft, แสดง preview ว่าเท่ากับกี่หน่วยสต็อก, และ detail/PDF ของ PO แสดงทั้งจำนวนหน่วยซื้อและจำนวนฐาน
+  - รายงาน/ยอดรวม PO เปลี่ยนไปใช้ `qty_base_ordered` สำหรับ total cost base แล้ว เพื่อให้ยอดตรงกับต้นทุนต่อหน่วยฐานหลังซื้อเป็นแพ็ก
+  - เพิ่ม migration `0041_purchase_order_units.sql` และ snapshot `0041_snapshot.json`
+  - `scripts/repair-migrations.mjs` รองรับเติม/backfill คอลัมน์ PO units สำหรับฐานเก่า โดย map `unit_id` กลับไป `products.base_unit_id` และคำนวณ `qty_base_*` ย้อนหลังให้
 
 - เพิ่ม `scan to search` ให้หน้า `/orders`:
   - `GET /api/orders` และ query `listOrdersByTab()` รองรับ query `q` แล้วสำหรับค้นหา `orderNo`, `customerName`, และ `contactDisplayName`
@@ -524,6 +532,13 @@
   - fallback compatibility: ข้อมูลสินค้าเดิมที่ไม่มี `price_per_unit` ยังทำงานได้เหมือนเดิม
   - อัปเดต `scripts/repair-migrations.mjs` ให้เติมคอลัมน์ `product_units.price_per_unit` อัตโนมัติสำหรับฐานที่ข้าม migration
   - ปรับ UI มือถือในส่วน `การแปลงหน่วย` ให้แถวกรอกข้อมูลเป็น 2 บรรทัด (บรรทัดแรกเลือกหน่วย+ลบ, บรรทัดสองกรอกตัวคูณ+ราคา) เพื่อลดความแคบและพิมพ์ผิด
+
+- เพิ่ม sales-unit controls สำหรับธุรกิจที่เก็บสต็อกเป็นชิ้นแต่ขายเป็นแพ็ก:
+  - schema `products` เพิ่ม `allow_base_unit_sale` (default `true`)
+  - schema `product_units` เพิ่ม `enabled_for_sale` (default `true`)
+  - หน้า `/products` เพิ่ม toggle ว่า `หน่วยหลักขายใน POS ได้ไหม` และ checkbox ต่อหน่วยแปลงว่า `เปิดขายใน POS`
+  - `getOrderCatalogForStore()` จะส่งไป `/orders/new` เฉพาะหน่วยที่เปิดขาย และจะซ่อนสินค้าทั้งตัวจาก POS ถ้าไม่มีหน่วยขายเหลือเลย
+  - โครงสต็อก/ต้นทุนไม่เปลี่ยน: inventory ยังเก็บและตัดเป็น `qtyBase` ตามหน่วยหลักเหมือนเดิม
 
 - ปรับ UX ฟอร์มสร้างออเดอร์หน้า `/orders` ให้เป็น mobile-first แบบ POS-lite:
   - เพิ่ม quick add section (`ค้นหา SKU/ชื่อ/บาร์โค้ด`) และการ์ดสินค้าแบบแตะครั้งเดียวเพื่อเพิ่มเข้าตะกร้า
@@ -1046,7 +1061,9 @@
 ## Files (สำคัญ)
 
 - `lib/db/schema/tables.ts`
+- `drizzle/0040_modern_sales_units.sql`
 - `drizzle/0034_spooky_talos.sql`
+- `drizzle/meta/0040_snapshot.json`
 - `drizzle/meta/0034_snapshot.json`
 - `drizzle/meta/_journal.json`
 - `scripts/repair-migrations.mjs`

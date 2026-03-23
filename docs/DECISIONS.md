@@ -2,6 +2,42 @@
 
 ไฟล์นี้บันทึก "ทำไม" ของการออกแบบสำคัญ เพื่อให้ AI/คนทำงานต่อไม่เดาเอง
 
+## ADR-032: ฝั่ง PO เก็บหน่วยซื้อเป็น Snapshot แต่ใช้จำนวนฐานเป็น Source of Truth สำหรับสต็อกและต้นทุน
+
+- Date: March 23, 2026
+- Status: Accepted
+- Decision:
+  - เพิ่ม `purchase_order_items.unit_id` เพื่อเก็บหน่วยซื้อที่เลือกใน PO
+  - เพิ่ม `purchase_order_items.multiplier_to_base` เป็น snapshot ตัวคูณของหน่วยซื้อ ณ วันที่สร้าง PO
+  - เพิ่ม `purchase_order_items.qty_base_ordered` และ `qty_base_received` เพื่อใช้เป็น source of truth สำหรับ stock-in และ weighted average cost
+  - คง `qty_ordered` และ `qty_received` ไว้เป็นจำนวนในหน่วยซื้อ เพื่อให้ UI/PDF/รายงานฝั่งธุรกิจอ่านตรงกับ PO จริง
+- Reason:
+  - ธุรกิจซื้อเข้าเป็นแพ็ก เช่น 10 แพ็ก x 100 ชิ้น แต่สต็อกจริงต้องเข้า 1,000 ชิ้น
+  - ถ้าใช้ `qtyOrdered` ตรง ๆ เป็นหน่วยสต็อก จะทำให้สต็อกและต้นทุนผิดทันทีเมื่อซื้อเป็นแพ็ก
+  - snapshot `multiplier_to_base` กันกรณีมีคนเปลี่ยน unit conversion ของสินค้าในอนาคต แล้ว PO เก่าย้อนความหมายผิด
+- Consequence:
+  - หน้า `/stock?tab=purchase` ต้องให้เลือกหน่วยซื้อและ preview จำนวนฐานก่อนบันทึก
+  - service/reports/PDF ของ PO ต้องแยก `qty หน่วยซื้อ` ออกจาก `qty หน่วยสต็อก`
+  - phase ถัดไปสามารถต่อยอดไปการรับของบางส่วนเป็นแพ็กได้โดยไม่รื้อโครงนี้อีก
+
+## ADR-031: แยกหน่วยสต็อกออกจากหน่วยขาย โดยให้ POS เห็นเฉพาะหน่วยที่เปิดขาย
+
+- Date: March 23, 2026
+- Status: Accepted
+- Decision:
+  - คง `products.base_unit_id` เป็นหน่วยสต็อกหลักของสินค้าเหมือนเดิม
+  - เพิ่ม `products.allow_base_unit_sale` เพื่อคุมว่าหน่วยหลักจะโผล่ใน POS หรือไม่
+  - เพิ่ม `product_units.enabled_for_sale` เพื่อคุมว่าหน่วยแปลงใดเปิดขายใน POS
+  - `getOrderCatalogForStore()` จะส่งไป `/orders/new` เฉพาะหน่วยที่เปิดขาย และจะซ่อนสินค้าที่ไม่มีหน่วยขายเหลือจาก POS
+- Reason:
+  - ธุรกิจบางประเภทเก็บสต็อกเป็นชิ้น แต่ขายจริงเป็นแพ็ก เช่น 100 ชิ้น / 1,000 ชิ้น
+  - ถ้าใช้หน่วยหลักเดียวทั้งสต็อกและขาย จะทำให้พนักงานเลือกขายเป็นชิ้นได้โดยไม่ตั้งใจ
+  - แยก `stock unit` กับ `sales units` ช่วยรักษา logic สต็อก/ต้นทุนเดิม และลด scope ของ phase แรกก่อนขยับไปแก้ฝั่ง PO
+- Consequence:
+  - หน้า `/products` ต้องมี UI สำหรับกำหนดว่าหน่วยไหนขายได้ใน POS
+  - หน้า `/orders/new` และ `POST /api/orders` จะไม่เห็น/ไม่รับหน่วยที่ไม่ได้เปิดขายแล้ว
+  - phase ถัดไปควรขยายแนวคิดเดียวกันไปฝั่ง `purchase_order_items` เพื่อรองรับการซื้อเป็นแพ็กจากซัพพลายเออร์
+
 ## ADR-030: Cash Flow Phase 1 ใช้ Operational Ledger แยกจาก GL และยอมให้ PO Payment เป็น Unassigned Account ชั่วคราว
 
 - Date: March 20, 2026

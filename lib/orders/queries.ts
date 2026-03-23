@@ -189,6 +189,7 @@ export type OrderCatalogProduct = {
   baseUnitId: string;
   baseUnitCode: string;
   baseUnitNameTh: string;
+  allowBaseUnitSale: boolean;
   available: number;
   units: OrderCatalogProductUnit[];
 };
@@ -928,6 +929,7 @@ export async function getOrderCatalogForStore(storeId: string): Promise<OrderCat
             baseUnitId: products.baseUnitId,
             baseUnitCode: baseUnits.code,
             baseUnitNameTh: baseUnits.nameTh,
+            allowBaseUnitSale: products.allowBaseUnitSale,
           })
           .from(products)
           .innerJoin(baseUnits, eq(products.baseUnitId, baseUnits.id))
@@ -943,6 +945,7 @@ export async function getOrderCatalogForStore(storeId: string): Promise<OrderCat
             unitCode: units.code,
             unitNameTh: units.nameTh,
             multiplierToBase: productUnits.multiplierToBase,
+            enabledForSale: productUnits.enabledForSale,
             pricePerUnit: productUnits.pricePerUnit,
           })
           .from(productUnits)
@@ -1026,6 +1029,7 @@ export async function getOrderCatalogForStore(storeId: string): Promise<OrderCat
       unitCode: string;
       unitNameTh: string;
       multiplierToBase: number;
+      enabledForSale: boolean;
       pricePerUnit: number | null;
     }>
   >();
@@ -1037,6 +1041,7 @@ export async function getOrderCatalogForStore(storeId: string): Promise<OrderCat
       unitCode: row.unitCode,
       unitNameTh: row.unitNameTh,
       multiplierToBase: row.multiplierToBase,
+      enabledForSale: Boolean(row.enabledForSale),
       pricePerUnit: row.pricePerUnit ?? null,
     });
     conversionMap.set(row.productId, current);
@@ -1047,15 +1052,20 @@ export async function getOrderCatalogForStore(storeId: string): Promise<OrderCat
     const conversions = conversionMap.get(product.productId) ?? [];
 
     const unitsPayloadMap = new Map<string, OrderCatalogProductUnit>();
-    unitsPayloadMap.set(product.baseUnitId, {
-      unitId: product.baseUnitId,
-      unitCode: product.baseUnitCode,
-      unitNameTh: product.baseUnitNameTh,
-      multiplierToBase: 1,
-      pricePerUnit: product.priceBase,
-    });
+    if (product.allowBaseUnitSale) {
+      unitsPayloadMap.set(product.baseUnitId, {
+        unitId: product.baseUnitId,
+        unitCode: product.baseUnitCode,
+        unitNameTh: product.baseUnitNameTh,
+        multiplierToBase: 1,
+        pricePerUnit: product.priceBase,
+      });
+    }
 
     for (const conversion of conversions) {
+      if (!conversion.enabledForSale) {
+        continue;
+      }
       if (unitsPayloadMap.has(conversion.unitId)) {
         continue;
       }
@@ -1086,10 +1096,11 @@ export async function getOrderCatalogForStore(storeId: string): Promise<OrderCat
       baseUnitId: product.baseUnitId,
       baseUnitCode: product.baseUnitCode,
       baseUnitNameTh: product.baseUnitNameTh,
+      allowBaseUnitSale: Boolean(product.allowBaseUnitSale),
       available: balance?.available ?? 0,
       units: unitsPayload,
     };
-  });
+  }).filter((product) => product.units.length > 0);
 
   return {
     storeCurrency: financial?.currency ?? "LAK",

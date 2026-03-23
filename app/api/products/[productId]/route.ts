@@ -318,6 +318,7 @@ export async function PATCH(
             variantOptionsJson: variantColumns.variantOptionsJson,
             variantSortOrder: variantColumns.variantSortOrder,
             baseUnitId: payload.baseUnitId,
+            allowBaseUnitSale: payload.allowBaseUnitSale,
             priceBase: payload.priceBase,
             costBase: payload.costBase,
             outStockThreshold: payload.outStockThreshold,
@@ -335,6 +336,7 @@ export async function PATCH(
               productId,
               unitId: conversion.unitId,
               multiplierToBase: conversion.multiplierToBase,
+              enabledForSale: conversion.enabledForSale,
               pricePerUnit: conversion.pricePerUnit ?? null,
             })),
           );

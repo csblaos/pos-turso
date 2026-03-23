@@ -134,6 +134,7 @@ export async function POST(request: Request) {
           variantOptionsJson: variantColumns.variantOptionsJson,
           variantSortOrder: variantColumns.variantSortOrder,
           baseUnitId: payload.baseUnitId,
+          allowBaseUnitSale: payload.allowBaseUnitSale,
           priceBase: payload.priceBase,
           costBase: payload.costBase,
           outStockThreshold: payload.outStockThreshold,
@@ -149,6 +150,7 @@ export async function POST(request: Request) {
               productId,
               unitId: conversion.unitId,
               multiplierToBase: conversion.multiplierToBase,
+              enabledForSale: conversion.enabledForSale,
               pricePerUnit: conversion.pricePerUnit ?? null,
             })),
           );

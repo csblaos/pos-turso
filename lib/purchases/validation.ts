@@ -19,6 +19,7 @@ export const createPurchaseOrderSchema = z.object({
     .array(
       z.object({
         productId: z.string().min(1, "กรุณาเลือกสินค้า"),
+        unitId: z.string().min(1, "กรุณาเลือกหน่วยซื้อ"),
         qtyOrdered: z.coerce
           .number({ message: "กรอกจำนวนให้ถูกต้อง" })
           .int("จำนวนต้องเป็นจำนวนเต็ม")
@@ -116,6 +117,7 @@ export const updatePurchaseOrderSchema = z.object({
     .array(
       z.object({
         productId: z.string().min(1, "กรุณาเลือกสินค้า"),
+        unitId: z.string().min(1, "กรุณาเลือกหน่วยซื้อ"),
         qtyOrdered: z.coerce
           .number({ message: "กรอกจำนวนให้ถูกต้อง" })
           .int("จำนวนต้องเป็นจำนวนเต็ม")

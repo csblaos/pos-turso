@@ -1,6 +1,7 @@
 import "server-only";
 
 import { and, desc, eq, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 
 import { db } from "@/lib/db/client";
 import {
@@ -9,6 +10,7 @@ import {
   purchaseOrderItems,
   purchaseOrderPayments,
   purchaseOrders,
+  units,
   users,
 } from "@/lib/db/schema";
 
@@ -31,6 +33,10 @@ export type PurchaseOrderView = PurchaseOrderRow & {
   items: (PurchaseOrderItemRow & {
     productName: string;
     productSku: string;
+    purchaseUnitCode: string;
+    purchaseUnitNameTh: string;
+    baseUnitCode: string;
+    baseUnitNameTh: string;
   })[];
   paymentEntries: PurchaseOrderPaymentEntry[];
   createdByName: string | null;
@@ -141,7 +147,7 @@ export async function listPurchaseOrders(
         WHERE ${purchaseOrderItems.purchaseOrderId} = ${purchaseOrders.id}
       )`,
       totalCostBase: sql<number>`(
-        SELECT coalesce(sum(${purchaseOrderItems.unitCostBase} * ${purchaseOrderItems.qtyOrdered}), 0)
+        SELECT coalesce(sum(${purchaseOrderItems.unitCostBase} * ${purchaseOrderItems.qtyBaseOrdered}), 0)
         FROM ${purchaseOrderItems}
         WHERE ${purchaseOrderItems.purchaseOrderId} = ${purchaseOrders.id}
       )`,
@@ -216,7 +222,7 @@ export async function listPurchaseOrdersPaged(
         WHERE ${purchaseOrderItems.purchaseOrderId} = ${purchaseOrders.id}
       )`,
       totalCostBase: sql<number>`(
-        SELECT coalesce(sum(${purchaseOrderItems.unitCostBase} * ${purchaseOrderItems.qtyOrdered}), 0)
+        SELECT coalesce(sum(${purchaseOrderItems.unitCostBase} * ${purchaseOrderItems.qtyBaseOrdered}), 0)
         FROM ${purchaseOrderItems}
         WHERE ${purchaseOrderItems.purchaseOrderId} = ${purchaseOrders.id}
       )`,
@@ -269,6 +275,8 @@ export async function getPurchaseOrderById(
   tx?: PurchaseRepoTx,
 ): Promise<PurchaseOrderView | null> {
   const executor: PurchaseRepoExecutor = tx ?? db;
+  const purchaseUnits = alias(units, "purchase_units");
+  const baseUnits = alias(units, "base_units");
   const [poRow] = await executor
     .select({
       po: purchaseOrders,
@@ -293,15 +301,25 @@ export async function getPurchaseOrderById(
       item: purchaseOrderItems,
       productName: products.name,
       productSku: products.sku,
+      purchaseUnitCode: purchaseUnits.code,
+      purchaseUnitNameTh: purchaseUnits.nameTh,
+      baseUnitCode: baseUnits.code,
+      baseUnitNameTh: baseUnits.nameTh,
     })
     .from(purchaseOrderItems)
     .innerJoin(products, eq(purchaseOrderItems.productId, products.id))
+    .innerJoin(purchaseUnits, eq(purchaseOrderItems.unitId, purchaseUnits.id))
+    .innerJoin(baseUnits, eq(products.baseUnitId, baseUnits.id))
     .where(eq(purchaseOrderItems.purchaseOrderId, poId));
 
   const items = itemRows.map((r) => ({
     ...r.item,
     productName: r.productName,
     productSku: r.productSku,
+    purchaseUnitCode: r.purchaseUnitCode,
+    purchaseUnitNameTh: r.purchaseUnitNameTh,
+    baseUnitCode: r.baseUnitCode,
+    baseUnitNameTh: r.baseUnitNameTh,
   }));
 
   const paymentRows = await executor
@@ -320,7 +338,7 @@ export async function getPurchaseOrderById(
   }));
 
   const totalCostBase = items.reduce(
-    (sum, it) => sum + it.unitCostBase * it.qtyOrdered,
+    (sum, it) => sum + it.unitCostBase * it.qtyBaseOrdered,
     0,
   );
   const totalPaidBase = paymentEntries.reduce((sum, entry) => {
@@ -394,7 +412,7 @@ export async function listPendingExchangeRateQueue(params: {
         WHERE ${purchaseOrderItems.purchaseOrderId} = ${purchaseOrders.id}
       )`,
       totalCostBase: sql<number>`(
-        SELECT coalesce(sum(${purchaseOrderItems.unitCostBase} * ${purchaseOrderItems.qtyOrdered}), 0)
+        SELECT coalesce(sum(${purchaseOrderItems.unitCostBase} * ${purchaseOrderItems.qtyBaseOrdered}), 0)
         FROM ${purchaseOrderItems}
         WHERE ${purchaseOrderItems.purchaseOrderId} = ${purchaseOrders.id}
       )`,
@@ -495,13 +513,14 @@ export async function updatePurchaseOrderStatus(
 export async function updatePurchaseOrderItemReceived(
   itemId: string,
   qtyReceived: number,
+  qtyBaseReceived: number,
   landedCostPerUnit: number,
   tx?: PurchaseRepoTx,
 ) {
   const executor: PurchaseRepoExecutor = tx ?? db;
   await executor
     .update(purchaseOrderItems)
-    .set({ qtyReceived, landedCostPerUnit })
+    .set({ qtyReceived, qtyBaseReceived, landedCostPerUnit })
     .where(eq(purchaseOrderItems.id, itemId));
 }
 

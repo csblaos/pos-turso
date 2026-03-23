@@ -21,6 +21,7 @@ export const productConversionSchema = z.object({
     .number({ message: "กรอกตัวคูณให้ถูกต้อง" })
     .int("ตัวคูณต้องเป็นจำนวนเต็ม")
     .min(2, "ตัวคูณต้องมากกว่า 1"),
+  enabledForSale: z.boolean().default(true),
   pricePerUnit: optionalNonNegativeInt,
 });
 
@@ -107,6 +108,7 @@ export const productUpsertSchema = z
     name: z.string().trim().min(1, "กรุณากรอกชื่อสินค้า").max(180),
     barcode: z.string().trim().max(64).optional().or(z.literal("")),
     baseUnitId: z.string().min(1, "กรุณาเลือกหน่วยหลัก"),
+    allowBaseUnitSale: z.boolean().default(true),
     priceBase: z.coerce
       .number({ message: "กรอกราคาขายให้ถูกต้อง" })
       .int("ราคาขายต้องเป็นจำนวนเต็ม")
@@ -162,6 +164,16 @@ export const productUpsertSchema = z
 
       unitIds.add(conversion.unitId);
     });
+
+    const hasSaleUnit =
+      data.allowBaseUnitSale || data.conversions.some((conversion) => conversion.enabledForSale);
+    if (!hasSaleUnit) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["allowBaseUnitSale"],
+        message: "ต้องมีอย่างน้อย 1 หน่วยที่เปิดขายใน POS",
+      });
+    }
   });
 
 export const createUnitSchema = z.object({
@@ -235,6 +247,7 @@ export const normalizeProductPayload = (payload: ProductUpsertInput) => ({
   name: payload.name.trim(),
   barcode: payload.barcode?.trim() ? payload.barcode.trim() : null,
   baseUnitId: payload.baseUnitId,
+  allowBaseUnitSale: payload.allowBaseUnitSale,
   priceBase: payload.priceBase,
   costBase: payload.costBase,
   outStockThreshold:
@@ -242,7 +255,10 @@ export const normalizeProductPayload = (payload: ProductUpsertInput) => ({
   lowStockThreshold:
     payload.lowStockThreshold !== undefined ? payload.lowStockThreshold : null,
   categoryId: payload.categoryId?.trim() ? payload.categoryId.trim() : null,
-  conversions: payload.conversions,
+  conversions: payload.conversions.map((conversion) => ({
+    ...conversion,
+    enabledForSale: conversion.enabledForSale,
+  })),
 });
 
 export const normalizeUnitPayload = (payload: CreateUnitInput) => ({
