@@ -26,6 +26,7 @@ import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 import { compressRasterImageFile, validateRasterImageFile } from "@/lib/media/client-image";
 import { RASTER_IMAGE_ACCEPT } from "@/lib/media/image-upload";
 import { buildOrderQrSvgMarkup } from "@/lib/orders/print";
+import { buildShippingLabelPrintMarkup } from "@/lib/orders/shipping-label-print";
 import type { OrderCatalogPaymentAccount, OrderDetail } from "@/lib/orders/queries";
 import { maskAccountValue } from "@/lib/payments/store-payment";
 
@@ -269,14 +270,6 @@ export function OrderDetailView({
           ? -order.shippingCost
           : 0
       : 0;
-  const orderQrSvgMarkup = useMemo(
-    () =>
-      buildOrderQrSvgMarkup(order.orderNo, {
-        size: 120,
-        ariaLabel: `${t(uiLocale, "orders.print.label.orderQrTitle")} ${order.orderNo}`,
-      }),
-    [order.orderNo, uiLocale],
-  );
   const printFontFamily = useMemo(() => {
     if (uiLocale === "lo") {
       return '"NotoSansLaoLooped", "GoogleSans", Sarabun, "Noto Sans Lao", "Segoe UI", sans-serif';
@@ -715,35 +708,13 @@ export function OrderDetailView({
   }, [numberLocale, order, paymentCurrencyDisplay, storeCurrencyDisplay, uiLocale]);
 
   const buildLabelPrintMarkup = useCallback(() => {
-    return `<section class="print-page print-label">
-      <div style="border:1px solid #0f172a;padding:12px;min-height:136mm;display:flex;flex-direction:column;justify-content:space-between;">
-        <section style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;">
-          <div>
-            <h1 style="margin:0;font-size:18px;font-weight:700;">${escapeHtml(t(uiLocale, "orders.print.label.title"))}</h1>
-            <p style="margin:4px 0 0;font-size:14px;">${escapeHtml(t(uiLocale, "orders.print.label.orderPrefix"))} ${escapeHtml(order.orderNo)}</p>
-            <p style="margin:2px 0 0;font-size:13px;">${escapeHtml(t(uiLocale, "orders.print.label.statusPrefix"))} ${escapeHtml(t(uiLocale, statusLabelKey[order.status]))}</p>
-            <p style="margin:4px 0 0;font-size:11px;color:#64748b;">${escapeHtml(t(uiLocale, "orders.print.label.createdAtPrefix"))} ${escapeHtml(new Date(order.createdAt).toLocaleString(numberLocale))}</p>
-          </div>
-          <div style="width:132px;border:1px solid #cbd5e1;border-radius:12px;padding:8px;text-align:center;">
-            <div style="width:120px;height:120px;margin:0 auto;">${orderQrSvgMarkup}</div>
-            <p style="margin:8px 0 0;font-size:10px;font-weight:700;">${escapeHtml(t(uiLocale, "orders.print.label.orderQrTitle"))}</p>
-            <p style="margin:4px 0 0;font-size:9px;line-height:1.35;color:#64748b;">${escapeHtml(t(uiLocale, "orders.print.label.orderQrHint"))}</p>
-          </div>
-        </section>
-        <section style="margin-top:10px;">
-          <p style="margin:0 0 6px;font-size:12px;color:#475569;">${escapeHtml(t(uiLocale, "orders.print.label.receiverTitle"))}</p>
-          <p style="margin:0;font-size:20px;font-weight:700;line-height:1.2;">${escapeHtml(order.customerName || order.contactDisplayName || t(uiLocale, "orders.customer.guest"))}</p>
-          <p style="margin:6px 0 0;font-size:15px;">${escapeHtml(t(uiLocale, "orders.print.label.phonePrefix"))} ${escapeHtml(order.customerPhone || order.contactPhone || "-")}</p>
-          <p style="margin:6px 0 0;font-size:15px;white-space:pre-wrap;line-height:1.35;">${escapeHtml(order.customerAddress || "-")}</p>
-        </section>
-        <section style="border-top:1px dashed #64748b;padding-top:8px;margin-top:12px;font-size:13px;line-height:1.5;">
-          <p style="margin:0;">${escapeHtml(t(uiLocale, "orders.print.label.shippingPrefix"))} ${escapeHtml(order.shippingProvider || order.shippingCarrier || "-")}</p>
-          <p style="margin:0;">${escapeHtml(t(uiLocale, "orders.print.label.trackingPrefix"))} ${escapeHtml(order.trackingNo || "-")}</p>
-          <p style="margin:0;">${escapeHtml(t(uiLocale, "orders.print.label.shippingCostPrefix"))} ${order.shippingCost.toLocaleString(numberLocale)} ${escapeHtml(storeCurrencyDisplay)}</p>
-        </section>
-      </div>
-    </section>`;
-  }, [numberLocale, order, orderQrSvgMarkup, storeCurrencyDisplay, uiLocale]);
+    return buildShippingLabelPrintMarkup({
+      order,
+      uiLocale,
+      numberLocale,
+      storeCurrencyDisplay,
+    });
+  }, [numberLocale, order, storeCurrencyDisplay, uiLocale]);
 
   const buildPackPrintMarkup = useCallback(() => {
     const totalQuantity = order.items.reduce((sum, item) => sum + item.qty, 0);
@@ -841,6 +812,7 @@ export function OrderDetailView({
       const printStyle = document.createElement("style");
       printStyle.id = printStyleId;
       printStyle.textContent = `
+        ${kind === "label" ? "@page { size: 100mm 150mm; margin: 0; }" : ""}
         @media screen {
           #${printRootId} {
             display: none !important;
@@ -870,8 +842,9 @@ export function OrderDetailView({
             line-height: 1.35;
           }
           #${printRootId} .print-label {
-            width: 105mm;
+            width: 100mm;
             margin: 0 auto;
+            min-height: 150mm;
             padding: 4mm;
             font-size: 14px;
             line-height: 1.35;

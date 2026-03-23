@@ -153,6 +153,9 @@ export type OrderDetail = {
   createdBy: string;
   createdByName: string | null;
   createdAt: string;
+  storeName: string;
+  storeSenderName: string;
+  storeSenderPhone: string | null;
   storeCurrency: string;
   storeVatMode: "EXCLUSIVE" | "INCLUSIVE";
   storeVatEnabled: boolean;
@@ -746,6 +749,9 @@ export async function getOrderDetail(storeId: string, orderId: string): Promise<
         createdBy: orders.createdBy,
         createdByName: users.name,
         createdAt: orders.createdAt,
+        storeName: stores.name,
+        storeSenderName: sql<string>`coalesce(${stores.pdfCompanyName}, ${stores.name})`,
+        storeSenderPhone: sql<string | null>`coalesce(${stores.pdfCompanyPhone}, ${stores.phoneNumber})`,
         storeCurrency: stores.currency,
         storeVatMode: stores.vatMode,
         storeVatEnabled: stores.vatEnabled,
@@ -804,6 +810,9 @@ export async function getOrderDetail(storeId: string, orderId: string): Promise<
         createdBy: orders.createdBy,
         createdByName: users.name,
         createdAt: orders.createdAt,
+        storeName: stores.name,
+        storeSenderName: sql<string>`coalesce(${stores.pdfCompanyName}, ${stores.name})`,
+        storeSenderPhone: sql<string | null>`coalesce(${stores.pdfCompanyPhone}, ${stores.phoneNumber})`,
         storeCurrency: stores.currency,
       })
       .from(orders)

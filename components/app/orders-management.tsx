@@ -29,6 +29,7 @@ import {
   type ManagerCancelApprovalPayload,
   type ManagerCancelApprovalResult,
 } from "@/components/app/manager-cancel-approval-modal";
+import { OrderPackContent } from "@/components/app/order-pack-content";
 import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch } from "@/lib/auth/client-token";
@@ -46,9 +47,11 @@ import {
   setNewOrderDraftPayload,
   type NewOrderDraftPayload,
 } from "@/lib/orders/new-order-draft";
-import { parseOrderSearchValue } from "@/lib/orders/print";
+import { buildOrderQrSvgMarkup, parseOrderSearchValue } from "@/lib/orders/print";
+import { buildShippingLabelPrintMarkup } from "@/lib/orders/shipping-label-print";
 import type {
   OrderCatalog,
+  OrderDetail,
   OrderListItem,
   OrderListTab,
   PaginatedOrderList,
@@ -196,7 +199,12 @@ type OrderBulkActionGroup = {
   orders: Array<Pick<OrderListItem, "id" | "orderNo">>;
 };
 
-type BulkPrintKind = "receipt" | "label";
+type BulkPrintKind = "receipt" | "label" | "pack";
+type ProductUnitPickerSource = "quick-add" | "manual-search" | "scanner";
+type ProductUnitPickerState = {
+  productId: string;
+  source: ProductUnitPickerSource;
+};
 
 const bulkActionButtonLabelKey: Record<OrderBulkActionKey, MessageKey> = {
   "confirm-paid": "orders.management.bulk.action.confirmPaid",
@@ -499,6 +507,15 @@ const getOrderListSecondaryQuickAction = (
   };
 };
 
+const canOpenOrderPackView = (
+  order: Pick<OrderListItem, "channel" | "status">,
+) =>
+  order.status !== "DRAFT" &&
+  order.status !== "CANCELLED" &&
+  (order.channel !== "WALK_IN" ||
+    order.status === "READY_FOR_PICKUP" ||
+    order.status === "PICKED_UP_PENDING_PAYMENT");
+
 type CreateOrderStep = "products" | "details";
 type DiscountInputMode = "AMOUNT" | "PERCENT";
 type CheckoutPaymentMethod = "CASH" | "LAO_QR" | "ON_CREDIT" | "COD";
@@ -514,42 +531,15 @@ type CreatedOrderSuccessState = {
   orderNo: string;
   checkoutFlow: CheckoutFlow;
 };
-type ReceiptPreviewItem = {
-  id: string;
-  productName: string;
-  productSku: string;
-  qty: number;
-  unitCode: string;
-  lineTotal: number;
-};
-type ReceiptPreviewOrder = {
-  id: string;
-  orderNo: string;
-  createdAt: string;
-  customerName: string | null;
-  customerPhone: string | null;
-  customerAddress: string | null;
-  contactDisplayName: string | null;
-  contactPhone: string | null;
-  subtotal: number;
-  discount: number;
-  vatAmount: number;
-  shippingFeeCharged: number;
-  shippingCost: number;
-  shippingProvider: string | null;
-  shippingCarrier: string | null;
-  trackingNo: string | null;
-  total: number;
-  paymentCurrency: "LAK" | "THB" | "USD";
-  paymentMethod: "CASH" | "LAO_QR" | "ON_CREDIT" | "COD" | "BANK_TRANSFER";
-  storeCurrency: string;
-  storeVatMode: "EXCLUSIVE" | "INCLUSIVE";
-  items: ReceiptPreviewItem[];
-};
+type ReceiptPreviewOrder = OrderDetail;
 type OrderDetailApiResponse = {
   ok: boolean;
-  order?: ReceiptPreviewOrder;
+  order?: OrderDetail;
   message?: string;
+};
+type OrderPackSheetState = {
+  orderId: string;
+  orderNo: string;
 };
 type RecentOrderItem = {
   id: string;
@@ -717,6 +707,15 @@ export function OrdersManagement(props: OrdersManagementProps) {
   const ordersPage = isCreateOnlyMode ? null : props.ordersPage;
   const uiLocale = useUiLocale();
   const numberLocale = uiLocaleToDateLocale(uiLocale);
+  const printFontFamily = useMemo(() => {
+    if (uiLocale === "lo") {
+      return '"NotoSansLaoLooped", "GoogleSans", Sarabun, "Noto Sans Lao", "Segoe UI", sans-serif';
+    }
+    if (uiLocale === "th") {
+      return 'Sarabun, "GoogleSans", "Noto Sans Thai", "Segoe UI", sans-serif';
+    }
+    return 'ui-sans-serif, -apple-system, "Segoe UI", sans-serif';
+  }, [uiLocale]);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isTabPending, startTabTransition] = useTransition();
@@ -748,6 +747,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
   const [quickAddCategoryId, setQuickAddCategoryId] = useState<string>("ALL");
   const [quickAddOnlyAvailable, setQuickAddOnlyAvailable] = useState(false);
   const [showCartSheet, setShowCartSheet] = useState(false);
+  const [productUnitPicker, setProductUnitPicker] = useState<ProductUnitPickerState | null>(null);
   const [showCheckoutSheet, setShowCheckoutSheet] = useState(false);
   const [showRecentOrdersSheet, setShowRecentOrdersSheet] = useState(false);
   const [showCheckoutCloseConfirm, setShowCheckoutCloseConfirm] = useState(false);
@@ -771,6 +771,11 @@ export function OrdersManagement(props: OrdersManagementProps) {
   const [receiptPreviewError, setReceiptPreviewError] = useState<string | null>(null);
   const [receiptPrintLoading, setReceiptPrintLoading] = useState(false);
   const [shippingLabelPrintLoading, setShippingLabelPrintLoading] = useState(false);
+  const [showOrderPackSheet, setShowOrderPackSheet] = useState<OrderPackSheetState | null>(null);
+  const [orderPackPreview, setOrderPackPreview] = useState<OrderDetail | null>(null);
+  const [orderPackPreviewLoading, setOrderPackPreviewLoading] = useState(false);
+  const [orderPackPreviewError, setOrderPackPreviewError] = useState<string | null>(null);
+  const [orderPackPrintLoading, setOrderPackPrintLoading] = useState(false);
   const [recentOrders, setRecentOrders] = useState<RecentOrderItem[]>([]);
   const [recentOrdersLoading, setRecentOrdersLoading] = useState(false);
   const [recentOrdersError, setRecentOrdersError] = useState<string | null>(null);
@@ -952,6 +957,44 @@ export function OrdersManagement(props: OrdersManagementProps) {
   const isKnownShippingProvider = shippingProviderChipOptions.some(
     (provider) => provider === watchedShippingProvider.trim(),
   );
+  const getProductAvailableQty = useCallback(
+    (productId: string, unitId?: string) => {
+      const product = productsById.get(productId);
+      const available = Number(product?.available ?? 0);
+      if (!Number.isFinite(available)) {
+        return 0;
+      }
+      const normalizedAvailable = Math.max(0, Math.trunc(available));
+      if (!unitId) {
+        return normalizedAvailable;
+      }
+
+      const multiplierToBase = Math.max(
+        1,
+        Math.trunc(
+          Number(
+            product?.units.find((unitOption) => unitOption.unitId === unitId)?.multiplierToBase ?? 1,
+          ),
+        ) || 1,
+      );
+      return Math.max(0, Math.floor(normalizedAvailable / multiplierToBase));
+    },
+    [productsById],
+  );
+  const getAvailableSellUnits = useCallback(
+    (product: OrderCatalog["products"][number]) =>
+      product.units.filter((unit) => getProductAvailableQty(product.productId, unit.unitId) > 0),
+    [getProductAvailableQty],
+  );
+  const getPreferredUnitId = useCallback(
+    (product: OrderCatalog["products"][number] | undefined) => {
+      if (!product) {
+        return "";
+      }
+      return getAvailableSellUnits(product)[0]?.unitId ?? product.units[0]?.unitId ?? "";
+    },
+    [getAvailableSellUnits],
+  );
   const manualSearchResults = useMemo(() => {
     const keyword = manualSearchKeyword.trim().toLowerCase();
     if (!keyword) {
@@ -987,11 +1030,17 @@ export function OrdersManagement(props: OrdersManagementProps) {
     }
 
     if (quickAddOnlyAvailable) {
-      filtered = filtered.filter((product) => product.available > 0);
+      filtered = filtered.filter((product) => getAvailableSellUnits(product).length > 0);
     }
 
     return filtered.slice(0, 24);
-  }, [catalog.products, quickAddKeyword, quickAddCategoryId, quickAddOnlyAvailable]);
+  }, [
+    catalog.products,
+    getAvailableSellUnits,
+    quickAddKeyword,
+    quickAddCategoryId,
+    quickAddOnlyAvailable,
+  ]);
   const quickAddCategories = useMemo<QuickAddCategory[]>(() => {
     const categoryMap = new Map<string, QuickAddCategory>();
     for (const product of catalog.products) {
@@ -1052,6 +1101,14 @@ export function OrdersManagement(props: OrdersManagementProps) {
   }, [isCreateOnlyMode, visibleOrderIds]);
   const clearSelectedOrders = useCallback(() => {
     setSelectedOrderIds([]);
+  }, []);
+  const openOrderPackSheet = useCallback((order: Pick<OrderListItem, "id" | "orderNo">) => {
+    setOrderPackPreview(null);
+    setOrderPackPreviewError(null);
+    setShowOrderPackSheet({
+      orderId: order.id,
+      orderNo: order.orderNo,
+    });
   }, []);
   const toggleDesktopBulkSelectMode = useCallback(() => {
     setIsDesktopBulkSelectMode((current) => {
@@ -1122,6 +1179,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
   const selectedReceiptPrintOrders = selectedOrders;
   const selectedLabelPrintOrders = useMemo(
     () => selectedOrders.filter((order) => order.channel !== "WALK_IN"),
+    [selectedOrders],
+  );
+  const selectedPackPrintOrders = useMemo(
+    () => selectedOrders.filter((order) => canOpenOrderPackView(order)),
     [selectedOrders],
   );
   const selectedReviewQrAccount = useMemo(() => {
@@ -1525,15 +1586,31 @@ export function OrdersManagement(props: OrdersManagementProps) {
     (product: OrderCatalog["products"][number]) => product.units[0]?.pricePerUnit ?? product.priceBase,
     [],
   );
-  const getProductAvailableQty = useCallback(
-    (productId: string) => {
-      const available = Number(productsById.get(productId)?.available ?? 0);
-      if (!Number.isFinite(available)) {
-        return 0;
+  const setItemUnit = useCallback(
+    (index: number, nextUnitId: string) => {
+      const productId = String(form.getValues(`items.${index}.productId`) ?? "");
+      const product = productsById.get(productId);
+      const maxQty = getProductAvailableQty(productId, nextUnitId);
+      const currentQty = Number(form.getValues(`items.${index}.qty`) ?? 0);
+      const normalizedQty = Math.max(1, Math.trunc(currentQty) || 1);
+      const boundedQty = maxQty > 0 ? Math.min(normalizedQty, maxQty) : 1;
+
+      form.setValue(`items.${index}.unitId`, nextUnitId, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+      form.setValue(`items.${index}.qty`, boundedQty, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+
+      if (product && maxQty > 0 && boundedQty < normalizedQty) {
+        setScanMessage(
+          `${t(uiLocale, "orders.create.scan.productPrefix")} ${product.sku} - ${product.name} ${t(uiLocale, "orders.create.scan.maxQty.prefix")} ${maxQty.toLocaleString(numberLocale)} ${t(uiLocale, "orders.create.scan.maxQty.unit")}`,
+        );
       }
-      return Math.max(0, Math.trunc(available));
     },
-    [productsById],
+    [form, getProductAvailableQty, numberLocale, productsById, uiLocale],
   );
   const restoreDraftFormForCatalog = useCallback(
     (draft: NewOrderDraftPayload) => {
@@ -1545,9 +1622,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
           }
 
           const hasUnit = product.units.some((unit) => unit.unitId === item.unitId);
-          const fallbackUnitId = product.units[0]?.unitId ?? "";
+          const fallbackUnitId = getPreferredUnitId(product);
           const unitId = hasUnit ? item.unitId : fallbackUnitId;
-          const maxQty = getProductAvailableQty(item.productId);
+          const maxQty = getProductAvailableQty(item.productId, unitId);
           if (!unitId || maxQty <= 0) {
             return null;
           }
@@ -1615,6 +1692,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
       catalog.paymentAccounts,
       catalog.storeCurrency,
       catalog.supportedCurrencies,
+      getPreferredUnitId,
       getProductAvailableQty,
       productsById,
     ],
@@ -1643,6 +1721,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
     const qty = Number(item.qty ?? 0);
     return sum + (Number.isFinite(qty) && qty > 0 ? qty : 0);
   }, 0);
+  const isOrderPackSheetBusy = orderPackPreviewLoading || orderPackPrintLoading;
 
   const applyDiscountAmount = useCallback(
     (nextDiscount: number) => {
@@ -1788,8 +1867,16 @@ export function OrdersManagement(props: OrdersManagementProps) {
 
   const onChangeProduct = (index: number, productId: string) => {
     const product = productsById.get(productId);
-    form.setValue(`items.${index}.productId`, productId);
-    form.setValue(`items.${index}.unitId`, product?.units[0]?.unitId ?? "");
+    const nextUnitId = getPreferredUnitId(product);
+    const currentQty = Number(form.getValues(`items.${index}.qty`) ?? 0);
+    const maxQty = getProductAvailableQty(productId, nextUnitId);
+    form.setValue(`items.${index}.productId`, productId, { shouldDirty: true, shouldValidate: true });
+    form.setValue(`items.${index}.unitId`, nextUnitId, { shouldDirty: true, shouldValidate: true });
+    form.setValue(
+      `items.${index}.qty`,
+      maxQty > 0 ? Math.min(Math.max(1, Math.trunc(currentQty) || 1), maxQty) : 1,
+      { shouldDirty: true, shouldValidate: true },
+    );
   };
 
   const onPickContact = (contactId: string) => {
@@ -1908,12 +1995,13 @@ export function OrdersManagement(props: OrdersManagementProps) {
     [form, setCheckoutPaymentMethod],
   );
 
-  const addProductFromCatalog = (productId: string) => {
+  const addProductFromCatalog = useCallback((productId: string, unitId?: string) => {
     const product = productsById.get(productId);
     if (!product) {
       return null;
     }
-    const availableQty = getProductAvailableQty(productId);
+    const nextUnitId = unitId ?? getPreferredUnitId(product);
+    const availableQty = getProductAvailableQty(productId, nextUnitId);
     if (availableQty <= 0) {
       setScanMessage(
         `${t(uiLocale, "orders.create.scan.productPrefix")} ${product.sku} - ${product.name} ${t(uiLocale, "orders.create.scan.outOfStockOrReserved.suffix")}`,
@@ -1938,7 +2026,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
       return null;
     }
 
-    const existingIndex = watchedItems.findIndex((item) => item.productId === productId);
+    const existingIndex = watchedItems.findIndex(
+      (item) => item.productId === productId && item.unitId === nextUnitId,
+    );
     if (existingIndex >= 0) {
       const currentQty = Number(form.getValues(`items.${existingIndex}.qty`) ?? 0);
       if (currentQty >= availableQty) {
@@ -1954,17 +2044,67 @@ export function OrdersManagement(props: OrdersManagementProps) {
     } else {
       append({
         productId,
-        unitId: product.units[0]?.unitId ?? "",
+        unitId: nextUnitId,
         qty: 1,
       });
     }
 
     return product;
-  };
+  }, [
+    append,
+    form,
+    getPreferredUnitId,
+    getProductAvailableQty,
+    numberLocale,
+    productsById,
+    uiLocale,
+    watchedItems,
+  ]);
+  const beginAddProductFromCatalog = useCallback(
+    (productId: string, source: ProductUnitPickerSource = "quick-add") => {
+      const product = productsById.get(productId);
+      if (!product) {
+        return null;
+      }
+
+      const availableUnits = getAvailableSellUnits(product);
+      if (availableUnits.length <= 0) {
+        return addProductFromCatalog(productId, getPreferredUnitId(product));
+      }
+      if (availableUnits.length === 1) {
+        return addProductFromCatalog(productId, availableUnits[0]?.unitId);
+      }
+
+      setProductUnitPicker({ productId, source });
+      return null;
+    },
+    [addProductFromCatalog, getAvailableSellUnits, getPreferredUnitId, productsById],
+  );
+  const confirmAddProductUnit = useCallback(
+    (unitId: string) => {
+      if (!productUnitPicker) {
+        return;
+      }
+
+      const addedProduct = addProductFromCatalog(productUnitPicker.productId, unitId);
+      if (addedProduct) {
+        setScanMessage(
+          `${t(uiLocale, "orders.create.scan.addedProduct.prefix")} ${addedProduct.sku} - ${addedProduct.name} ${t(uiLocale, "orders.create.scan.addedProduct.suffix")}`,
+        );
+      }
+      if (productUnitPicker.source === "manual-search" || productUnitPicker.source === "scanner") {
+        setNotFoundBarcode(null);
+        setManualSearchKeyword("");
+      }
+      setProductUnitPicker(null);
+    },
+    [addProductFromCatalog, productUnitPicker, uiLocale],
+  );
   const setItemQty = useCallback(
     (index: number, nextQty: number) => {
       const productId = String(form.getValues(`items.${index}.productId`) ?? "");
-      const availableQty = getProductAvailableQty(productId);
+      const unitId = String(form.getValues(`items.${index}.unitId`) ?? "");
+      const availableQty = getProductAvailableQty(productId, unitId);
       const safeQty = Math.max(1, Math.trunc(nextQty) || 1);
       const boundedQty = availableQty > 0 ? Math.min(safeQty, availableQty) : safeQty;
       if (boundedQty < safeQty && availableQty > 0) {
@@ -2024,7 +2164,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
     );
 
     if (matched) {
-      const addedProduct = addProductFromCatalog(matched.productId);
+      const addedProduct = beginAddProductFromCatalog(matched.productId, "scanner");
       if (addedProduct) {
         setScanMessage(
           `${t(uiLocale, "orders.create.scan.addedProduct.prefix")} ${addedProduct.sku} - ${addedProduct.name} ${t(uiLocale, "orders.create.scan.addedProduct.suffix")}`,
@@ -2043,7 +2183,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
   };
 
   const pickProductFromManualSearch = (productId: string) => {
-    const addedProduct = addProductFromCatalog(productId);
+    const addedProduct = beginAddProductFromCatalog(productId, "manual-search");
     if (!addedProduct) {
       return;
     }
@@ -2257,6 +2397,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
             row.original,
             orderQuickActionPermissions,
           );
+          const showPackAction = canOpenOrderPackView(row.original);
           const loadingKey = quickAction
             ? buildOrderQuickActionLoadingKey(row.original.id, quickAction.key)
             : null;
@@ -2311,11 +2452,35 @@ export function OrdersManagement(props: OrdersManagementProps) {
                   {isSecondaryBusy ? t(uiLocale, "common.action.saving") : t(uiLocale, secondaryQuickAction.labelKey)}
                 </Button>
               ) : null}
+              {showPackAction ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 px-2 text-xs"
+                  disabled={
+                    loading ||
+                    quickActionLoadingKey !== null ||
+                    bulkActionLoadingKey !== null ||
+                    bulkPrintLoadingKind !== null ||
+                    isOrderPackSheetBusy
+                  }
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openOrderPackSheet({ id: row.original.id, orderNo: row.original.orderNo });
+                  }}
+                >
+                  {t(uiLocale, "orders.detail.actions.packView")}
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="ghost"
                 className="h-8 px-2 text-xs"
-                disabled={bulkActionLoadingKey !== null || bulkPrintLoadingKind !== null}
+                disabled={
+                  bulkActionLoadingKey !== null ||
+                  bulkPrintLoadingKind !== null ||
+                  isOrderPackSheetBusy
+                }
                 onClick={(event) => {
                   event.stopPropagation();
                   router.push(`/orders/${row.original.id}`);
@@ -2344,6 +2509,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
       quickActionLoadingKey,
       router,
       selectedOrderIdSet,
+      isOrderPackSheetBusy,
+      openOrderPackSheet,
       toggleOrderSelection,
       toggleSelectAllVisibleOrders,
       uiLocale,
@@ -2612,6 +2779,14 @@ export function OrdersManagement(props: OrdersManagementProps) {
     }
     return data.order;
   }, [uiLocale]);
+  const fetchOrderPackPreview = useCallback(async (orderId: string) => {
+    const response = await authFetch(`/api/orders/${orderId}`);
+    const data = (await response.json().catch(() => null)) as OrderDetailApiResponse | null;
+    if (!response.ok || !data?.order) {
+      throw new Error(data?.message ?? t(uiLocale, "orders.print.error.loadPackData"));
+    }
+    return data.order;
+  }, [uiLocale]);
 
   const mergePrintDocuments = useCallback(
     (documents: string[], kind: BulkPrintKind) => {
@@ -2619,7 +2794,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
         throw new Error(
           kind === "receipt"
             ? t(uiLocale, "orders.management.bulk.print.error.noReceipts")
-            : t(uiLocale, "orders.management.bulk.print.error.noLabels"),
+            : kind === "label"
+              ? t(uiLocale, "orders.management.bulk.print.error.noLabels")
+              : t(uiLocale, "orders.management.bulk.print.error.noPacks"),
         );
       }
 
@@ -2648,7 +2825,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
     <title>${escapeHtml(
       kind === "receipt"
         ? t(uiLocale, "orders.management.bulk.print.receipts")
-        : t(uiLocale, "orders.management.bulk.print.labels"),
+        : kind === "label"
+          ? t(uiLocale, "orders.management.bulk.print.labels")
+          : t(uiLocale, "orders.management.bulk.print.packs"),
     )}</title>
     <style>
       ${styles.join("\n")}
@@ -2768,13 +2947,13 @@ export function OrdersManagement(props: OrdersManagementProps) {
 </html>`;
   }, [numberLocale, uiLocale]);
 
-  const buildShippingLabelPrintHtml = useCallback((order: ReceiptPreviewOrder) => {
-    const labelDateText = new Date(order.createdAt).toLocaleString(numberLocale);
-    const receiverName =
-      order.customerName || order.contactDisplayName || t(uiLocale, "orders.customer.guest");
-    const receiverPhone = order.customerPhone || order.contactPhone || "-";
-    const shippingProviderLabel = order.shippingProvider || order.shippingCarrier || "-";
-    const trackingNo = order.trackingNo || "-";
+  const buildShippingLabelPrintHtml = useCallback((order: OrderDetail) => {
+    const labelMarkup = buildShippingLabelPrintMarkup({
+      order,
+      uiLocale,
+      numberLocale,
+      storeCurrencyDisplay: order.storeCurrency,
+    });
 
     return `<!doctype html>
 <html lang="${escapeHtml(uiLocale)}">
@@ -2783,82 +2962,121 @@ export function OrdersManagement(props: OrdersManagementProps) {
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>${escapeHtml(t(uiLocale, "orders.print.label.title"))} ${escapeHtml(order.orderNo)}</title>
     <style>
-      @page { size: A6 portrait; margin: 6mm; }
+      @page { size: 100mm 150mm; margin: 0; }
       * { box-sizing: border-box; }
       body {
         margin: 0;
         background: #ffffff;
         color: #0f172a;
-        font-family: ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+        font-family: ${printFontFamily};
       }
-      .label {
-        min-height: calc(148mm - 12mm);
-        border: 1px solid #0f172a;
-        padding: 12px;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-      }
-      .order-no { font-size: 18px; font-weight: 700; }
-      .section-title { font-size: 12px; color: #475569; margin-bottom: 6px; }
-      .receiver { font-size: 21px; font-weight: 700; line-height: 1.2; }
-      .phone { font-size: 16px; margin-top: 4px; }
-      .address {
-        margin-top: 8px;
-        font-size: 16px;
-        line-height: 1.35;
-        white-space: pre-wrap;
-      }
-      .meta {
-        border-top: 1px dashed #475569;
-        margin-top: 12px;
-        padding-top: 8px;
+      .print-label {
+        width: 100mm;
+        margin: 0 auto;
+        min-height: 150mm;
+        padding: 4mm;
         font-size: 14px;
-        line-height: 1.5;
+        line-height: 1.35;
       }
-      .meta-row {
-        display: flex;
-        justify-content: space-between;
-        gap: 8px;
-      }
-      .meta-label { color: #475569; }
-      .meta-value { text-align: right; font-weight: 600; }
     </style>
   </head>
   <body>
-    <main class="label">
-      <section>
-        <div class="order-no">${escapeHtml(t(uiLocale, "orders.print.label.orderPrefix"))} ${escapeHtml(order.orderNo)}</div>
-        <div class="section-title">${escapeHtml(t(uiLocale, "orders.print.label.title"))}</div>
-        <div class="receiver">${escapeHtml(receiverName)}</div>
-        <div class="phone">${escapeHtml(t(uiLocale, "orders.print.label.phonePrefix"))} ${escapeHtml(receiverPhone)}</div>
-        <div class="address">${escapeHtml(t(uiLocale, "orders.print.label.addressPrefix"))} ${escapeHtml(order.customerAddress || "-")}</div>
-      </section>
-
-      <section class="meta">
-        <div class="meta-row">
-          <span class="meta-label">${escapeHtml(t(uiLocale, "orders.print.label.shippingPrefix"))}</span>
-          <span class="meta-value">${escapeHtml(shippingProviderLabel)}</span>
-        </div>
-        <div class="meta-row">
-          <span class="meta-label">${escapeHtml(t(uiLocale, "orders.print.label.trackingPrefix"))}</span>
-          <span class="meta-value">${escapeHtml(trackingNo)}</span>
-        </div>
-        <div class="meta-row">
-          <span class="meta-label">${escapeHtml(t(uiLocale, "orders.print.label.shippingCostPrefix"))}</span>
-          <span class="meta-value">${order.shippingCost.toLocaleString(numberLocale)} ${escapeHtml(order.storeCurrency)}</span>
-        </div>
-        <div class="meta-row">
-          <span class="meta-label">${escapeHtml(t(uiLocale, "orders.print.label.createdAtPrefix"))}</span>
-          <span class="meta-value">${escapeHtml(labelDateText)}</span>
-        </div>
-      </section>
-    </main>
+    ${labelMarkup}
   </body>
 </html>`;
-  }, [numberLocale, uiLocale]);
+  }, [numberLocale, printFontFamily, uiLocale]);
 
-  const printDocumentViaWindow = useCallback((html: string, kind: "receipt" | "label") => {
+  const buildPackPrintHtml = useCallback((order: OrderDetail) => {
+    const orderFlowLabel =
+      order.channel === "WALK_IN"
+        ? order.status === "READY_FOR_PICKUP" || order.status === "PICKED_UP_PENDING_PAYMENT"
+          ? t(uiLocale, "orders.flow.PICKUP_LATER")
+          : t(uiLocale, "orders.flow.WALK_IN_NOW")
+        : t(uiLocale, "orders.flow.ONLINE_DELIVERY");
+    const totalQuantity = order.items.reduce((sum, item) => sum + item.qty, 0);
+    const rows = order.items
+      .map(
+        (item, index) => `<div style="display:flex;gap:8px;border-top:1px dashed #64748b;padding:6px 0;">
+          <div style="font-size:11px;color:#475569;flex-shrink:0;">${index + 1}.</div>
+          <div style="min-width:0;flex:1;">
+            <div style="font-size:11px;font-weight:700;color:#0f172a;line-height:1.35;word-break:break-word;">${escapeHtml(item.productName)}</div>
+            <div style="margin-top:2px;font-size:10px;color:#64748b;word-break:break-word;">${escapeHtml(t(uiLocale, "orders.pack.page.skuLabel"))}: ${escapeHtml(item.productSku || "-")}</div>
+          </div>
+          <div style="text-align:right;white-space:nowrap;flex-shrink:0;">
+            <div style="font-size:11px;font-weight:700;color:#0f172a;">${item.qty.toLocaleString(numberLocale)}</div>
+            <div style="font-size:10px;color:#64748b;">${escapeHtml(item.unitCode)}</div>
+          </div>
+        </div>`,
+      )
+      .join("");
+
+    const codSummary =
+      order.paymentMethod === "COD"
+        ? `<div style="margin-top:6px;font-size:11px;display:flex;justify-content:space-between;gap:8px;">
+            <span>${escapeHtml(t(uiLocale, "orders.pack.page.codAmountLabel"))}</span>
+            <span style="font-weight:700;">${(order.codAmount > 0 ? order.codAmount : order.total).toLocaleString(numberLocale)} ${escapeHtml(order.storeCurrency)}</span>
+          </div>`
+        : "";
+
+    return `<!doctype html>
+<html lang="${escapeHtml(uiLocale)}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>${escapeHtml(t(uiLocale, "orders.pack.page.title"))} ${escapeHtml(order.orderNo)}</title>
+    <style>
+      @page { size: 80mm auto; margin: 4mm; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: #ffffff;
+        color: #0f172a;
+        font-family: ${printFontFamily};
+        font-size: 11px;
+        line-height: 1.35;
+      }
+      .pack {
+        width: 72mm;
+        margin: 0 auto;
+        padding: 2mm 0;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="pack">
+      <h1 style="margin:0;text-align:center;font-size:14px;font-weight:700;">${escapeHtml(t(uiLocale, "orders.pack.page.title"))}</h1>
+      <p style="margin:4px 0 0;text-align:center;font-size:13px;font-weight:700;">${escapeHtml(order.orderNo)}</p>
+      <p style="margin:4px 0 0;text-align:center;font-size:11px;color:#475569;">${escapeHtml(t(uiLocale, "orders.pack.page.flowLabel"))}: ${escapeHtml(orderFlowLabel)}</p>
+      <p style="margin:4px 0 0;text-align:center;font-size:10px;color:#64748b;">${escapeHtml(t(uiLocale, "orders.print.label.createdAtPrefix"))} ${escapeHtml(new Date(order.createdAt).toLocaleString(numberLocale))}</p>
+      <div style="margin:8px auto 0;width:72px;height:72px;">${buildOrderQrSvgMarkup(order.orderNo, {
+        size: 72,
+        ariaLabel: `${t(uiLocale, "orders.print.label.orderQrTitle")} ${order.orderNo}`,
+      })}</div>
+      <p style="margin:6px 0 0;text-align:center;font-size:9px;color:#64748b;">${escapeHtml(t(uiLocale, "orders.print.label.orderQrHint"))}</p>
+      <hr style="border:0;border-top:1px dashed #64748b;margin:8px 0;" />
+      <div style="font-size:11px;line-height:1.45;word-break:break-word;">
+        <div><strong>${escapeHtml(t(uiLocale, "orders.print.label.receiverTitle"))}:</strong> ${escapeHtml(order.customerName || order.contactDisplayName || t(uiLocale, "orders.customer.guest"))}</div>
+        <div><strong>${escapeHtml(t(uiLocale, "common.phone.prefix"))}</strong> ${escapeHtml(order.customerPhone || order.contactPhone || "-")}</div>
+        <div><strong>${escapeHtml(t(uiLocale, "orders.print.label.addressPrefix"))}</strong> ${escapeHtml(order.customerAddress || "-")}</div>
+        <div><strong>${escapeHtml(t(uiLocale, "orders.print.label.shippingPrefix"))}</strong> ${escapeHtml(order.shippingProvider || order.shippingCarrier || "-")}</div>
+        <div><strong>${escapeHtml(t(uiLocale, "orders.print.label.trackingPrefix"))}</strong> ${escapeHtml(order.trackingNo || "-")}</div>
+        <div style="display:flex;justify-content:space-between;gap:8px;">
+          <span>${escapeHtml(t(uiLocale, "orders.pack.page.itemsQtyTotal"))}</span>
+          <span style="font-weight:700;">${totalQuantity.toLocaleString(numberLocale)}</span>
+        </div>
+      </div>
+      ${codSummary}
+      <hr style="border:0;border-top:1px dashed #64748b;margin:8px 0;" />
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#475569;">${escapeHtml(t(uiLocale, "orders.pack.page.itemsTitle"))}</div>
+        <div style="margin-top:4px;">${rows}</div>
+      </div>
+    </section>
+  </body>
+</html>`;
+  }, [numberLocale, printFontFamily, uiLocale]);
+
+  const printDocumentViaWindow = useCallback((html: string, kind: "receipt" | "label" | "pack") => {
     if (typeof window === "undefined") {
       return;
     }
@@ -2929,8 +3147,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
       settled = true;
       if (kind === "receipt") {
         setReceiptPrintLoading(false);
-      } else {
+      } else if (kind === "label") {
         setShippingLabelPrintLoading(false);
+      } else {
+        setOrderPackPrintLoading(false);
       }
     };
 
@@ -2955,13 +3175,15 @@ export function OrdersManagement(props: OrdersManagementProps) {
           window.print();
         } catch {
           window.removeEventListener("afterprint", handleAfterPrint);
-          setErrorMessage(
-            kind === "receipt"
-              ? t(uiLocale, "orders.print.error.receiptPrintFailed")
-              : t(uiLocale, "orders.print.error.labelPrintFailed"),
-          );
-          settleLoading();
-          cleanup();
+            setErrorMessage(
+              kind === "receipt"
+                ? t(uiLocale, "orders.print.error.receiptPrintFailed")
+                : kind === "label"
+                  ? t(uiLocale, "orders.print.error.labelPrintFailed")
+                  : t(uiLocale, "orders.print.error.packPrintFailed"),
+            );
+            settleLoading();
+            cleanup();
         }
       });
     });
@@ -3043,16 +3265,48 @@ export function OrdersManagement(props: OrdersManagementProps) {
       uiLocale,
     ],
   );
+  const handlePrintOrderPackFromList = useCallback(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!orderPackPreview) {
+      setErrorMessage(t(uiLocale, "orders.print.error.packPreviewLoadFailed"));
+      return;
+    }
+
+    setErrorMessage(null);
+    setOrderPackPrintLoading(true);
+    setShowOrderPackSheet(null);
+
+    window.setTimeout(() => {
+      try {
+        printDocumentViaWindow(buildPackPrintHtml(orderPackPreview), "pack");
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : t(uiLocale, "orders.print.error.packPrintFailed");
+        setErrorMessage(message);
+        setOrderPackPrintLoading(false);
+      }
+    }, 280);
+  }, [buildPackPrintHtml, orderPackPreview, printDocumentViaWindow, uiLocale]);
 
   const runBulkPrint = useCallback(
     async (kind: BulkPrintKind) => {
       const sourceOrders =
-        kind === "receipt" ? selectedReceiptPrintOrders : selectedLabelPrintOrders;
+        kind === "receipt"
+          ? selectedReceiptPrintOrders
+          : kind === "label"
+            ? selectedLabelPrintOrders
+            : selectedPackPrintOrders;
       if (sourceOrders.length <= 0) {
         const message =
           kind === "receipt"
             ? t(uiLocale, "orders.management.bulk.print.error.noReceipts")
-            : t(uiLocale, "orders.management.bulk.print.error.noLabels");
+            : kind === "label"
+              ? t(uiLocale, "orders.management.bulk.print.error.noLabels")
+              : t(uiLocale, "orders.management.bulk.print.error.noPacks");
         setErrorMessage(message);
         toast.error(message);
         return;
@@ -3063,6 +3317,19 @@ export function OrdersManagement(props: OrdersManagementProps) {
       setSuccessMessage(null);
 
       try {
+        if (kind === "pack") {
+          const previewOrders = await Promise.all(
+            sourceOrders.map((order) => fetchOrderPackPreview(order.id)),
+          );
+          const mergedHtml = mergePrintDocuments(
+            previewOrders.map((order) => buildPackPrintHtml(order)),
+            kind,
+          );
+          setOrderPackPrintLoading(true);
+          printDocumentViaWindow(mergedHtml, kind);
+          return;
+        }
+
         const previewOrders = await Promise.all(
           sourceOrders.map((order) => fetchOrderReceiptPreview(order.id)),
         );
@@ -3103,26 +3370,33 @@ export function OrdersManagement(props: OrdersManagementProps) {
         const fallbackMessage =
           kind === "receipt"
             ? t(uiLocale, "orders.management.bulk.print.error.receiptFailed")
-            : t(uiLocale, "orders.management.bulk.print.error.labelFailed");
+            : kind === "label"
+              ? t(uiLocale, "orders.management.bulk.print.error.labelFailed")
+              : t(uiLocale, "orders.management.bulk.print.error.packFailed");
         const message =
           error instanceof Error && error.message ? error.message : fallbackMessage;
         setErrorMessage(message);
         toast.error(message);
         if (kind === "receipt") {
           setReceiptPrintLoading(false);
-        } else {
+        } else if (kind === "label") {
           setShippingLabelPrintLoading(false);
+        } else {
+          setOrderPackPrintLoading(false);
         }
       } finally {
         setBulkPrintLoadingKind(null);
       }
     },
     [
+      buildPackPrintHtml,
       buildReceiptPrintHtml,
       buildShippingLabelPrintHtml,
+      fetchOrderPackPreview,
       fetchOrderReceiptPreview,
       mergePrintDocuments,
       printDocumentViaWindow,
+      selectedPackPrintOrders,
       selectedLabelPrintOrders,
       selectedReceiptPrintOrders,
       uiLocale,
@@ -3198,6 +3472,47 @@ export function OrdersManagement(props: OrdersManagementProps) {
       cancelled = true;
     };
   }, [createdOrderSuccess, fetchOrderReceiptPreview, uiLocale]);
+
+  useEffect(() => {
+    if (!showOrderPackSheet) {
+      setOrderPackPreview(null);
+      setOrderPackPreviewError(null);
+      setOrderPackPreviewLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setOrderPackPreviewLoading(true);
+    setOrderPackPreviewError(null);
+
+    fetchOrderPackPreview(showOrderPackSheet.orderId)
+      .then((order) => {
+        if (cancelled) {
+          return;
+        }
+        setOrderPackPreview(order);
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : t(uiLocale, "orders.print.error.packPreviewLoadFailed");
+        setOrderPackPreviewError(message);
+        setOrderPackPreview(null);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setOrderPackPreviewLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchOrderPackPreview, showOrderPackSheet, uiLocale]);
 
   useEffect(() => {
     if (!showRecentOrdersSheet) {
@@ -3937,7 +4252,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 onClick={() =>
                   append({
                     productId: catalog.products[0]?.productId ?? "",
-                    unitId: catalog.products[0]?.units[0]?.unitId ?? "",
+                    unitId: getPreferredUnitId(catalog.products[0]),
                     qty: 1,
                   })
                 }
@@ -3998,12 +4313,16 @@ export function OrdersManagement(props: OrdersManagementProps) {
             ) : (
               <div className="grid max-h-56 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
                 {quickAddProducts.map((product) => (
+                  (() => {
+                    const availableSellUnits = getAvailableSellUnits(product);
+                    const canQuickAdd = availableSellUnits.length > 0;
+                    return (
                   <button
                     key={product.productId}
                     type="button"
                     className="rounded-md border bg-white px-3 py-2 text-left transition-colors hover:bg-blue-50"
                     onClick={() => {
-                      const addedProduct = addProductFromCatalog(product.productId);
+                      const addedProduct = beginAddProductFromCatalog(product.productId, "quick-add");
                       if (addedProduct) {
                         setScanMessage(
                           `${t(uiLocale, "orders.create.scan.addedProduct.prefix")} ${addedProduct.sku} - ${addedProduct.name} ${t(uiLocale, "orders.create.scan.addedProduct.suffix")}`,
@@ -4018,7 +4337,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       {t(uiLocale, "orders.create.products.stockRemainingPrefix")}{" "}
                       {product.available.toLocaleString(numberLocale)}
                     </p>
-                    {product.available > 0 ? (
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      {product.units.map((unit) => unit.unitCode).join(" • ")}
+                    </p>
+                    {canQuickAdd ? (
                       <p className="mt-1 text-xs font-medium text-blue-700">
                         {t(uiLocale, "orders.create.products.quickAdd.addPrefix")}{" "}
                         {getProductDefaultUnitPrice(product).toLocaleString(numberLocale)}{" "}
@@ -4030,6 +4352,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       </p>
                     )}
                   </button>
+                    );
+                  })()
                 ))}
               </div>
             )}
@@ -4132,12 +4456,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       <select
                         className="h-9 rounded-md border px-2 text-sm outline-none ring-primary focus:ring-2"
                         value={item.unitId ?? ""}
-                        onChange={(event) =>
-                          form.setValue(`items.${index}.unitId`, event.target.value, {
-                            shouldDirty: true,
-                            shouldValidate: true,
-                          })
-                        }
+                        onChange={(event) => setItemUnit(index, event.target.value)}
                         disabled={loading}
                       >
                         {selectedProduct?.units.map((unit) => (
@@ -4234,7 +4553,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       <select
                         className="h-10 rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
                         disabled={loading}
-                        {...form.register(`items.${index}.unitId`)}
+                        value={watchedItems[index]?.unitId ?? ""}
+                        onChange={(event) => setItemUnit(index, event.target.value)}
                       >
                         {selectedProduct?.units.map((unit) => (
                           <option key={unit.unitId} value={unit.unitId}>
@@ -5055,58 +5375,65 @@ export function OrdersManagement(props: OrdersManagementProps) {
             ) : (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
                 {quickAddProducts.map((product) => (
-                  <button
-                    key={product.productId}
-                    type="button"
-                    className="space-y-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2.5 text-left transition-colors hover:border-blue-300 hover:bg-blue-50"
-                    onClick={() => {
-                      const addedProduct = addProductFromCatalog(product.productId);
-                      if (addedProduct) {
-                        setScanMessage(
-                          `${t(uiLocale, "orders.create.scan.addedProduct.prefix")} ${addedProduct.sku} - ${addedProduct.name} ${t(uiLocale, "orders.create.scan.addedProduct.suffix")}`,
-                        );
-                      }
-                    }}
-                    disabled={loading}
-                  >
-                    <div className="relative h-12 w-12 overflow-hidden rounded-md border border-slate-200 bg-slate-100 sm:h-14 sm:w-14">
-                      {product.imageUrl ? (
-                        <Image
-                          src={product.imageUrl}
-                          alt={product.name}
-                          fill
-                          sizes="(min-width: 1280px) 56px, (min-width: 640px) 56px, 48px"
-                          className="object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-[11px] text-slate-400">
-                          {t(uiLocale, "common.noImageShort")}
+                  (() => {
+                    const availableSellUnits = getAvailableSellUnits(product);
+                    const canQuickAdd = availableSellUnits.length > 0;
+                    return (
+                      <button
+                        key={product.productId}
+                        type="button"
+                        className="space-y-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2.5 text-left transition-colors hover:border-blue-300 hover:bg-blue-50"
+                        onClick={() => {
+                          const addedProduct = beginAddProductFromCatalog(product.productId, "quick-add");
+                          if (addedProduct) {
+                            setScanMessage(
+                              `${t(uiLocale, "orders.create.scan.addedProduct.prefix")} ${addedProduct.sku} - ${addedProduct.name} ${t(uiLocale, "orders.create.scan.addedProduct.suffix")}`,
+                            );
+                          }
+                        }}
+                        disabled={loading}
+                      >
+                        <div className="relative h-12 w-12 overflow-hidden rounded-md border border-slate-200 bg-slate-100 sm:h-14 sm:w-14">
+                          {product.imageUrl ? (
+                            <Image
+                              src={product.imageUrl}
+                              alt={product.name}
+                              fill
+                              sizes="(min-width: 1280px) 56px, (min-width: 640px) 56px, 48px"
+                              className="object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-[11px] text-slate-400">
+                              {t(uiLocale, "common.noImageShort")}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <p className="truncate text-[11px] text-slate-500">{product.sku}</p>
-                    <p className="line-clamp-2 text-[13px] font-medium text-slate-900 sm:text-sm">
-                      {product.name}
-                    </p>
-                    <p className="text-[11px] font-semibold text-blue-700 sm:text-xs">
-                      {getProductDefaultUnitPrice(product).toLocaleString(numberLocale)} {catalog.storeCurrency}
-                    </p>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-[11px] text-slate-500">
-                        {t(uiLocale, "orders.create.products.stockRemainingPrefix")}{" "}
-                        {product.available.toLocaleString(numberLocale)}
-                      </p>
-                      {product.available > 0 ? (
-                        <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
-                          {t(uiLocale, "orders.create.products.quickAdd.addPrefix")}
-                        </span>
-                      ) : (
-                        <span className="rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-700">
-                          {t(uiLocale, "orders.create.products.outOfStockShort")}
-                        </span>
-                      )}
-                    </div>
-                  </button>
+                        <p className="truncate text-[11px] text-slate-500">{product.sku}</p>
+                        <p className="line-clamp-2 text-[13px] font-medium text-slate-900 sm:text-sm">
+                          {product.name}
+                        </p>
+                        <p className="text-[11px] font-semibold text-blue-700 sm:text-xs">
+                          {getProductDefaultUnitPrice(product).toLocaleString(numberLocale)} {catalog.storeCurrency}
+                        </p>
+                        <p className="text-[10px] text-slate-500">{product.units.map((unit) => unit.unitCode).join(" • ")}</p>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[11px] text-slate-500">
+                            {t(uiLocale, "orders.create.products.stockRemainingPrefix")}{" "}
+                            {product.available.toLocaleString(numberLocale)}
+                          </p>
+                          {canQuickAdd ? (
+                            <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                              {t(uiLocale, "orders.create.products.quickAdd.addPrefix")}
+                            </span>
+                          ) : (
+                            <span className="rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-700">
+                              {t(uiLocale, "orders.create.products.outOfStockShort")}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })()
                 ))}
               </div>
             )}
@@ -5176,12 +5503,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                         <select
                           className="h-7 w-full min-w-0 rounded-md border px-2 text-[11px] outline-none ring-primary focus:ring-2"
                           value={item.unitId ?? ""}
-                          onChange={(event) =>
-                            form.setValue(`items.${index}.unitId`, event.target.value, {
-                              shouldDirty: true,
-                              shouldValidate: true,
-                            })
-                          }
+                          onChange={(event) => setItemUnit(index, event.target.value)}
                           disabled={loading}
                         >
                           {selectedProduct?.units.map((unit) => (
@@ -5561,6 +5883,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       order,
                       orderQuickActionPermissions,
                     );
+                    const showPackAction = canOpenOrderPackView(order);
                     const quickActionLoading =
                       quickActionLoadingKey !== null &&
                       quickAction !== null &&
@@ -5633,11 +5956,11 @@ export function OrdersManagement(props: OrdersManagementProps) {
                               </p>
                             ) : null}
                           </div>
-                          <div className={`grid gap-2 ${secondaryQuickAction ? "grid-cols-2" : "grid-cols-2"}`}>
+                          <div className="grid gap-2">
                             <Button
                               type="button"
                               variant={quickAction?.type === "patch" ? "default" : "outline"}
-                              className={`h-9 text-xs ${secondaryQuickAction ? "col-span-2" : ""}`}
+                              className="h-9 text-xs"
                               disabled={
                                 !quickAction ||
                                 loading ||
@@ -5655,33 +5978,56 @@ export function OrdersManagement(props: OrdersManagementProps) {
                                     ? t(uiLocale, quickAction.labelKey)
                                     : t(uiLocale, "orders.management.quickAction.none")}
                             </Button>
-                            {secondaryQuickAction ? (
+                            <div className="flex flex-wrap gap-2">
+                              {secondaryQuickAction ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-9 flex-1 border-orange-300 px-2 text-xs text-orange-700 hover:bg-orange-50"
+                                  disabled={
+                                    loading ||
+                                    quickActionLoadingKey !== null ||
+                                    bulkActionLoadingKey !== null ||
+                                    bulkPrintLoadingKind !== null
+                                  }
+                                  onClick={() => handleOrderQuickAction(order, secondaryQuickAction)}
+                                >
+                                  {secondaryQuickActionLoading
+                                    ? t(uiLocale, "common.action.saving")
+                                    : t(uiLocale, secondaryQuickAction.labelKey)}
+                                </Button>
+                              ) : null}
+                              {showPackAction ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-9 flex-1 text-xs"
+                                  disabled={
+                                    loading ||
+                                    quickActionLoadingKey !== null ||
+                                    bulkActionLoadingKey !== null ||
+                                    bulkPrintLoadingKind !== null ||
+                                    isOrderPackSheetBusy
+                                  }
+                                  onClick={() => openOrderPackSheet({ id: order.id, orderNo: order.orderNo })}
+                                >
+                                  {t(uiLocale, "orders.detail.actions.packView")}
+                                </Button>
+                              ) : null}
                               <Button
                                 type="button"
-                                variant="outline"
-                                className="h-9 border-orange-300 px-2 text-xs text-orange-700 hover:bg-orange-50"
+                                variant="ghost"
+                                className="h-9 flex-1 text-xs"
                                 disabled={
-                                  loading ||
-                                  quickActionLoadingKey !== null ||
                                   bulkActionLoadingKey !== null ||
-                                  bulkPrintLoadingKind !== null
+                                  bulkPrintLoadingKind !== null ||
+                                  isOrderPackSheetBusy
                                 }
-                                onClick={() => handleOrderQuickAction(order, secondaryQuickAction)}
+                                onClick={() => router.push(`/orders/${order.id}`)}
                               >
-                                {secondaryQuickActionLoading
-                                  ? t(uiLocale, "common.action.saving")
-                                  : t(uiLocale, secondaryQuickAction.labelKey)}
+                                {t(uiLocale, "orders.management.action.open")}
                               </Button>
-                            ) : null}
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              className="h-9 text-xs"
-                              disabled={bulkActionLoadingKey !== null || bulkPrintLoadingKind !== null}
-                              onClick={() => router.push(`/orders/${order.id}`)}
-                            >
-                              {t(uiLocale, "orders.management.action.open")}
-                            </Button>
+                            </div>
                           </div>
                         </div>
                       </article>
@@ -5870,6 +6216,137 @@ export function OrdersManagement(props: OrdersManagementProps) {
           ) : null}
         </div>
       </SlideUpSheet>
+      <SlideUpSheet
+        isOpen={productUnitPicker !== null}
+        onClose={() => setProductUnitPicker(null)}
+        title={t(uiLocale, "orders.create.products.unitPicker.title")}
+        description={t(uiLocale, "orders.create.products.unitPicker.description")}
+        disabled={loading}
+      >
+        {productUnitPicker ? (
+          <div className="space-y-3 p-4">
+            {(() => {
+              const product = productsById.get(productUnitPicker.productId);
+              if (!product) {
+                return (
+                  <p className="rounded-lg border border-dashed p-3 text-sm text-slate-500">
+                    {t(uiLocale, "orders.create.products.productNotFound")}
+                  </p>
+                );
+              }
+
+              const availableUnits = getAvailableSellUnits(product);
+              if (availableUnits.length <= 0) {
+                return (
+                  <p className="rounded-lg border border-dashed p-3 text-sm text-slate-500">
+                    {t(uiLocale, "orders.create.products.outOfStockBadge")}
+                  </p>
+                );
+              }
+
+              return (
+                <>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">{product.sku}</p>
+                    <p className="text-sm font-semibold text-slate-900">{product.name}</p>
+                  </div>
+                  <div className="space-y-2">
+                    {availableUnits.map((unit) => {
+                      const maxQty = getProductAvailableQty(product.productId, unit.unitId);
+                      return (
+                        <button
+                          key={unit.unitId}
+                          type="button"
+                          className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-3 text-left hover:border-blue-300 hover:bg-blue-50"
+                          onClick={() => confirmAddProductUnit(unit.unitId)}
+                          disabled={loading || maxQty <= 0}
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-slate-900">{unit.unitCode}</p>
+                            <p className="text-xs text-slate-500">
+                              {unit.multiplierToBase.toLocaleString(numberLocale)} {product.baseUnitCode}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold text-blue-700">
+                              {unit.pricePerUnit.toLocaleString(numberLocale)} {catalog.storeCurrency}
+                            </p>
+                            <p className="text-[11px] text-slate-500">
+                              {t(uiLocale, "orders.create.products.unitPicker.availablePrefix")}{" "}
+                              {maxQty.toLocaleString(numberLocale)}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        ) : null}
+      </SlideUpSheet>
+      <SlideUpSheet
+        isOpen={showOrderPackSheet !== null}
+        onClose={() => {
+          if (isOrderPackSheetBusy) {
+            return;
+          }
+          setShowOrderPackSheet(null);
+        }}
+        title={t(uiLocale, "orders.pack.page.title")}
+        description={t(uiLocale, "orders.pack.page.subtitle")}
+        panelMaxWidthClass="min-[1200px]:max-w-5xl"
+        disabled={isOrderPackSheetBusy}
+        scrollToTopOnOpen
+        footer={
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 w-full rounded-xl"
+              onClick={() => setShowOrderPackSheet(null)}
+              disabled={isOrderPackSheetBusy}
+            >
+              {t(uiLocale, "common.action.close")}
+            </Button>
+            <Button
+              type="button"
+              className="h-10 w-full rounded-xl"
+              onClick={handlePrintOrderPackFromList}
+              disabled={isOrderPackSheetBusy || !orderPackPreview}
+            >
+              {orderPackPrintLoading
+                ? t(uiLocale, "orders.detail.actions.print.loading")
+                : t(uiLocale, "orders.detail.actions.print.pack")}
+            </Button>
+          </div>
+        }
+      >
+        <div className="pb-1">
+          {orderPackPreviewLoading ? (
+            <p className="rounded-lg border border-dashed p-3 text-sm text-slate-500">
+              {t(uiLocale, "common.loading")}
+            </p>
+          ) : orderPackPreviewError ? (
+            <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+              {orderPackPreviewError}
+            </p>
+          ) : orderPackPreview ? (
+            <OrderPackContent
+              order={orderPackPreview}
+              uiLocale={uiLocale}
+              numberLocale={numberLocale}
+              storeCurrencyDisplay={orderPackPreview.storeCurrency}
+              className="px-1"
+            />
+          ) : (
+            <p className="rounded-lg border border-dashed p-3 text-sm text-slate-500">
+              {showOrderPackSheet?.orderNo ?? t(uiLocale, "orders.customer.guest")}
+            </p>
+          )}
+        </div>
+      </SlideUpSheet>
       {isCreateOnlyMode ? (
         <SlideUpSheet
           isOpen={showRecentOrdersSheet}
@@ -6043,12 +6520,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       <select
                         className="h-8 w-full min-w-0 rounded-md border px-2 text-xs outline-none ring-primary focus:ring-2"
                         value={item.unitId ?? ""}
-                        onChange={(event) =>
-                          form.setValue(`items.${index}.unitId`, event.target.value, {
-                            shouldDirty: true,
-                            shouldValidate: true,
-                          })
-                        }
+                        onChange={(event) => setItemUnit(index, event.target.value)}
                         disabled={loading}
                       >
                         {selectedProduct?.units.map((unit) => (
@@ -6507,6 +6979,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 {t(uiLocale, "orders.management.bulk.summary.labelsPrefix")}{" "}
                 {selectedLabelPrintOrders.length.toLocaleString(numberLocale)}
               </span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1">
+                {t(uiLocale, "orders.management.bulk.summary.packsPrefix")}{" "}
+                {selectedPackPrintOrders.length.toLocaleString(numberLocale)}
+              </span>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -6525,6 +7001,22 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 {bulkPrintLoadingKind === "receipt" || receiptPrintLoading
                   ? t(uiLocale, "orders.detail.actions.print.loading")
                   : `${t(uiLocale, "orders.management.bulk.print.receipts")} (${selectedReceiptPrintOrders.length.toLocaleString(numberLocale)})`}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 px-3 text-xs"
+                disabled={
+                  selectedPackPrintOrders.length <= 0 ||
+                  quickActionLoadingKey !== null ||
+                  bulkActionLoadingKey !== null ||
+                  bulkPrintLoadingKind !== null
+                }
+                onClick={() => void runBulkPrint("pack")}
+              >
+                {bulkPrintLoadingKind === "pack" || orderPackPrintLoading
+                  ? t(uiLocale, "orders.detail.actions.print.loading")
+                  : `${t(uiLocale, "orders.management.bulk.print.packs")} (${selectedPackPrintOrders.length.toLocaleString(numberLocale)})`}
               </Button>
               <Button
                 type="button"

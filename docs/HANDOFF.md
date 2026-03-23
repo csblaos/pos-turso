@@ -6,6 +6,27 @@
 
 ## Changed (ล่าสุด)
 
+- เพิ่ม pack view จากหน้า `/orders` โดยตรง:
+  - `components/app/orders-management.tsx` เพิ่มปุ่ม `หน้าแพ็ก` ใน action ของ order list ทั้ง mobile/desktop
+  - เปิด `SlideUpSheet` บนหน้า list แล้วค่อยดึง `GET /api/orders/[orderId]` ตอนเปิดจริง เพื่อลดโหลดถาวรของ `/orders`
+  - ใน sheet reuse `OrderPackContent` และกด `พิมพ์ใบแพ็ก` ผ่าน current-page `window.print()` ได้เลย ไม่ต้องเข้า order detail ก่อน
+  - รอบนี้เพิ่ม `bulk print ใบแพ็ก` ใน sticky bulk bar ของ `/orders` แล้ว โดยกรองเฉพาะออเดอร์ที่เปิด pack view ได้ และ merge pack slip หลายใบเป็น current-page print document เดียว
+
+- redesign `shipping sticker`:
+  - `lib/orders/queries.ts` ขยาย `OrderDetail` ให้มี `storeName`, `storeSenderName`, `storeSenderPhone` โดยใช้ fallback `pdfCompanyName -> store.name` และ `pdfCompanyPhone -> store.phoneNumber`
+  - route [orders/[orderId]/print/label](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/app/(app)/orders/[orderId]/print/label/page.tsx) กับ current-page print ใน [order-detail-view.tsx](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/components/app/order-detail-view.tsx) ใช้ layout ใหม่แบบ shipping sticker 100x150mm: ชื่อร้าน, ผู้ฝาก + QR ด้านบน, ผู้รับ, ที่อยู่ปลายทาง, ติ๊ก `ค่าส่ง ต้นทาง/ปลายทาง` สีเขียวเด่นบนพื้นอ่อน, block `COD` ใช้ badge ติ๊กวงกลมสีเขียวเด่นบนพื้นอ่อน, และชื่อขนส่ง + placeholder โลโก้แบบ dashed box
+  - รอบล่าสุดเพิ่ม helper กลาง [shipping-label-print.ts](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/lib/orders/shipping-label-print.ts) แล้ว เพื่อให้ route print, current-page print จาก detail, และ bulk print label จากหน้า `/orders` ใช้ markup/styling เดียวกันจริง และไม่หลุดเป็น A6 template เก่าอีก
+  - ตัดข้อมูลที่ไม่จำเป็นกับสติกเกอร์ออกแล้ว เช่น `status`, `createdAt`, `shipping cost`, text `QR ออเดอร์`, และ hint ใต้ QR; ถ้าไม่มี tracking จะซ่อนทั้งบรรทัดแทนการพิมพ์ `Tracking: -`
+
+- ปรับ stock tabs ภาษาลาวไม่ให้ตก 2 บรรทัด:
+  - ย่อ label หลักเป็น `ສະຕັອກ / ສັ່ງຊື້ / ບັນທຶກ / ປະຫວັດ`
+  - `components/app/stock-tabs.tsx` เพิ่ม `whitespace-nowrap` และซ่อน scrollbar UI ของ tab bar เพื่อให้คง single-line แล้วเลื่อนแนวนอนได้แทน
+
+- ปรับ POS quick add ให้เลือกหน่วยขายก่อนถ้าสินค้ามีหลายแพ็ก:
+  - `components/app/orders-management.tsx` เปลี่ยน flow กดสินค้า/สแกน/ค้นหาเองใน `/orders/new` จากการ add `units[0]` ทันที เป็นเปิด `SlideUpSheet` เลือกหน่วยขายก่อนเมื่อสินค้ามีหลายหน่วยที่ขายได้ เช่น `1 / 100 / 1000`
+  - quantity cap ใน create order ปรับให้คำนวณตาม `multiplierToBase` ของหน่วยที่เลือกแล้ว ทั้งตอนเพิ่มสินค้า, เปลี่ยนหน่วยใน cart, และ restore draft เดิม เพื่อกันขายแพ็กเกินสต็อกฐาน
+  - quick add cards แสดงรหัสหน่วยขาย (`unitCode`) เพิ่ม เพื่อให้เห็นตั้งแต่ก่อนกดว่า SKU นี้ขายได้หลายแพ็ก
+
 - เพิ่ม PO purchase units phase แรก:
   - schema `purchase_order_items` เพิ่ม `unit_id`, `multiplier_to_base`, `qty_base_ordered`, `qty_base_received`
   - flow `create/update/receive/finalize-rate/apply-extra-cost` ของ `server/services/purchase.service.ts` ใช้หน่วยซื้อที่เลือกเป็น source input แต่แปลงกลับเป็น `qty_base_*` ก่อนลงสต็อกและคำนวณต้นทุน
