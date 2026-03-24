@@ -4366,14 +4366,14 @@ function PODetailSheet({
           ) : po ? (
             <>
               {/* Status + timeline */}
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
                   {(() => {
                     const cfg = statusConfig[po.status as PurchaseOrderListItem["status"]];
                     const Icon = cfg?.icon ?? FileText;
                     return (
                       <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${cfg?.badgeClass ?? "bg-slate-100 text-slate-600"}`}
+                        className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${cfg?.badgeClass ?? "bg-slate-100 text-slate-600"}`}
                       >
                         <Icon className="h-3.5 w-3.5" />
                         {cfg?.label ?? po.status}
@@ -4381,12 +4381,12 @@ function PODetailSheet({
                     );
                   })()}
                   {po.supplierName && (
-                    <span className="text-xs text-slate-500">
+                    <span className="min-w-0 text-xs text-slate-500 sm:truncate">
                       · {po.supplierName}
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
                   {canSettlePayment &&
                     !isEditMode &&
                     !isSettleMode &&
@@ -4394,7 +4394,7 @@ function PODetailSheet({
                     !isApplyExtraCostMode && (
                     <Button
                       variant="outline"
-                      className="h-8 rounded-lg border-emerald-300 px-2.5 text-xs text-emerald-700 hover:bg-emerald-50"
+                      className="h-9 w-full justify-center whitespace-nowrap rounded-lg border-emerald-300 px-2.5 text-xs text-emerald-700 hover:bg-emerald-50 sm:h-8 sm:w-auto"
                       onClick={startSettlePayment}
 	                      disabled={updating || isSettlingPayment || isExchangeRatePending}
 	                      title={
@@ -4414,7 +4414,7 @@ function PODetailSheet({
                     !isApplyExtraCostMode && (
                     <Button
                       variant="outline"
-                      className="h-8 rounded-lg border-sky-300 px-2.5 text-xs text-sky-700 hover:bg-sky-50"
+                      className="h-9 w-full justify-center whitespace-nowrap rounded-lg border-sky-300 px-2.5 text-xs text-sky-700 hover:bg-sky-50 sm:h-8 sm:w-auto"
                       onClick={startApplyExtraCost}
 	                      disabled={updating || isApplyingExtraCost}
 	                    >
@@ -4428,7 +4428,7 @@ function PODetailSheet({
                     !isApplyExtraCostMode && (
                     <Button
                       variant="outline"
-                      className="h-8 rounded-lg border-amber-300 px-2.5 text-xs text-amber-700 hover:bg-amber-50"
+                      className="h-9 w-full justify-center whitespace-nowrap rounded-lg border-amber-300 px-2.5 text-xs text-amber-700 hover:bg-amber-50 sm:h-8 sm:w-auto"
 	                      onClick={startFinalizeRate}
 	                      disabled={updating || isFinalizingRate}
 	                    >
@@ -4442,7 +4442,7 @@ function PODetailSheet({
                     !isApplyExtraCostMode && (
                     <Button
                       variant="outline"
-                      className="h-8 rounded-lg px-2.5 text-xs"
+                      className="h-9 w-full justify-center whitespace-nowrap rounded-lg px-2.5 text-xs sm:h-8 sm:w-auto"
                       onClick={startEdit}
 	                      disabled={updating}
 	                    >

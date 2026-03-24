@@ -10,6 +10,8 @@
   - [purchase-order-list.tsx](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/components/app/purchase-order-list.tsx) ใช้ `purchaseCurrency` เป็นค่าหลักใน create wizard summary, ราคาต่อหน่วย/ยอดต่อรายการใน detail sheet, และยอดสินค้า (`products subtotal`) ของ PO; ถ้าเป็น PO ต่างสกุลจะแสดง `≈ storeCurrency` เป็นค่ารอง
   - คง `ค่าขนส่ง`, `ค่าอื่น`, `ยอดรวมต้องจ่าย`, `ยอดชำระแล้ว`, และ `ยอดค้าง` เป็น `storeCurrency` ตาม logic เดิม เพราะเป็นยอดฐานร้าน/ยอดปิดบัญชีจริง
   - [generate-po-pdf.ts](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/lib/pdf/generate-po-pdf.ts) กับ mapping ใน [purchase-order-list.tsx](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/components/app/purchase-order-list.tsx) ปรับแล้วให้ตารางสินค้าใน PDF ใช้ `unitCostPurchase` และ line total ตาม `purchaseCurrency` แทนการพิมพ์ `₭` ทุกแถว
+  - รอบล่าสุดปรับ `PO detail modal` ฝั่ง mobile เพิ่ม: badge สถานะ (`ຮັບແລ້ວ`) ถูกบังคับให้อยู่บรรทัดเดียว และ action ด้านบน modal เปลี่ยนเป็นปุ่มเต็มความกว้างเรียงลงมาในมือถือ เพื่อกัน `ປິດເຣດ` ล้นจอ; บน `sm+` ยังกลับไปเป็นปุ่มแนวนอนแบบเดิม
+  - เพิ่ม i18n ให้ workspace labels ฝั่ง purchase แล้ว: `PO Operations / Month-End Close / AP by Supplier` ถูกแปลเป็น `งานสั่งซื้อ / ปิดรอบปลายเดือน / เจ้าหนี้ตามซัพพลายเออร์` (ไทย) และ `ວຽກສັ່ງຊື້ / ປິດຮອບປາຍເດືອນ / ໜີ້ຄ້າງຈ່າຍຕາມຜູ້ສະໜອງ` (ลาว) รวมถึงข้อความอ้างอิงอย่าง shortcut active และ month-end empty-state
 
 - เพิ่ม pack view จากหน้า `/orders` โดยตรง:
   - `components/app/orders-management.tsx` เพิ่มปุ่ม `หน้าแพ็ก` ใน action ของ order list ทั้ง mobile/desktop
