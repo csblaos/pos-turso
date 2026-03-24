@@ -28,6 +28,7 @@ export type POPdfData = {
     purchaseUnitCode: string;
     qtyBaseOrdered: number;
     baseUnitCode: string;
+    unitCostPurchase: number;
     unitCostBase: number;
   }[];
 };
@@ -428,6 +429,11 @@ export async function generatePoPdf(
   y += 6;
 
   // ── Items table ──
+  const purchaseCurrency = (po.purchaseCurrency || storeCurrency) as StoreCurrency;
+  const itemsTotalPurchase = po.items.reduce(
+    (sum, item) => sum + item.unitCostPurchase * item.qtyOrdered,
+    0,
+  );
   const tableBody = po.items.map((item, idx) => [
     String(idx + 1),
     item.productName,
@@ -437,8 +443,8 @@ export async function generatePoPdf(
         ? ` (= ${item.qtyBaseOrdered.toLocaleString("th-TH")} ${item.baseUnitCode})`
         : ""
     }`,
-    fmtMoney(item.unitCostBase, storeCurrency),
-    fmtMoney(item.unitCostBase * item.qtyBaseOrdered, storeCurrency),
+    fmtMoney(item.unitCostPurchase, purchaseCurrency),
+    fmtMoney(item.unitCostPurchase * item.qtyOrdered, purchaseCurrency),
   ]);
 
   // Parse header color from config
@@ -489,8 +495,11 @@ export async function generatePoPdf(
   doc.setFontSize(10);
 
   const summaryLines: [string, string][] = [
-    [L.subtotal, fmtMoney(po.totalCostBase, storeCurrency)],
+    [`${L.subtotal} (${purchaseCurrency})`, fmtMoney(itemsTotalPurchase, purchaseCurrency)],
   ];
+  if (purchaseCurrency !== storeCurrency) {
+    summaryLines.push([`${L.subtotal} (${storeCurrency})`, fmtMoney(po.totalCostBase, storeCurrency)]);
+  }
   if (po.shippingCost > 0) {
     summaryLines.push([L.shipping, fmtMoney(po.shippingCost, storeCurrency)]);
   }

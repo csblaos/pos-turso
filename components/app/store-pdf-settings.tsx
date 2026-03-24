@@ -263,6 +263,7 @@ export function StorePdfSettings({
             purchaseUnitCode: "PCS",
             qtyBaseOrdered: 100,
             baseUnitCode: "PCS",
+            unitCostPurchase: 8500,
             unitCostBase: 8500,
           },
           {
@@ -272,6 +273,7 @@ export function StorePdfSettings({
             purchaseUnitCode: "PCS",
             qtyBaseOrdered: 200,
             baseUnitCode: "PCS",
+            unitCostPurchase: 1200,
             unitCostBase: 1200,
           },
           {
@@ -281,6 +283,7 @@ export function StorePdfSettings({
             purchaseUnitCode: "PCS",
             qtyBaseOrdered: 50,
             baseUnitCode: "PCS",
+            unitCostPurchase: 3200,
             unitCostBase: 3200,
           },
         ],

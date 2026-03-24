@@ -42,7 +42,7 @@ import {
 } from "@/components/app/purchase-ap-supplier-panel";
 import { authFetch } from "@/lib/auth/client-token";
 import type { StoreCurrency } from "@/lib/finance/store-financial";
-import { currencySymbol } from "@/lib/finance/store-financial";
+import { currencySymbol, parseStoreCurrency } from "@/lib/finance/store-financial";
 import type { UiLocale } from "@/lib/i18n/locales";
 import { uiLocaleToDateLocale } from "@/lib/i18n/locales";
 import { t } from "@/lib/i18n/messages";
@@ -289,6 +289,46 @@ type DraftPurchaseItem = {
 
 function fmtPrice(amount: number, currency: StoreCurrency, numberLocale?: string): string {
   return `${currencySymbol(currency)}${amount.toLocaleString(numberLocale)}`;
+}
+
+function CurrencyAmountStack({
+  primaryAmount,
+  primaryCurrency,
+  secondaryAmount,
+  secondaryCurrency,
+  numberLocale,
+  align = "right",
+  primaryClassName = "font-medium",
+}: {
+  primaryAmount: number;
+  primaryCurrency: StoreCurrency;
+  secondaryAmount?: number | null;
+  secondaryCurrency?: StoreCurrency | null;
+  numberLocale?: string;
+  align?: "left" | "right";
+  primaryClassName?: string;
+}) {
+  const wrapperClassName =
+    align === "left"
+      ? "inline-flex flex-col items-start"
+      : "inline-flex flex-col items-end text-right";
+  const shouldShowSecondary =
+    secondaryAmount != null &&
+    secondaryCurrency != null &&
+    secondaryCurrency !== primaryCurrency;
+
+  return (
+    <span className={wrapperClassName}>
+      <span className={primaryClassName}>
+        {fmtPrice(primaryAmount, primaryCurrency, numberLocale)}
+      </span>
+      {shouldShowSecondary ? (
+        <span className="text-[11px] font-normal text-slate-500">
+          ≈ {fmtPrice(secondaryAmount, secondaryCurrency, numberLocale)}
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 function getPurchaseUnitLabel(unitCode: string, unitNameTh: string): string {
@@ -3467,9 +3507,25 @@ export function PurchaseOrderList({
 	                        {t(uiLocale, "purchase.summary.products")} ({items.length}{" "}
 	                        {t(uiLocale, "purchase.items")})
 	                      </span>
-	                      <span className="font-medium">
-	                        {fmtPrice(itemsTotalBase, storeCurrency, numberLocale)}
-	                      </span>
+                        <CurrencyAmountStack
+                          primaryAmount={
+                            purchaseCurrency === storeCurrency
+                              ? itemsTotalBase
+                              : itemsTotalPurchase
+                          }
+                          primaryCurrency={
+                            purchaseCurrency === storeCurrency
+                              ? storeCurrency
+                              : purchaseCurrency
+                          }
+                          secondaryAmount={
+                            purchaseCurrency === storeCurrency ? null : itemsTotalBase
+                          }
+                          secondaryCurrency={
+                            purchaseCurrency === storeCurrency ? null : storeCurrency
+                          }
+                          numberLocale={numberLocale}
+                        />
 	                    </div>
 	                    {shipping > 0 && (
 	                      <div className="flex justify-between">
@@ -3858,6 +3914,21 @@ function PODetailSheet({
       cancelled = true;
     };
 	  }, [getCachedPoDetail, loadPoDetail, poId, uiLocale]);
+
+  const poPurchaseCurrency = useMemo(
+    () => parseStoreCurrency(po?.purchaseCurrency, storeCurrency),
+    [po?.purchaseCurrency, storeCurrency],
+  );
+  const poItemsTotalPurchase = useMemo(
+    () =>
+      po
+        ? po.items.reduce(
+            (sum, item) => sum + item.unitCostPurchase * item.qtyOrdered,
+            0,
+          )
+        : 0,
+    [po],
+  );
 
   const handleStatusChange = async (
     newStatus: "ORDERED" | "SHIPPED" | "RECEIVED" | "CANCELLED",
@@ -4420,6 +4491,7 @@ function PODetailSheet({
                             purchaseUnitCode: item.purchaseUnitCode,
                             qtyBaseOrdered: item.qtyBaseOrdered,
                             baseUnitCode: item.baseUnitCode,
+                            unitCostPurchase: item.unitCostPurchase,
                             unitCostBase: item.unitCostBase,
                           })),
                         };
@@ -4471,13 +4543,14 @@ function PODetailSheet({
                             trackingInfo: po.trackingInfo,
                             totalCostBase: po.totalCostBase,
                             storeLogoUrl: storeLogoUrl,
-                            items: po.items.map((item) => ({
+                          items: po.items.map((item) => ({
                               productName: item.productName,
                               productSku: item.productSku,
                               qtyOrdered: item.qtyOrdered,
                               purchaseUnitCode: item.purchaseUnitCode,
                               qtyBaseOrdered: item.qtyBaseOrdered,
                               baseUnitCode: item.baseUnitCode,
+                              unitCostPurchase: item.unitCostPurchase,
                               unitCostBase: item.unitCostBase,
                             })),
                           };
@@ -5347,12 +5420,23 @@ function PODetailSheet({
                           item.purchaseUnitCode,
                           item.purchaseUnitNameTh,
                         )}{" "}
-                        · {fmtPrice(item.unitCostBase, storeCurrency, numberLocale)}/
-                        {item.baseUnitCode}
+                        ·{" "}
+                        {fmtPrice(
+                          item.unitCostPurchase,
+                          poPurchaseCurrency,
+                          numberLocale,
+                        )}
+                        /{getPurchaseUnitLabel(item.purchaseUnitCode, item.purchaseUnitNameTh)}
                         <span className="ml-1">
                           ({item.qtyBaseOrdered.toLocaleString(numberLocale)}{" "}
                           {item.baseUnitCode})
                         </span>
+                        {poPurchaseCurrency !== storeCurrency ? (
+                          <span className="ml-1 text-slate-400">
+                            ≈ {fmtPrice(item.unitCostBase, storeCurrency, numberLocale)}/
+                            {item.baseUnitCode}
+                          </span>
+                        ) : null}
                         {item.qtyReceived > 0 &&
                           item.qtyReceived !== item.qtyOrdered && (
                             <span className="ml-1 text-amber-600">
@@ -5369,13 +5453,27 @@ function PODetailSheet({
                           )}
                       </p>
                     </div>
-                    <span className="text-sm font-medium text-slate-900">
-                      {fmtPrice(
-                        item.unitCostBase * item.qtyBaseOrdered,
-                        storeCurrency,
-                        numberLocale,
-                      )}
-                    </span>
+                    <CurrencyAmountStack
+                      primaryAmount={
+                        poPurchaseCurrency === storeCurrency
+                          ? item.unitCostBase * item.qtyBaseOrdered
+                          : item.unitCostPurchase * item.qtyOrdered
+                      }
+                      primaryCurrency={
+                        poPurchaseCurrency === storeCurrency
+                          ? storeCurrency
+                          : poPurchaseCurrency
+                      }
+                      secondaryAmount={
+                        poPurchaseCurrency === storeCurrency
+                          ? null
+                          : item.unitCostBase * item.qtyBaseOrdered
+                      }
+                      secondaryCurrency={
+                        poPurchaseCurrency === storeCurrency ? null : storeCurrency
+                      }
+                      numberLocale={numberLocale}
+                    />
                   </div>
                 ))}
               </div>
@@ -5386,7 +5484,25 @@ function PODetailSheet({
 	                  <span className="text-slate-600">
 	                    {t(uiLocale, "purchase.summary.products")}
 	                  </span>
-	                  <span>{fmtPrice(po.totalCostBase, storeCurrency, numberLocale)}</span>
+                    <CurrencyAmountStack
+                      primaryAmount={
+                        poPurchaseCurrency === storeCurrency
+                          ? po.totalCostBase
+                          : poItemsTotalPurchase
+                      }
+                      primaryCurrency={
+                        poPurchaseCurrency === storeCurrency
+                          ? storeCurrency
+                          : poPurchaseCurrency
+                      }
+                      secondaryAmount={
+                        poPurchaseCurrency === storeCurrency ? null : po.totalCostBase
+                      }
+                      secondaryCurrency={
+                        poPurchaseCurrency === storeCurrency ? null : storeCurrency
+                      }
+                      numberLocale={numberLocale}
+                    />
 	                </div>
 	                {po.shippingCost > 0 && (
 	                  <div className="flex justify-between">

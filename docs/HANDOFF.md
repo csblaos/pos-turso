@@ -6,6 +6,11 @@
 
 ## Changed (ล่าสุด)
 
+- ปรับสกุลเงินใน PO ให้ตรงกับ `purchaseCurrency` มากขึ้น:
+  - [purchase-order-list.tsx](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/components/app/purchase-order-list.tsx) ใช้ `purchaseCurrency` เป็นค่าหลักใน create wizard summary, ราคาต่อหน่วย/ยอดต่อรายการใน detail sheet, และยอดสินค้า (`products subtotal`) ของ PO; ถ้าเป็น PO ต่างสกุลจะแสดง `≈ storeCurrency` เป็นค่ารอง
+  - คง `ค่าขนส่ง`, `ค่าอื่น`, `ยอดรวมต้องจ่าย`, `ยอดชำระแล้ว`, และ `ยอดค้าง` เป็น `storeCurrency` ตาม logic เดิม เพราะเป็นยอดฐานร้าน/ยอดปิดบัญชีจริง
+  - [generate-po-pdf.ts](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/lib/pdf/generate-po-pdf.ts) กับ mapping ใน [purchase-order-list.tsx](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/components/app/purchase-order-list.tsx) ปรับแล้วให้ตารางสินค้าใน PDF ใช้ `unitCostPurchase` และ line total ตาม `purchaseCurrency` แทนการพิมพ์ `₭` ทุกแถว
+
 - เพิ่ม pack view จากหน้า `/orders` โดยตรง:
   - `components/app/orders-management.tsx` เพิ่มปุ่ม `หน้าแพ็ก` ใน action ของ order list ทั้ง mobile/desktop
   - เปิด `SlideUpSheet` บนหน้า list แล้วค่อยดึง `GET /api/orders/[orderId]` ตอนเปิดจริง เพื่อลดโหลดถาวรของ `/orders`
