@@ -118,6 +118,92 @@ function derivePoPaymentStatus(
   return "PARTIAL";
 }
 
+function assertSupportedExtraCostCurrency(params: {
+  currency: string;
+  purchaseCurrency: string;
+  storeCurrency: string;
+  label: string;
+}): string {
+  const { currency, purchaseCurrency, storeCurrency, label } = params;
+  if (currency === storeCurrency || currency === purchaseCurrency) {
+    return currency;
+  }
+  throw new PurchaseServiceError(
+    400,
+    `${label} ใช้ได้เฉพาะสกุลร้านหรือสกุลซื้อของ PO`,
+  );
+}
+
+function resolvePurchaseExtraCost(params: {
+  amount: number;
+  currency: string;
+  purchaseCurrency: string;
+  storeCurrency: string;
+  exchangeRate: number;
+  label: string;
+}) {
+  const { amount, purchaseCurrency, storeCurrency, exchangeRate, label } = params;
+  const normalizedAmount = Math.max(0, Math.round(amount));
+  const currency = assertSupportedExtraCostCurrency({
+    currency: params.currency,
+    purchaseCurrency,
+    storeCurrency,
+    label,
+  });
+
+  if (normalizedAmount <= 0) {
+    return {
+      amountOriginal: 0,
+      currency,
+      amountBase: 0,
+    };
+  }
+
+  if (currency === storeCurrency) {
+    return {
+      amountOriginal: normalizedAmount,
+      currency,
+      amountBase: normalizedAmount,
+    };
+  }
+
+  return {
+    amountOriginal: normalizedAmount,
+    currency,
+    amountBase: Math.round(normalizedAmount * Math.max(1, exchangeRate)),
+  };
+}
+
+function resolveNextDraftExtraCostCurrency(params: {
+  explicitCurrency: string | undefined;
+  currentCurrency: string;
+  previousPurchaseCurrency: string;
+  nextPurchaseCurrency: string;
+  storeCurrency: string;
+  label: string;
+}) {
+  const {
+    explicitCurrency,
+    currentCurrency,
+    previousPurchaseCurrency,
+    nextPurchaseCurrency,
+    storeCurrency,
+    label,
+  } = params;
+  const nextCurrency =
+    explicitCurrency ??
+    (currentCurrency === previousPurchaseCurrency
+      ? nextPurchaseCurrency
+      : currentCurrency);
+
+  return assertSupportedExtraCostCurrency({
+    currency: nextCurrency,
+    purchaseCurrency: nextPurchaseCurrency,
+    storeCurrency,
+    label,
+  });
+}
+
 async function resolvePurchaseUnitCatalog(
   storeId: string,
   productIds: string[],
@@ -323,6 +409,22 @@ export async function createPurchaseOrder(params: {
     ? 1
     : Math.round(payload.exchangeRate ?? 1);
   const dueDate = normalizeIsoDateOrNull(payload.dueDate);
+  const shippingCost = resolvePurchaseExtraCost({
+    amount: payload.shippingCost,
+    currency: payload.shippingCostCurrency,
+    purchaseCurrency: payload.purchaseCurrency,
+    storeCurrency,
+    exchangeRate,
+    label: "ค่าขนส่ง",
+  });
+  const otherCost = resolvePurchaseExtraCost({
+    amount: payload.otherCost,
+    currency: payload.otherCostCurrency,
+    purchaseCurrency: payload.purchaseCurrency,
+    storeCurrency,
+    exchangeRate,
+    label: "ค่าใช้จ่ายอื่น",
+  });
 
   const initialStatus = payload.receiveImmediately ? "RECEIVED" : "DRAFT";
 
@@ -347,8 +449,12 @@ export async function createPurchaseOrder(params: {
         paidBy: null,
         paymentReference: null,
         paymentNote: null,
-        shippingCost: payload.shippingCost,
-        otherCost: payload.otherCost,
+        shippingCostOriginal: shippingCost.amountOriginal,
+        shippingCostCurrency: parseStoreCurrency(shippingCost.currency),
+        shippingCost: shippingCost.amountBase,
+        otherCostOriginal: otherCost.amountOriginal,
+        otherCostCurrency: parseStoreCurrency(otherCost.currency),
+        otherCost: otherCost.amountBase,
         otherCostNote: payload.otherCostNote || null,
         note: payload.note || null,
         expectedAt: payload.expectedAt || null,
@@ -371,7 +477,7 @@ export async function createPurchaseOrder(params: {
     });
 
     // Calculate landed cost per unit (proportional allocation of shipping + other)
-    const totalExtraCost = payload.shippingCost + payload.otherCost;
+    const totalExtraCost = shippingCost.amountBase + otherCost.amountBase;
     applyLandedCostPerBaseUnit(items, totalExtraCost, (item) => item.qtyBaseOrdered);
 
     await insertPurchaseOrderItems(items, tx);
@@ -635,7 +741,23 @@ export async function finalizePurchaseOrderExchangeRateFlow(params: {
       throw new PurchaseServiceError(400, "อัตราแลกเปลี่ยนต้องมากกว่า 0");
     }
 
-    const totalExtraCost = po.shippingCost + po.otherCost;
+    const shippingCost = resolvePurchaseExtraCost({
+      amount: po.shippingCostOriginal,
+      currency: po.shippingCostCurrency,
+      purchaseCurrency: po.purchaseCurrency,
+      storeCurrency,
+      exchangeRate: nextRate,
+      label: "ค่าขนส่ง",
+    });
+    const otherCost = resolvePurchaseExtraCost({
+      amount: po.otherCostOriginal,
+      currency: po.otherCostCurrency,
+      purchaseCurrency: po.purchaseCurrency,
+      storeCurrency,
+      exchangeRate: nextRate,
+      label: "ค่าใช้จ่ายอื่น",
+    });
+    const totalExtraCost = shippingCost.amountBase + otherCost.amountBase;
     const itemsWithBaseCost = po.items.map((item) => ({
       ...item,
       qtyForCalc: Math.max(item.qtyBaseReceived, 0),
@@ -670,6 +792,8 @@ export async function finalizePurchaseOrderExchangeRateFlow(params: {
         exchangeRateLockedAt: now,
         exchangeRateLockedBy: userId,
         exchangeRateLockNote: payload.note || null,
+        shippingCost: shippingCost.amountBase,
+        otherCost: otherCost.amountBase,
         updatedBy: userId,
         updatedAt: now,
       },
@@ -855,11 +979,12 @@ export async function applyPurchaseOrderExtraCostFlow(params: {
   poId: string;
   storeId: string;
   userId: string;
+  storeCurrency: string;
   payload: ApplyPurchaseOrderExtraCostInput;
   audit?: PurchaseAuditContext;
   idempotency?: PurchaseIdempotencyContext;
 }): Promise<PurchaseOrderView> {
-  const { poId, storeId, userId, payload, audit, idempotency } = params;
+  const { poId, storeId, userId, storeCurrency, payload, audit, idempotency } = params;
   const now = new Date().toISOString();
 
   return db.transaction(async (tx) => {
@@ -880,9 +1005,24 @@ export async function applyPurchaseOrderExtraCostFlow(params: {
       );
     }
 
-    const shippingCost = Math.round(payload.shippingCost);
-    const otherCost = Math.round(payload.otherCost);
-    const nextGrandTotalBase = po.totalCostBase + shippingCost + otherCost;
+    const shippingCost = resolvePurchaseExtraCost({
+      amount: payload.shippingCost,
+      currency: payload.shippingCostCurrency,
+      purchaseCurrency: po.purchaseCurrency,
+      storeCurrency,
+      exchangeRate: po.exchangeRate,
+      label: "ค่าขนส่ง",
+    });
+    const otherCost = resolvePurchaseExtraCost({
+      amount: payload.otherCost,
+      currency: payload.otherCostCurrency,
+      purchaseCurrency: po.purchaseCurrency,
+      storeCurrency,
+      exchangeRate: po.exchangeRate,
+      label: "ค่าใช้จ่ายอื่น",
+    });
+    const nextGrandTotalBase =
+      po.totalCostBase + shippingCost.amountBase + otherCost.amountBase;
     if (nextGrandTotalBase < po.totalPaidBase) {
       throw new PurchaseServiceError(
         400,
@@ -890,7 +1030,7 @@ export async function applyPurchaseOrderExtraCostFlow(params: {
       );
     }
 
-    const totalExtraCost = shippingCost + otherCost;
+    const totalExtraCost = shippingCost.amountBase + otherCost.amountBase;
     const itemsForCost = po.items.map((item) => ({
       ...item,
       qtyForCalc: Math.max(item.qtyBaseReceived, 0),
@@ -925,8 +1065,12 @@ export async function applyPurchaseOrderExtraCostFlow(params: {
     await updatePurchaseOrderFields(
       po.id,
       {
-        shippingCost,
-        otherCost,
+        shippingCostOriginal: shippingCost.amountOriginal,
+        shippingCostCurrency: parseStoreCurrency(shippingCost.currency),
+        shippingCost: shippingCost.amountBase,
+        otherCostOriginal: otherCost.amountOriginal,
+        otherCostCurrency: parseStoreCurrency(otherCost.currency),
+        otherCost: otherCost.amountBase,
         otherCostNote: payload.otherCostNote?.trim() || null,
         paymentStatus: nextPaymentStatus,
         updatedBy: userId,
@@ -949,10 +1093,18 @@ export async function applyPurchaseOrderExtraCostFlow(params: {
           metadata: {
             poNumber: po.poNumber,
             previousShippingCost: po.shippingCost,
+            previousShippingCostOriginal: po.shippingCostOriginal,
+            previousShippingCostCurrency: po.shippingCostCurrency,
             previousOtherCost: po.otherCost,
+            previousOtherCostOriginal: po.otherCostOriginal,
+            previousOtherCostCurrency: po.otherCostCurrency,
             previousOtherCostNote: po.otherCostNote,
-            shippingCost,
-            otherCost,
+            shippingCost: shippingCost.amountBase,
+            shippingCostOriginal: shippingCost.amountOriginal,
+            shippingCostCurrency: shippingCost.currency,
+            otherCost: otherCost.amountBase,
+            otherCostOriginal: otherCost.amountOriginal,
+            otherCostCurrency: otherCost.currency,
             otherCostNote: payload.otherCostNote?.trim() || null,
             totalPaidBase: po.totalPaidBase,
             nextGrandTotalBase,
@@ -1148,7 +1300,9 @@ export async function updatePurchaseOrderFlow(params: {
       "purchaseCurrency",
       "exchangeRate",
       "shippingCost",
+      "shippingCostCurrency",
       "otherCost",
+      "otherCostCurrency",
       "otherCostNote",
       "items",
     ] as const;
@@ -1188,8 +1342,6 @@ export async function updatePurchaseOrderFlow(params: {
       if (payload.supplierContact !== undefined) {
         updates.supplierContact = payload.supplierContact || null;
       }
-      if (payload.shippingCost !== undefined) updates.shippingCost = payload.shippingCost;
-      if (payload.otherCost !== undefined) updates.otherCost = payload.otherCost;
       if (payload.otherCostNote !== undefined) {
         updates.otherCostNote = payload.otherCostNote || null;
       }
@@ -1231,7 +1383,9 @@ export async function updatePurchaseOrderFlow(params: {
         payload.purchaseCurrency !== undefined ||
         payload.exchangeRate !== undefined ||
         payload.shippingCost !== undefined ||
-        payload.otherCost !== undefined;
+        payload.shippingCostCurrency !== undefined ||
+        payload.otherCost !== undefined ||
+        payload.otherCostCurrency !== undefined;
 
       if (costAffectingChanged) {
         const sourceItems =
@@ -1243,9 +1397,46 @@ export async function updatePurchaseOrderFlow(params: {
             unitCostPurchase: item.unitCostPurchase,
           }));
 
-        const shippingCost = payload.shippingCost ?? po.shippingCost;
-        const otherCost = payload.otherCost ?? po.otherCost;
-        const totalExtraCost = shippingCost + otherCost;
+        const nextShippingCostCurrency = resolveNextDraftExtraCostCurrency({
+          explicitCurrency: payload.shippingCostCurrency,
+          currentCurrency: po.shippingCostCurrency,
+          previousPurchaseCurrency: po.purchaseCurrency,
+          nextPurchaseCurrency: nextCurrency,
+          storeCurrency,
+          label: "ค่าขนส่ง",
+        });
+        const nextOtherCostCurrency = resolveNextDraftExtraCostCurrency({
+          explicitCurrency: payload.otherCostCurrency,
+          currentCurrency: po.otherCostCurrency,
+          previousPurchaseCurrency: po.purchaseCurrency,
+          nextPurchaseCurrency: nextCurrency,
+          storeCurrency,
+          label: "ค่าใช้จ่ายอื่น",
+        });
+        const shippingCost = resolvePurchaseExtraCost({
+          amount: payload.shippingCost ?? po.shippingCostOriginal,
+          currency: nextShippingCostCurrency,
+          purchaseCurrency: nextCurrency,
+          storeCurrency,
+          exchangeRate: nextRate,
+          label: "ค่าขนส่ง",
+        });
+        const otherCost = resolvePurchaseExtraCost({
+          amount: payload.otherCost ?? po.otherCostOriginal,
+          currency: nextOtherCostCurrency,
+          purchaseCurrency: nextCurrency,
+          storeCurrency,
+          exchangeRate: nextRate,
+          label: "ค่าใช้จ่ายอื่น",
+        });
+        const totalExtraCost = shippingCost.amountBase + otherCost.amountBase;
+
+        updates.shippingCostOriginal = shippingCost.amountOriginal;
+        updates.shippingCostCurrency = parseStoreCurrency(nextShippingCostCurrency);
+        updates.shippingCost = shippingCost.amountBase;
+        updates.otherCostOriginal = otherCost.amountOriginal;
+        updates.otherCostCurrency = parseStoreCurrency(nextOtherCostCurrency);
+        updates.otherCost = otherCost.amountBase;
 
         const items = await buildPurchaseOrderItemSnapshots({
           storeId,

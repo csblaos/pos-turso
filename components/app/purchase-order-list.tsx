@@ -192,7 +192,11 @@ type PurchaseOrderDetail = {
   paymentReference: string | null;
   paymentNote: string | null;
   dueDate: string | null;
+  shippingCostOriginal: number;
+  shippingCostCurrency: StoreCurrency;
   shippingCost: number;
+  otherCostOriginal: number;
+  otherCostCurrency: StoreCurrency;
   otherCost: number;
   otherCostNote: string | null;
   status: string;
@@ -288,6 +292,8 @@ type DraftPurchaseItem = {
   lineTotalPurchase: string;
   priceInputMode: "UNIT" | "TOTAL";
 };
+
+type PurchaseExtraCostCurrency = StoreCurrency;
 
 function fmtPrice(amount: number, currency: StoreCurrency, numberLocale?: string): string {
   return `${currencySymbol(currency)}${amount.toLocaleString(numberLocale)}`;
@@ -385,6 +391,44 @@ function switchPurchaseItemPriceInputMode(
     priceInputMode: nextMode,
     lineTotalPurchase: String(getPurchaseItemResolvedLineTotal(item)),
   };
+}
+
+function getPurchaseExtraCostCurrencyOptions(
+  purchaseCurrency: StoreCurrency,
+  storeCurrency: StoreCurrency,
+): PurchaseExtraCostCurrency[] {
+  return Array.from(new Set([storeCurrency, purchaseCurrency]));
+}
+
+function syncPurchaseLinkedCurrency(params: {
+  nextPurchaseCurrency: StoreCurrency;
+  previousPurchaseCurrency: StoreCurrency;
+  currentCurrency: PurchaseExtraCostCurrency;
+  storeCurrency: StoreCurrency;
+}): PurchaseExtraCostCurrency {
+  const { nextPurchaseCurrency, previousPurchaseCurrency, currentCurrency, storeCurrency } =
+    params;
+  if (currentCurrency === previousPurchaseCurrency) {
+    return nextPurchaseCurrency;
+  }
+  if (currentCurrency !== storeCurrency && currentCurrency !== nextPurchaseCurrency) {
+    return storeCurrency;
+  }
+  return currentCurrency;
+}
+
+function resolvePurchaseExtraCostBasePreview(params: {
+  amountInput: string;
+  currency: PurchaseExtraCostCurrency;
+  purchaseCurrency: StoreCurrency;
+  storeCurrency: StoreCurrency;
+  exchangeRateInput: string;
+}): number {
+  const amount = parseWholeNumberInput(params.amountInput);
+  if (amount <= 0) return 0;
+  if (params.currency === params.storeCurrency) return amount;
+  const rate = Math.max(1, Math.round(Number(params.exchangeRateInput) || 1));
+  return Math.round(amount * rate);
 }
 
 function daysUntil(dateStr: string): number {
@@ -753,7 +797,11 @@ export function PurchaseOrderList({
   const [exchangeRate, setExchangeRate] = useState("");
   const [items, setItems] = useState<DraftPurchaseItem[]>([]);
   const [shippingCost, setShippingCost] = useState("");
+  const [shippingCostCurrency, setShippingCostCurrency] =
+    useState<PurchaseExtraCostCurrency>(storeCurrency);
   const [otherCost, setOtherCost] = useState("");
+  const [otherCostCurrency, setOtherCostCurrency] =
+    useState<PurchaseExtraCostCurrency>(storeCurrency);
   const [otherCostNote, setOtherCostNote] = useState("");
   const [note, setNote] = useState("");
   const [expectedAt, setExpectedAt] = useState("");
@@ -823,7 +871,9 @@ export function PurchaseOrderList({
     const hasItemDraft = items.length > 0;
     const hasCostDraft =
       (Number(shippingCost) || 0) > 0 ||
+      shippingCostCurrency !== storeCurrency ||
       (Number(otherCost) || 0) > 0 ||
+      otherCostCurrency !== storeCurrency ||
       otherCostNote.trim().length > 0;
     const hasMetaDraft =
       note.trim().length > 0 || expectedAt.trim().length > 0 || dueDate.trim().length > 0;
@@ -844,9 +894,11 @@ export function PurchaseOrderList({
     items.length,
     note,
     otherCost,
+    otherCostCurrency,
     otherCostNote,
     purchaseCurrency,
     shippingCost,
+    shippingCostCurrency,
     storeCurrency,
     supplierContact,
     supplierName,
@@ -1731,7 +1783,9 @@ export function PurchaseOrderList({
     setIsProductPickerOpen(false);
     setItems([]);
     setShippingCost("");
+    setShippingCostCurrency(storeCurrency);
     setOtherCost("");
+    setOtherCostCurrency(storeCurrency);
     setOtherCostNote("");
     setNote("");
     setExpectedAt("");
@@ -1840,9 +1894,23 @@ export function PurchaseOrderList({
     0,
   );
   const itemsTotalBase = Math.round(itemsTotalPurchase * effectiveRate);
-  const shipping = Number(shippingCost) || 0;
-  const other = Number(otherCost) || 0;
-  const grandTotal = itemsTotalBase + shipping + other;
+  const shipping = parseWholeNumberInput(shippingCost);
+  const shippingBase = resolvePurchaseExtraCostBasePreview({
+    amountInput: shippingCost,
+    currency: shippingCostCurrency,
+    purchaseCurrency,
+    storeCurrency,
+    exchangeRateInput: exchangeRate,
+  });
+  const other = parseWholeNumberInput(otherCost);
+  const otherBase = resolvePurchaseExtraCostBasePreview({
+    amountInput: otherCost,
+    currency: otherCostCurrency,
+    purchaseCurrency,
+    storeCurrency,
+    exchangeRateInput: exchangeRate,
+  });
+  const grandTotal = itemsTotalBase + shippingBase + otherBase;
 
   /* ── Submit ── */
   const submitPO = async (receiveImmediately: boolean) => {
@@ -1866,7 +1934,9 @@ export function PurchaseOrderList({
                 ? rate
                 : undefined,
           shippingCost: shipping,
+          shippingCostCurrency,
           otherCost: other,
+          otherCostCurrency,
           otherCostNote: otherCostNote || undefined,
           note: note || undefined,
           expectedAt: expectedAt || undefined,
@@ -3147,6 +3217,22 @@ export function PurchaseOrderList({
                         }`}
                         onClick={() => {
                           setPurchaseCurrency(c);
+                          setShippingCostCurrency((prev) =>
+                            syncPurchaseLinkedCurrency({
+                              nextPurchaseCurrency: c,
+                              previousPurchaseCurrency: purchaseCurrency,
+                              currentCurrency: prev,
+                              storeCurrency,
+                            }),
+                          );
+                          setOtherCostCurrency((prev) =>
+                            syncPurchaseLinkedCurrency({
+                              nextPurchaseCurrency: c,
+                              previousPurchaseCurrency: purchaseCurrency,
+                              currentCurrency: prev,
+                              storeCurrency,
+                            }),
+                          );
                           if (c === storeCurrency) {
                             setExchangeRate("");
                           }
@@ -3464,29 +3550,75 @@ export function PurchaseOrderList({
 	                <div className="grid grid-cols-2 gap-3">
 	                  <div className="space-y-2">
 	                    <label className="text-xs text-muted-foreground">
-	                      {t(uiLocale, "purchase.field.shippingCost.label")} ({currencySymbol(storeCurrency)})
+	                      {t(uiLocale, "purchase.field.shippingCost.label")}
 	                    </label>
-                    <input
-                      className={fieldClassName}
-                      type="number"
-                      inputMode="numeric"
-                      value={shippingCost}
-                      placeholder="0"
-                      onChange={(e) => setShippingCost(e.target.value)}
-                    />
+                    <div className="grid grid-cols-[1fr_auto] gap-2">
+                      <input
+                        className={fieldClassName}
+                        type="number"
+                        inputMode="numeric"
+                        value={shippingCost}
+                        placeholder="0"
+                        onChange={(e) => setShippingCost(e.target.value)}
+                      />
+                      <select
+                        className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-primary"
+                        value={shippingCostCurrency}
+                        onChange={(e) =>
+                          setShippingCostCurrency(e.target.value as PurchaseExtraCostCurrency)
+                        }
+                      >
+                        {getPurchaseExtraCostCurrencyOptions(
+                          purchaseCurrency,
+                          storeCurrency,
+                        ).map((currency) => (
+                          <option key={currency} value={currency}>
+                            {currency}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {shippingCostCurrency !== storeCurrency && Number(shippingCost) > 0 ? (
+                      <p className="text-[11px] text-slate-500">
+                        ≈ {fmtPrice(shippingBase, storeCurrency, numberLocale)}
+                      </p>
+                    ) : null}
                   </div>
 	                  <div className="space-y-2">
 	                    <label className="text-xs text-muted-foreground">
-	                      {t(uiLocale, "purchase.field.otherCost.label")} ({currencySymbol(storeCurrency)})
+	                      {t(uiLocale, "purchase.field.otherCost.label")}
 	                    </label>
-                    <input
-                      className={fieldClassName}
-                      type="number"
-                      inputMode="numeric"
-                      value={otherCost}
-                      placeholder="0"
-                      onChange={(e) => setOtherCost(e.target.value)}
-                    />
+                    <div className="grid grid-cols-[1fr_auto] gap-2">
+                      <input
+                        className={fieldClassName}
+                        type="number"
+                        inputMode="numeric"
+                        value={otherCost}
+                        placeholder="0"
+                        onChange={(e) => setOtherCost(e.target.value)}
+                      />
+                      <select
+                        className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-primary"
+                        value={otherCostCurrency}
+                        onChange={(e) =>
+                          setOtherCostCurrency(e.target.value as PurchaseExtraCostCurrency)
+                        }
+                      >
+                        {getPurchaseExtraCostCurrencyOptions(
+                          purchaseCurrency,
+                          storeCurrency,
+                        ).map((currency) => (
+                          <option key={currency} value={currency}>
+                            {currency}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {otherCostCurrency !== storeCurrency && Number(otherCost) > 0 ? (
+                      <p className="text-[11px] text-slate-500">
+                        ≈ {fmtPrice(otherBase, storeCurrency, numberLocale)}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
 	                {Number(otherCost) > 0 && (
@@ -3897,7 +4029,11 @@ function PODetailSheet({
   const [isApplyExtraCostMode, setIsApplyExtraCostMode] = useState(false);
   const [isApplyingExtraCost, setIsApplyingExtraCost] = useState(false);
   const [extraCostShippingInput, setExtraCostShippingInput] = useState("");
+  const [extraCostShippingCurrency, setExtraCostShippingCurrency] =
+    useState<PurchaseExtraCostCurrency>(storeCurrency);
   const [extraCostOtherInput, setExtraCostOtherInput] = useState("");
+  const [extraCostOtherCurrency, setExtraCostOtherCurrency] =
+    useState<PurchaseExtraCostCurrency>(storeCurrency);
   const [extraCostOtherNoteInput, setExtraCostOtherNoteInput] = useState("");
   const [reversingPaymentId, setReversingPaymentId] = useState<string | null>(null);
   const [settleAmountInput, setSettleAmountInput] = useState("");
@@ -3910,7 +4046,9 @@ function PODetailSheet({
     purchaseCurrency: storeCurrency,
     exchangeRate: "1",
     shippingCost: "0",
+    shippingCostCurrency: storeCurrency as PurchaseExtraCostCurrency,
     otherCost: "0",
+    otherCostCurrency: storeCurrency as PurchaseExtraCostCurrency,
     otherCostNote: "",
     note: "",
     expectedAt: "",
@@ -3983,7 +4121,9 @@ function PODetailSheet({
       setSettleReferenceInput("");
       setSettleNoteInput("");
       setExtraCostShippingInput("");
+      setExtraCostShippingCurrency(storeCurrency);
       setExtraCostOtherInput("");
+      setExtraCostOtherCurrency(storeCurrency);
       setExtraCostOtherNoteInput("");
       setReversingPaymentId(null);
       return;
@@ -4028,7 +4168,7 @@ function PODetailSheet({
     return () => {
       cancelled = true;
     };
-	  }, [getCachedPoDetail, loadPoDetail, poId, uiLocale]);
+	  }, [getCachedPoDetail, loadPoDetail, poId, storeCurrency, uiLocale]);
 
   const poPurchaseCurrency = useMemo(
     () => parseStoreCurrency(po?.purchaseCurrency, storeCurrency),
@@ -4218,8 +4358,10 @@ function PODetailSheet({
 
   const startApplyExtraCost = useCallback(() => {
     if (!po) return;
-    setExtraCostShippingInput(String(Math.max(0, po.shippingCost)));
-    setExtraCostOtherInput(String(Math.max(0, po.otherCost)));
+    setExtraCostShippingInput(String(Math.max(0, po.shippingCostOriginal)));
+    setExtraCostShippingCurrency(po.shippingCostCurrency);
+    setExtraCostOtherInput(String(Math.max(0, po.otherCostOriginal)));
+    setExtraCostOtherCurrency(po.otherCostCurrency);
     setExtraCostOtherNoteInput(po.otherCostNote ?? "");
     setIsApplyExtraCostMode(true);
   }, [po]);
@@ -4250,7 +4392,9 @@ function PODetailSheet({
           },
           body: JSON.stringify({
             shippingCost,
+            shippingCostCurrency: extraCostShippingCurrency,
             otherCost,
+            otherCostCurrency: extraCostOtherCurrency,
             otherCostNote: extraCostOtherNoteInput || undefined,
           }),
         },
@@ -4280,8 +4424,10 @@ function PODetailSheet({
 	    }
 	  }, [
 	    extraCostOtherInput,
+	    extraCostOtherCurrency,
 	    extraCostOtherNoteInput,
 	    extraCostShippingInput,
+	    extraCostShippingCurrency,
 	    onCacheUpdate,
 	    onRefreshList,
 	    po,
@@ -4347,12 +4493,32 @@ function PODetailSheet({
     0,
     Math.round(Number(extraCostShippingInput) || 0),
   );
+  const extraCostShippingBasePreview =
+    po
+      ? resolvePurchaseExtraCostBasePreview({
+          amountInput: extraCostShippingInput,
+          currency: extraCostShippingCurrency,
+          purchaseCurrency: poPurchaseCurrency,
+          storeCurrency,
+          exchangeRateInput: String(po.exchangeRate),
+        })
+      : 0;
   const extraCostOtherPreview = Math.max(
     0,
     Math.round(Number(extraCostOtherInput) || 0),
   );
+  const extraCostOtherBasePreview =
+    po
+      ? resolvePurchaseExtraCostBasePreview({
+          amountInput: extraCostOtherInput,
+          currency: extraCostOtherCurrency,
+          purchaseCurrency: poPurchaseCurrency,
+          storeCurrency,
+          exchangeRateInput: String(po.exchangeRate),
+        })
+      : 0;
   const extraCostGrandTotalPreview = po
-    ? po.totalCostBase + extraCostShippingPreview + extraCostOtherPreview
+    ? po.totalCostBase + extraCostShippingBasePreview + extraCostOtherBasePreview
     : 0;
   const extraCostOutstandingPreview = po
     ? extraCostGrandTotalPreview - po.totalPaidBase
@@ -4366,8 +4532,10 @@ function PODetailSheet({
       supplierContact: po.supplierContact ?? "",
       purchaseCurrency: (po.purchaseCurrency as StoreCurrency) ?? storeCurrency,
       exchangeRate: String(po.exchangeRate ?? 1),
-      shippingCost: String(po.shippingCost ?? 0),
-      otherCost: String(po.otherCost ?? 0),
+      shippingCost: String(po.shippingCostOriginal ?? 0),
+      shippingCostCurrency: po.shippingCostCurrency,
+      otherCost: String(po.otherCostOriginal ?? 0),
+      otherCostCurrency: po.otherCostCurrency,
       otherCostNote: po.otherCostNote ?? "",
       note: po.note ?? "",
       expectedAt: po.expectedAt ? po.expectedAt.slice(0, 10) : "",
@@ -4416,7 +4584,9 @@ function PODetailSheet({
                   ? editRateValue
                   : undefined,
             shippingCost: Number(editForm.shippingCost) || 0,
+            shippingCostCurrency: editForm.shippingCostCurrency,
             otherCost: Number(editForm.otherCost) || 0,
+            otherCostCurrency: editForm.otherCostCurrency,
             otherCostNote: editForm.otherCostNote || undefined,
             note: editForm.note || undefined,
             expectedAt: editForm.expectedAt || undefined,
@@ -4597,7 +4767,11 @@ function PODetailSheet({
                           supplierContact: po.supplierContact,
                           purchaseCurrency: po.purchaseCurrency,
                           exchangeRate: po.exchangeRate,
+                          shippingCostOriginal: po.shippingCostOriginal,
+                          shippingCostCurrency: po.shippingCostCurrency,
                           shippingCost: po.shippingCost,
+                          otherCostOriginal: po.otherCostOriginal,
+                          otherCostCurrency: po.otherCostCurrency,
                           otherCost: po.otherCost,
                           otherCostNote: po.otherCostNote,
                           note: po.note,
@@ -4656,7 +4830,11 @@ function PODetailSheet({
                             supplierContact: po.supplierContact,
                             purchaseCurrency: po.purchaseCurrency,
                             exchangeRate: po.exchangeRate,
+                            shippingCostOriginal: po.shippingCostOriginal,
+                            shippingCostCurrency: po.shippingCostCurrency,
                             shippingCost: po.shippingCost,
+                            otherCostOriginal: po.otherCostOriginal,
+                            otherCostCurrency: po.otherCostCurrency,
                             otherCost: po.otherCost,
                             otherCostNote: po.otherCostNote,
                             note: po.note,
@@ -4935,27 +5113,79 @@ function PODetailSheet({
 	                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
 	                    <div className="space-y-1">
 	                      <label className="text-[11px] text-sky-700">
-	                        {t(uiLocale, "purchase.field.shippingCost.label")} ({storeCurrency})
+	                        {t(uiLocale, "purchase.field.shippingCost.label")}
 	                      </label>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        className="h-9 w-full rounded-lg border border-sky-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-sky-300"
-                        value={extraCostShippingInput}
-                        onChange={(event) => setExtraCostShippingInput(event.target.value)}
-                      />
+                      <div className="grid grid-cols-[1fr_auto] gap-2">
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          className="h-9 w-full rounded-lg border border-sky-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-sky-300"
+                          value={extraCostShippingInput}
+                          onChange={(event) => setExtraCostShippingInput(event.target.value)}
+                        />
+                        <select
+                          className="h-9 rounded-lg border border-sky-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-sky-300"
+                          value={extraCostShippingCurrency}
+                          onChange={(event) =>
+                            setExtraCostShippingCurrency(
+                              event.target.value as PurchaseExtraCostCurrency,
+                            )
+                          }
+                        >
+                          {getPurchaseExtraCostCurrencyOptions(
+                            poPurchaseCurrency,
+                            storeCurrency,
+                          ).map((currency) => (
+                            <option key={currency} value={currency}>
+                              {currency}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {extraCostShippingCurrency !== storeCurrency &&
+                      extraCostShippingPreview > 0 ? (
+                        <p className="text-[10px] text-sky-700/90">
+                          ≈ {fmtPrice(extraCostShippingBasePreview, storeCurrency, numberLocale)}
+                        </p>
+                      ) : null}
                     </div>
 	                    <div className="space-y-1">
 	                      <label className="text-[11px] text-sky-700">
-	                        {t(uiLocale, "purchase.field.otherCost.label")} ({storeCurrency})
+	                        {t(uiLocale, "purchase.field.otherCost.label")}
 	                      </label>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        className="h-9 w-full rounded-lg border border-sky-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-sky-300"
-                        value={extraCostOtherInput}
-                        onChange={(event) => setExtraCostOtherInput(event.target.value)}
-                      />
+                      <div className="grid grid-cols-[1fr_auto] gap-2">
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          className="h-9 w-full rounded-lg border border-sky-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-sky-300"
+                          value={extraCostOtherInput}
+                          onChange={(event) => setExtraCostOtherInput(event.target.value)}
+                        />
+                        <select
+                          className="h-9 rounded-lg border border-sky-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-sky-300"
+                          value={extraCostOtherCurrency}
+                          onChange={(event) =>
+                            setExtraCostOtherCurrency(
+                              event.target.value as PurchaseExtraCostCurrency,
+                            )
+                          }
+                        >
+                          {getPurchaseExtraCostCurrencyOptions(
+                            poPurchaseCurrency,
+                            storeCurrency,
+                          ).map((currency) => (
+                            <option key={currency} value={currency}>
+                              {currency}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {extraCostOtherCurrency !== storeCurrency &&
+                      extraCostOtherPreview > 0 ? (
+                        <p className="text-[10px] text-sky-700/90">
+                          ≈ {fmtPrice(extraCostOtherBasePreview, storeCurrency, numberLocale)}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
 	                  <div className="space-y-1">
@@ -5139,6 +5369,18 @@ function PODetailSheet({
                               setEditForm((prev) => ({
                                 ...prev,
                                 purchaseCurrency: e.target.value as StoreCurrency,
+                                shippingCostCurrency: syncPurchaseLinkedCurrency({
+                                  nextPurchaseCurrency: e.target.value as StoreCurrency,
+                                  previousPurchaseCurrency: prev.purchaseCurrency,
+                                  currentCurrency: prev.shippingCostCurrency,
+                                  storeCurrency,
+                                }),
+                                otherCostCurrency: syncPurchaseLinkedCurrency({
+                                  nextPurchaseCurrency: e.target.value as StoreCurrency,
+                                  previousPurchaseCurrency: prev.purchaseCurrency,
+                                  currentCurrency: prev.otherCostCurrency,
+                                  storeCurrency,
+                                }),
                               }))
                             }
                           >
@@ -5175,33 +5417,111 @@ function PODetailSheet({
 	                          <label className="text-[11px] text-slate-500">
 	                            {t(uiLocale, "purchase.field.shippingCost.label")}
 	                          </label>
-                          <input
-                            type="number"
-                            className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
-                            value={editForm.shippingCost}
-                            onChange={(e) =>
-                              setEditForm((prev) => ({
-                                ...prev,
-                                shippingCost: e.target.value,
-                              }))
-                            }
-                          />
+                          <div className="grid grid-cols-[1fr_auto] gap-2">
+                            <input
+                              type="number"
+                              className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
+                              value={editForm.shippingCost}
+                              onChange={(e) =>
+                                setEditForm((prev) => ({
+                                  ...prev,
+                                  shippingCost: e.target.value,
+                                }))
+                              }
+                            />
+                            <select
+                              className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
+                              value={editForm.shippingCostCurrency}
+                              onChange={(e) =>
+                                setEditForm((prev) => ({
+                                  ...prev,
+                                  shippingCostCurrency:
+                                    e.target.value as PurchaseExtraCostCurrency,
+                                }))
+                              }
+                            >
+                              {getPurchaseExtraCostCurrencyOptions(
+                                editForm.purchaseCurrency,
+                                storeCurrency,
+                              ).map((currency) => (
+                                <option key={currency} value={currency}>
+                                  {currency}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          {editForm.shippingCostCurrency !== storeCurrency &&
+                          Number(editForm.shippingCost) > 0 ? (
+                            <p className="text-[10px] text-slate-500">
+                              ≈{" "}
+                              {fmtPrice(
+                                resolvePurchaseExtraCostBasePreview({
+                                  amountInput: editForm.shippingCost,
+                                  currency: editForm.shippingCostCurrency,
+                                  purchaseCurrency: editForm.purchaseCurrency,
+                                  storeCurrency,
+                                  exchangeRateInput: editForm.exchangeRate,
+                                }),
+                                storeCurrency,
+                                numberLocale,
+                              )}
+                            </p>
+                          ) : null}
                         </div>
 	                        <div className="space-y-1">
 	                          <label className="text-[11px] text-slate-500">
 	                            {t(uiLocale, "purchase.field.otherCost.label")}
 	                          </label>
-                          <input
-                            type="number"
-                            className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
-                            value={editForm.otherCost}
-                            onChange={(e) =>
-                              setEditForm((prev) => ({
-                                ...prev,
-                                otherCost: e.target.value,
-                              }))
-                            }
-                          />
+                          <div className="grid grid-cols-[1fr_auto] gap-2">
+                            <input
+                              type="number"
+                              className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
+                              value={editForm.otherCost}
+                              onChange={(e) =>
+                                setEditForm((prev) => ({
+                                  ...prev,
+                                  otherCost: e.target.value,
+                                }))
+                              }
+                            />
+                            <select
+                              className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
+                              value={editForm.otherCostCurrency}
+                              onChange={(e) =>
+                                setEditForm((prev) => ({
+                                  ...prev,
+                                  otherCostCurrency:
+                                    e.target.value as PurchaseExtraCostCurrency,
+                                }))
+                              }
+                            >
+                              {getPurchaseExtraCostCurrencyOptions(
+                                editForm.purchaseCurrency,
+                                storeCurrency,
+                              ).map((currency) => (
+                                <option key={currency} value={currency}>
+                                  {currency}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          {editForm.otherCostCurrency !== storeCurrency &&
+                          Number(editForm.otherCost) > 0 ? (
+                            <p className="text-[10px] text-slate-500">
+                              ≈{" "}
+                              {fmtPrice(
+                                resolvePurchaseExtraCostBasePreview({
+                                  amountInput: editForm.otherCost,
+                                  currency: editForm.otherCostCurrency,
+                                  purchaseCurrency: editForm.purchaseCurrency,
+                                  storeCurrency,
+                                  exchangeRateInput: editForm.exchangeRate,
+                                }),
+                                storeCurrency,
+                                numberLocale,
+                              )}
+                            </p>
+                          ) : null}
                         </div>
                       </div>
 
@@ -5683,7 +6003,21 @@ function PODetailSheet({
 	                    <span className="text-slate-600">
 	                      {t(uiLocale, "purchase.summary.shipping")}
 	                    </span>
-	                    <span>{fmtPrice(po.shippingCost, storeCurrency, numberLocale)}</span>
+                      <CurrencyAmountStack
+                        primaryAmount={
+                          po.shippingCostCurrency === storeCurrency
+                            ? po.shippingCost
+                            : po.shippingCostOriginal
+                        }
+                        primaryCurrency={po.shippingCostCurrency}
+                        secondaryAmount={
+                          po.shippingCostCurrency === storeCurrency ? null : po.shippingCost
+                        }
+                        secondaryCurrency={
+                          po.shippingCostCurrency === storeCurrency ? null : storeCurrency
+                        }
+                        numberLocale={numberLocale}
+                      />
 	                  </div>
 	                )}
 	                {po.otherCost > 0 && (
@@ -5691,7 +6025,21 @@ function PODetailSheet({
 	                    <span className="text-slate-600">
 	                      {t(uiLocale, "purchase.summary.other")}
 	                    </span>
-	                    <span>{fmtPrice(po.otherCost, storeCurrency, numberLocale)}</span>
+                      <CurrencyAmountStack
+                        primaryAmount={
+                          po.otherCostCurrency === storeCurrency
+                            ? po.otherCost
+                            : po.otherCostOriginal
+                        }
+                        primaryCurrency={po.otherCostCurrency}
+                        secondaryAmount={
+                          po.otherCostCurrency === storeCurrency ? null : po.otherCost
+                        }
+                        secondaryCurrency={
+                          po.otherCostCurrency === storeCurrency ? null : storeCurrency
+                        }
+                        numberLocale={numberLocale}
+                      />
 	                  </div>
 	                )}
 	                <div className="flex justify-between border-t border-slate-200 pt-1 font-semibold">

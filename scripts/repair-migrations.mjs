@@ -1041,7 +1041,11 @@ async function ensureSchemaCompatForLatestAuthChanges() {
       \`payment_reference\` text,
       \`payment_note\` text,
       \`due_date\` text,
+      \`shipping_cost_original\` integer not null default 0,
+      \`shipping_cost_currency\` text not null default 'LAK',
       \`shipping_cost\` integer not null default 0,
+      \`other_cost_original\` integer not null default 0,
+      \`other_cost_currency\` text not null default 'LAK',
       \`other_cost\` integer not null default 0,
       \`other_cost_note\` text,
       \`status\` text not null default 'DRAFT',
@@ -1149,6 +1153,34 @@ async function ensureSchemaCompatForLatestAuthChanges() {
     console.info("[db:repair] added column purchase_orders.due_date");
   }
 
+  if (!(await columnExists("purchase_orders", "shipping_cost_original"))) {
+    await client.execute(
+      "alter table `purchase_orders` add `shipping_cost_original` integer not null default 0",
+    );
+    console.info("[db:repair] added column purchase_orders.shipping_cost_original");
+  }
+
+  if (!(await columnExists("purchase_orders", "shipping_cost_currency"))) {
+    await client.execute(
+      "alter table `purchase_orders` add `shipping_cost_currency` text not null default 'LAK'",
+    );
+    console.info("[db:repair] added column purchase_orders.shipping_cost_currency");
+  }
+
+  if (!(await columnExists("purchase_orders", "other_cost_original"))) {
+    await client.execute(
+      "alter table `purchase_orders` add `other_cost_original` integer not null default 0",
+    );
+    console.info("[db:repair] added column purchase_orders.other_cost_original");
+  }
+
+  if (!(await columnExists("purchase_orders", "other_cost_currency"))) {
+    await client.execute(
+      "alter table `purchase_orders` add `other_cost_currency` text not null default 'LAK'",
+    );
+    console.info("[db:repair] added column purchase_orders.other_cost_currency");
+  }
+
   await client.execute(`
     update \`purchase_orders\`
     set \`updated_at\` = coalesce(\`updated_at\`, \`created_at\`, CURRENT_TIMESTAMP)
@@ -1170,6 +1202,44 @@ async function ensureSchemaCompatForLatestAuthChanges() {
     where \`exchange_rate_initial\` is null or \`exchange_rate_initial\` <= 0
   `);
   console.info("[db:repair] normalized purchase_orders.exchange_rate_initial");
+
+  await client.execute(`
+    update \`purchase_orders\`
+    set \`shipping_cost_original\` = coalesce(\`shipping_cost\`, 0),
+        \`other_cost_original\` = coalesce(\`other_cost\`, 0)
+  `);
+  console.info("[db:repair] backfilled purchase_orders.*_cost_original from base cost");
+
+  await client.execute(`
+    update \`purchase_orders\`
+    set \`shipping_cost_currency\` = case
+      when \`store_id\` in (select \`id\` from \`stores\`) then (
+        select
+          case
+            when \`stores\`.\`currency\` in ('LAK', 'THB', 'USD') then \`stores\`.\`currency\`
+            else 'LAK'
+          end
+        from \`stores\`
+        where \`stores\`.\`id\` = \`purchase_orders\`.\`store_id\`
+        limit 1
+      )
+      else 'LAK'
+    end,
+    \`other_cost_currency\` = case
+      when \`store_id\` in (select \`id\` from \`stores\`) then (
+        select
+          case
+            when \`stores\`.\`currency\` in ('LAK', 'THB', 'USD') then \`stores\`.\`currency\`
+            else 'LAK'
+          end
+        from \`stores\`
+        where \`stores\`.\`id\` = \`purchase_orders\`.\`store_id\`
+        limit 1
+      )
+      else 'LAK'
+    end
+  `);
+  console.info("[db:repair] normalized purchase_orders.*_cost_currency from store currency");
 
   await client.execute(`
     update \`purchase_orders\`

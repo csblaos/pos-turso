@@ -2,6 +2,24 @@
 
 ไฟล์นี้บันทึก "ทำไม" ของการออกแบบสำคัญ เพื่อให้ AI/คนทำงานต่อไม่เดาเอง
 
+## ADR-033: Extra Cost ของ PO รองรับเฉพาะสกุลร้านหรือสกุลซื้อของ PO และเก็บยอดต้นฉบับแยกจากยอดฐานร้าน
+
+- Date: March 24, 2026
+- Status: Accepted
+- Decision:
+  - เพิ่ม `purchase_orders.shipping_cost_original`, `shipping_cost_currency`, `other_cost_original`, `other_cost_currency`
+  - คง `shipping_cost` และ `other_cost` เดิมไว้เป็นยอดฐานร้าน (`store currency`) สำหรับคำนวณ landed cost, AP, outstanding, payment flow
+  - UI ของ create/edit/apply-extra-cost อนุญาตให้เลือกสกุล extra cost ได้แค่ `store currency` หรือ `purchase currency`
+  - ถ้า extra cost ใช้ `purchase currency` ระบบจะคำนวณฐานร้านตาม `exchangeRate` ปัจจุบัน และ recalc ใหม่ตอน `finalize-rate`
+- Reason:
+  - งานจริงมีเคสค่าขนส่ง/ค่าอื่นเป็นคนละสกุลกับยอดสินค้า แต่ส่วนใหญ่ผูกอยู่กับสกุลซื้อหรือสกุลร้าน ไม่ได้มีสกุลที่สามบ่อยพอจะคุ้มกับ complexity
+  - การแยก `ยอดต้นฉบับ` ออกจาก `ยอดฐานร้าน` ช่วยให้ UI/PDF อธิบายตัวเลขได้ตรงกับเอกสารจริง โดยยังรักษา logic ต้นทุน/AP เดิมที่ต้องใช้ฐานร้าน
+  - จำกัด choice เหลือ 2 สกุลช่วย reuse month-end/finalize-rate flow เดิมได้ โดยไม่ต้องแตก exchange-rate lifecycle หลายชุด
+- Consequence:
+  - PO detail/PDF ต้องแสดงยอดต้นฉบับคู่กับยอดฐานร้านเมื่อ extra cost ไม่ได้ใช้สกุลร้าน
+  - `db:repair` ต้อง backfill PO เก่าให้ `*_cost_original = *_cost` และ `*_cost_currency = store currency`
+  - ถ้าอนาคตต้องรองรับสกุลที่สามของ extra cost ต้องเพิ่ม rate lifecycle แยกจาก `purchaseCurrency`
+
 ## ADR-032: ฝั่ง PO เก็บหน่วยซื้อเป็น Snapshot แต่ใช้จำนวนฐานเป็น Source of Truth สำหรับสต็อกและต้นทุน
 
 - Date: March 23, 2026

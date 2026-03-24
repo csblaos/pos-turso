@@ -971,7 +971,19 @@ export const purchaseOrders = sqliteTable(
     paymentReference: text("payment_reference"),
     paymentNote: text("payment_note"),
     dueDate: text("due_date"),
+    shippingCostOriginal: integer("shipping_cost_original").notNull().default(0),
+    shippingCostCurrency: text("shipping_cost_currency", {
+      enum: storeCurrencyEnum,
+    })
+      .notNull()
+      .default("LAK"),
     shippingCost: integer("shipping_cost").notNull().default(0),
+    otherCostOriginal: integer("other_cost_original").notNull().default(0),
+    otherCostCurrency: text("other_cost_currency", {
+      enum: storeCurrencyEnum,
+    })
+      .notNull()
+      .default("LAK"),
     otherCost: integer("other_cost").notNull().default(0),
     otherCostNote: text("other_cost_note"),
     status: text("status", { enum: purchaseOrderStatusEnum })

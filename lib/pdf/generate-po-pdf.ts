@@ -8,7 +8,11 @@ export type POPdfData = {
   supplierContact: string | null;
   purchaseCurrency: string;
   exchangeRate: number;
+  shippingCostOriginal: number;
+  shippingCostCurrency: StoreCurrency;
   shippingCost: number;
+  otherCostOriginal: number;
+  otherCostCurrency: StoreCurrency;
   otherCost: number;
   otherCostNote: string | null;
   note: string | null;
@@ -501,12 +505,21 @@ export async function generatePoPdf(
     summaryLines.push([`${L.subtotal} (${storeCurrency})`, fmtMoney(po.totalCostBase, storeCurrency)]);
   }
   if (po.shippingCost > 0) {
-    summaryLines.push([L.shipping, fmtMoney(po.shippingCost, storeCurrency)]);
+    summaryLines.push([
+      po.shippingCostCurrency === storeCurrency
+        ? L.shipping
+        : `${L.shipping} (${po.shippingCostCurrency})`,
+      po.shippingCostCurrency === storeCurrency
+        ? fmtMoney(po.shippingCost, storeCurrency)
+        : `${fmtMoney(po.shippingCostOriginal, po.shippingCostCurrency)} ≈ ${fmtMoney(po.shippingCost, storeCurrency)}`,
+    ]);
   }
   if (po.otherCost > 0) {
     summaryLines.push([
-      `${L.otherCost}${po.otherCostNote ? ` (${po.otherCostNote})` : ""}`,
-      fmtMoney(po.otherCost, storeCurrency),
+      `${L.otherCost}${po.otherCostNote ? ` (${po.otherCostNote})` : ""}${po.otherCostCurrency !== storeCurrency ? ` (${po.otherCostCurrency})` : ""}`,
+      po.otherCostCurrency === storeCurrency
+        ? fmtMoney(po.otherCost, storeCurrency)
+        : `${fmtMoney(po.otherCostOriginal, po.otherCostCurrency)} ≈ ${fmtMoney(po.otherCost, storeCurrency)}`,
     ]);
   }
 

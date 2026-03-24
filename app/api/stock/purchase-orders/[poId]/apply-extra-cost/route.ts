@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
 
 import { applyPurchaseOrderExtraCostSchema } from "@/lib/purchases/validation";
 import { enforcePermission, toRBACErrorResponse } from "@/lib/rbac/access";
+import { db } from "@/lib/db/client";
+import { stores } from "@/lib/db/schema";
 import { safeLogAuditEvent } from "@/server/services/audit.service";
 import {
   claimIdempotency,
@@ -140,10 +143,17 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ message: firstError }, { status: 400 });
     }
 
+    const [storeRow] = await db
+      .select({ currency: stores.currency })
+      .from(stores)
+      .where(eq(stores.id, storeId))
+      .limit(1);
+
     const po = await applyPurchaseOrderExtraCostFlow({
       poId,
       storeId,
       userId: session.userId,
+      storeCurrency: storeRow?.currency ?? "LAK",
       payload: parsed.data,
       audit: {
         actorName: session.displayName,

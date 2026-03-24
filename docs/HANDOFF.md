@@ -31,6 +31,13 @@
   - ย่อ label หลักเป็น `ສະຕັອກ / ສັ່ງຊື້ / ບັນທຶກ / ປະຫວັດ`
   - `components/app/stock-tabs.tsx` เพิ่ม `whitespace-nowrap` และซ่อน scrollbar UI ของ tab bar เพื่อให้คง single-line แล้วเลื่อนแนวนอนได้แทน
 
+- เพิ่ม PO extra cost currency แบบ pragmatic:
+  - `purchase_orders` เพิ่ม `shipping_cost_original`, `shipping_cost_currency`, `other_cost_original`, `other_cost_currency`
+  - UX ของ PO create/edit/apply-extra-cost ให้เลือกสกุลเงินของ `ค่าขนส่ง/ค่าอื่น` ได้ระหว่าง `สกุลร้าน` กับ `สกุลซื้อของ PO`
+  - ระบบยังคงเก็บ `shippingCost/otherCost` เป็นยอดฐานร้านสำหรับคำนวณ landed cost / outstanding
+  - ตอน `ปิดเรท` จะ recalc ทั้งต้นทุนสินค้าและ extra cost ที่ใช้สกุลซื้อของ PO ใหม่พร้อมกัน
+  - `db:repair` backfill PO เดิมให้ `*_cost_original = *_cost` และ `*_cost_currency = store currency`
+
 - ปรับ POS quick add ให้เลือกหน่วยขายก่อนถ้าสินค้ามีหลายแพ็ก:
   - `components/app/orders-management.tsx` เปลี่ยน flow กดสินค้า/สแกน/ค้นหาเองใน `/orders/new` จากการ add `units[0]` ทันที เป็นเปิด `SlideUpSheet` เลือกหน่วยขายก่อนเมื่อสินค้ามีหลายหน่วยที่ขายได้ เช่น `1 / 100 / 1000`
   - quantity cap ใน create order ปรับให้คำนวณตาม `multiplierToBase` ของหน่วยที่เลือกแล้ว ทั้งตอนเพิ่มสินค้า, เปลี่ยนหน่วยใน cart, และ restore draft เดิม เพื่อกันขายแพ็กเกินสต็อกฐาน

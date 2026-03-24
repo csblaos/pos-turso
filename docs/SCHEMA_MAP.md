@@ -4,8 +4,8 @@
 
 ## Migration Status
 
-- journal entries: `42`
-- latest migration tag: `0041_purchase_order_units`
+- journal entries: `43`
+- latest migration tag: `0042_purchase_extra_cost_currency`
 - latest focus:
   - เพิ่ม operational cash flow foundation:
     - ตาราง `financial_accounts`
@@ -51,6 +51,11 @@
     - `purchase_order_items.multiplier_to_base`
     - `purchase_order_items.qty_base_ordered`
     - `purchase_order_items.qty_base_received`
+  - เพิ่ม extra cost currency ของ PO:
+    - `purchase_orders.shipping_cost_original`
+    - `purchase_orders.shipping_cost_currency`
+    - `purchase_orders.other_cost_original`
+    - `purchase_orders.other_cost_currency`
 
 ## Table Inventory (High-level)
 
@@ -129,6 +134,9 @@
 - `purchase_order_items.unit_id` = หน่วยซื้อที่เลือกตอนสร้าง PO
 - `purchase_order_items.multiplier_to_base` = snapshot ตัวคูณของหน่วยซื้อเทียบหน่วยสต็อก
 - `purchase_order_items.qty_base_ordered` / `qty_base_received` = จำนวนฐานเป็นหน่วยสต็อก ใช้สำหรับรับของและคำนวณต้นทุนจริง
+- `purchase_orders.shipping_cost_original` / `other_cost_original` = ยอดต้นฉบับตามสกุลที่กรอกในฟอร์ม PO
+- `purchase_orders.shipping_cost_currency` / `other_cost_currency` = สกุลเงินของ extra cost (จำกัดที่ `store currency` หรือ `purchase currency`)
+- `purchase_orders.shipping_cost` / `other_cost` = ยอดฐานร้าน (`store currency`) หลังแปลงเรท ใช้เป็น source of truth สำหรับ landed cost / AP / outstanding
 - `inventory_movements.store_id -> stores.id`
 - `inventory_movements.product_id -> products.id`
 
