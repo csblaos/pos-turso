@@ -386,10 +386,17 @@ function switchPurchaseItemPriceInputMode(
   nextMode: "UNIT" | "TOTAL",
 ): DraftPurchaseItem {
   if (item.priceInputMode === nextMode) return item;
+  const hasAnyPriceInput =
+    item.unitCostPurchase.trim().length > 0 || item.lineTotalPurchase.trim().length > 0;
+  const resolvedUnitCost = getPurchaseItemResolvedUnitCost(item);
+  const resolvedLineTotal = getPurchaseItemResolvedLineTotal(item);
   return {
     ...item,
     priceInputMode: nextMode,
-    lineTotalPurchase: String(getPurchaseItemResolvedLineTotal(item)),
+    unitCostPurchase:
+      hasAnyPriceInput && resolvedUnitCost > 0 ? String(resolvedUnitCost) : "",
+    lineTotalPurchase:
+      hasAnyPriceInput && resolvedLineTotal > 0 ? String(resolvedLineTotal) : "",
   };
 }
 
@@ -3444,8 +3451,8 @@ export function PurchaseOrderList({
                             </div>
                           </div>
                           <div className="grid grid-cols-2 gap-2">
-	                          <div>
-	                            <label className="text-[11px] text-slate-500">
+	                          <div className="space-y-1">
+	                            <label className="flex min-h-[2rem] items-end text-[11px] text-slate-500">
 	                              {t(uiLocale, "purchase.field.qty")}
 	                            </label>
                             <input
@@ -3462,8 +3469,8 @@ export function PurchaseOrderList({
                               }
                             />
                           </div>
-	                          <div>
-	                            <label className="text-[11px] text-slate-500">
+	                          <div className="space-y-1">
+	                            <label className="flex min-h-[2rem] items-end text-[11px] text-slate-500">
 	                              {t(
                                   uiLocale,
                                   item.priceInputMode === "UNIT"
@@ -3490,7 +3497,7 @@ export function PurchaseOrderList({
                                   ),
                                 )
                               }
-                            />
+                              />
                           </div>
                         </div>
                         </div>
@@ -3866,7 +3873,7 @@ export function PurchaseOrderList({
                             productId: i.productId,
                             unitId: i.unitId,
                             qtyOrdered: Number(i.qtyOrdered) || 1,
-                            unitCostPurchase: Number(i.unitCostPurchase) || 0,
+                            unitCostPurchase: getPurchaseItemResolvedUnitCost(i),
                           })),
                         }),
                       });
@@ -5624,37 +5631,54 @@ function PODetailSheet({
                                 )}
                               </select>
                               <div className="grid grid-cols-2 gap-2">
-                              <input
-                                type="number"
-                                className="h-8 w-full rounded-md border border-slate-200 px-2 text-xs outline-none focus:ring-2 focus:ring-primary"
-                                value={item.qtyOrdered}
-                                onChange={(e) =>
-                                  setEditForm((prev) => ({
-                                    ...prev,
-                                    items: prev.items.map((x, i) =>
-                                      i === index
-                                        ? { ...x, qtyOrdered: e.target.value }
-                                        : x,
-                                    ),
-                                  }))
-                                }
-                              />
-                              <input
-                                type="number"
-                                className="h-8 w-full rounded-md border border-slate-200 px-2 text-xs outline-none focus:ring-2 focus:ring-primary"
-                                value={getPurchaseItemPriceInputValue(item)}
-                                onChange={(e) =>
-                                  setEditForm((prev) => ({
-                                    ...prev,
-                                    items: prev.items.map((x, i) =>
-                                      i === index
-                                        ? updatePurchaseItemPriceInput(x, e.target.value)
-                                        : x,
-                                    ),
-                                  }))
-                                }
-                              />
-                            </div>
+                                <div className="space-y-1">
+                                  <label className="flex min-h-[1.75rem] items-end text-[10px] text-slate-500">
+                                    {t(uiLocale, "purchase.field.qty")}
+                                  </label>
+                                  <input
+                                    type="number"
+                                    className="h-8 w-full rounded-md border border-slate-200 px-2 text-xs outline-none focus:ring-2 focus:ring-primary"
+                                    value={item.qtyOrdered}
+                                    onChange={(e) =>
+                                      setEditForm((prev) => ({
+                                        ...prev,
+                                        items: prev.items.map((x, i) =>
+                                          i === index
+                                            ? { ...x, qtyOrdered: e.target.value }
+                                            : x,
+                                        ),
+                                      }))
+                                    }
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="flex min-h-[1.75rem] items-end text-[10px] text-slate-500">
+                                    {t(
+                                      uiLocale,
+                                      item.priceInputMode === "UNIT"
+                                        ? "purchase.field.unitPrice.label"
+                                        : "purchase.field.lineTotal.label",
+                                    )}{" "}
+                                    ({currencySymbol(poPurchaseCurrency)})
+                                  </label>
+                                  <input
+                                    type="number"
+                                    className="h-8 w-full rounded-md border border-slate-200 px-2 text-xs outline-none focus:ring-2 focus:ring-primary"
+                                    value={getPurchaseItemPriceInputValue(item)}
+                                    placeholder="0"
+                                    onChange={(e) =>
+                                      setEditForm((prev) => ({
+                                        ...prev,
+                                        items: prev.items.map((x, i) =>
+                                          i === index
+                                            ? updatePurchaseItemPriceInput(x, e.target.value)
+                                            : x,
+                                        ),
+                                      }))
+                                    }
+                                  />
+                                </div>
+                              </div>
                             </div>
                             <p className="mt-1 text-[10px] text-slate-500">
                               {t(uiLocale, "purchase.field.baseQty")} ={" "}

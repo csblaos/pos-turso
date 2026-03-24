@@ -1395,3 +1395,6 @@ npm run build
 - PO detail modal เปลี่ยน behavior ของ action status update แล้ว: หลัง `ORDERED/SHIPPED/RECEIVED/CANCELLED` สำเร็จ จะไม่ปิด modal หลักอีก แต่จะคง sheet ไว้และอัปเดตข้อมูล PO เดิมต่อทันที
 - Product detail tab `ต้นทุน` แสดง `ต้นทุนจาก PO ล่าสุด` เป็นบรรทัดรองแล้ว โดยอิง audit `product.cost.auto_from_po`; ถ้า current cost ถูก manual override และต่างจาก PO cost ล่าสุด จะมีข้อความเตือนว่า override อยู่พร้อม delta
 - PO create/edit เพิ่มโหมดกรอกราคา `ต่อหน่วย / ยอดรวมรายการ` ต่อ item แล้ว; ใช้เพื่อรองรับเคสคัดลอกราคารวมจาก marketplace แต่ระบบยัง submit `unitCostPurchase` เดิมเข้า backend
+- PO create/edit ปรับ UX ของช่อง `ยอดรวมรายการ` แล้ว: ตอนสลับเข้า mode นี้จะไม่ auto ยัด `0` ค้างใน input ถ้ายังไม่มีราคาจริง และใน edit form ก็ใช้ placeholder `0` เหมือนช่อง `ราคาต่อหน่วย`
+- แก้ bug ของ create PO flow ที่ปุ่มสร้างแล้วเปลี่ยนสถานะต่อทันทีเคยส่ง `unitCostPurchase = 0` เมื่อผู้ใช้กรอกแบบ `ยอดรวมรายการ`; ตอนนี้ทุก create path ใช้ `getPurchaseItemResolvedUnitCost(...)` เหมือนกันแล้ว ทำให้ยอด PO และ settle payment ไม่เพี้ยนเป็น 0
+- PO item editor ใน create/edit ล็อก label row ของ `จำนวน` และ `ราคา` ให้สูงเท่ากันแล้ว พร้อมเพิ่ม label ชัดใน edit modal ด้วย เพื่อลดอาการ input ขยับตำแหน่งเมื่อสลับโหมดราคา
