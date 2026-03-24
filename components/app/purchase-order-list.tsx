@@ -495,7 +495,7 @@ function PurchaseDatePickerField({
     <div ref={containerRef} className="relative min-w-0">
       <button
         type="button"
-        className={triggerClassName}
+        className={`${triggerClassName} inline-flex min-w-0 items-center justify-between gap-2`}
         aria-label={ariaLabel}
         onClick={() => {
           if (disabled) return;
@@ -4373,7 +4373,7 @@ function PODetailSheet({
                     const Icon = cfg?.icon ?? FileText;
                     return (
                       <span
-                        className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${cfg?.badgeClass ?? "bg-slate-100 text-slate-600"}`}
+                        className={`inline-flex shrink-0 self-start items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${cfg?.badgeClass ?? "bg-slate-100 text-slate-600"}`}
                       >
                         <Icon className="h-3.5 w-3.5" />
                         {cfg?.label ?? po.status}
@@ -4744,11 +4744,12 @@ function PODetailSheet({
 	                    <label className="text-[11px] text-emerald-700">
 	                      {t(uiLocale, "purchase.detail.settle.field.paidAt.label")}
 	                    </label>
-                    <input
-                      type="date"
-                      className="po-date-input h-9 w-full rounded-lg border border-emerald-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-300"
+                    <PurchaseDatePickerField
+                      uiLocale={uiLocale}
                       value={settlePaidAtInput}
-                      onChange={(event) => setSettlePaidAtInput(event.target.value)}
+                      onChange={setSettlePaidAtInput}
+                      triggerClassName="h-9 w-full rounded-lg border border-emerald-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-300"
+                      ariaLabel={t(uiLocale, "purchase.detail.settle.field.paidAt.label")}
                     />
                   </div>
 	                  <div className="space-y-1">

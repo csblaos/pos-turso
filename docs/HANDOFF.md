@@ -12,6 +12,8 @@
   - [generate-po-pdf.ts](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/lib/pdf/generate-po-pdf.ts) กับ mapping ใน [purchase-order-list.tsx](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/components/app/purchase-order-list.tsx) ปรับแล้วให้ตารางสินค้าใน PDF ใช้ `unitCostPurchase` และ line total ตาม `purchaseCurrency` แทนการพิมพ์ `₭` ทุกแถว
   - รอบล่าสุดปรับ `PO detail modal` ฝั่ง mobile เพิ่ม: badge สถานะ (`ຮັບແລ້ວ`) ถูกบังคับให้อยู่บรรทัดเดียว และ action ด้านบน modal เปลี่ยนเป็นปุ่มเต็มความกว้างเรียงลงมาในมือถือ เพื่อกัน `ປິດເຣດ` ล้นจอ; บน `sm+` ยังกลับไปเป็นปุ่มแนวนอนแบบเดิม
   - เพิ่ม i18n ให้ workspace labels ฝั่ง purchase แล้ว: `PO Operations / Month-End Close / AP by Supplier` ถูกแปลเป็น `งานสั่งซื้อ / ปิดรอบปลายเดือน / เจ้าหนี้ตามซัพพลายเออร์` (ไทย) และ `ວຽກສັ່ງຊື້ / ປິດຮອບປາຍເດືອນ / ໜີ້ຄ້າງຈ່າຍຕາມຜູ້ສະໜອງ` (ลาว) รวมถึงข้อความอ้างอิงอย่าง shortcut active และ month-end empty-state
+  - modal `บันทึกชำระ PO` เปลี่ยน field `วันที่ชำระ` จาก native date input มาใช้ `PurchaseDatePickerField` ตัวเดียวกับ create/edit/filter ใน [purchase-order-list.tsx](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/components/app/purchase-order-list.tsx) แล้ว
+  - รอบล่าสุดขยับ layout พื้นฐานของ `PurchaseDatePickerField` เข้าไปใน component เอง (`inline-flex + items-center + justify-between`) เพื่อลดปัญหา icon ปฏิทินกับข้อความวันที่วางตำแหน่งเพี้ยนในบาง modal เช่น `บันทึกชำระ`
 
 - เพิ่ม pack view จากหน้า `/orders` โดยตรง:
   - `components/app/orders-management.tsx` เพิ่มปุ่ม `หน้าแพ็ก` ใน action ของ order list ทั้ง mobile/desktop
@@ -1382,3 +1384,4 @@ npm run build
 2. เพิ่ม role policy แบบละเอียดใน notification (`ใคร mute ได้`, scope ต่อ store/user/role) และเพิ่ม audit event สำหรับ action mute/snooze
 3. เพิ่มช่องทางส่งแจ้งเตือนถัดไป (email/push) โดย reuse notification_inbox เป็น source-of-truth
 4. เพิ่ม outbox worker สำหรับส่งข้อความ shipping label ไป Facebook/WhatsApp
+- PO detail modal บน mobile ปรับ badge สถานะให้ใช้ `self-start` แล้ว เพื่อให้ `ຮັບແລ້ວ`/status อื่นเป็น fit-content ไม่ stretch เต็มความกว้าง; action buttons ยังคง stack เต็มความกว้างตามเดิม
