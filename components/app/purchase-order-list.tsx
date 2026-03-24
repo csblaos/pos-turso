@@ -285,6 +285,8 @@ type DraftPurchaseItem = {
   multiplierToBase: number;
   qtyOrdered: string;
   unitCostPurchase: string;
+  lineTotalPurchase: string;
+  priceInputMode: "UNIT" | "TOTAL";
 };
 
 function fmtPrice(amount: number, currency: StoreCurrency, numberLocale?: string): string {
@@ -333,6 +335,56 @@ function CurrencyAmountStack({
 
 function getPurchaseUnitLabel(unitCode: string, unitNameTh: string): string {
   return unitCode.trim() || unitNameTh.trim();
+}
+
+function parseWholeNumberInput(value: string): number {
+  const parsed = Math.round(Number(value));
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return parsed;
+}
+
+function getPurchaseItemResolvedUnitCost(item: DraftPurchaseItem): number {
+  if (item.priceInputMode === "TOTAL") {
+    const qtyOrdered = Math.max(1, parseWholeNumberInput(item.qtyOrdered));
+    const lineTotalPurchase = parseWholeNumberInput(item.lineTotalPurchase);
+    return Math.round(lineTotalPurchase / qtyOrdered);
+  }
+  return parseWholeNumberInput(item.unitCostPurchase);
+}
+
+function getPurchaseItemResolvedLineTotal(item: DraftPurchaseItem): number {
+  if (item.priceInputMode === "TOTAL") {
+    return parseWholeNumberInput(item.lineTotalPurchase);
+  }
+  const qtyOrdered = Math.max(0, parseWholeNumberInput(item.qtyOrdered));
+  return qtyOrdered * parseWholeNumberInput(item.unitCostPurchase);
+}
+
+function getPurchaseItemPriceInputValue(item: DraftPurchaseItem): string {
+  return item.priceInputMode === "TOTAL"
+    ? item.lineTotalPurchase
+    : item.unitCostPurchase;
+}
+
+function updatePurchaseItemPriceInput(
+  item: DraftPurchaseItem,
+  nextValue: string,
+): DraftPurchaseItem {
+  return item.priceInputMode === "TOTAL"
+    ? { ...item, lineTotalPurchase: nextValue }
+    : { ...item, unitCostPurchase: nextValue };
+}
+
+function switchPurchaseItemPriceInputMode(
+  item: DraftPurchaseItem,
+  nextMode: "UNIT" | "TOTAL",
+): DraftPurchaseItem {
+  if (item.priceInputMode === nextMode) return item;
+  return {
+    ...item,
+    priceInputMode: nextMode,
+    lineTotalPurchase: String(getPurchaseItemResolvedLineTotal(item)),
+  };
 }
 
 function daysUntil(dateStr: string): number {
@@ -1734,6 +1786,8 @@ export function PurchaseOrderList({
         multiplierToBase: defaultUnit.multiplierToBase,
         qtyOrdered: "1",
         unitCostPurchase: "",
+        lineTotalPurchase: "",
+        priceInputMode: "UNIT",
       },
     ]);
     setProductSearch("");
@@ -1782,7 +1836,7 @@ export function PurchaseOrderList({
   const rate = hasExchangeRateInput ? Number(normalizedExchangeRate) : 1;
   const effectiveRate = purchaseCurrency === storeCurrency ? 1 : rate;
   const itemsTotalPurchase = items.reduce(
-    (sum, i) => sum + (Number(i.qtyOrdered) || 0) * (Number(i.unitCostPurchase) || 0),
+    (sum, item) => sum + getPurchaseItemResolvedLineTotal(item),
     0,
   );
   const itemsTotalBase = Math.round(itemsTotalPurchase * effectiveRate);
@@ -1822,7 +1876,7 @@ export function PurchaseOrderList({
             productId: i.productId,
             unitId: i.unitId,
             qtyOrdered: Number(i.qtyOrdered) || 1,
-            unitCostPurchase: Number(i.unitCostPurchase) || 0,
+            unitCostPurchase: getPurchaseItemResolvedUnitCost(i),
           })),
         }),
       });
@@ -1859,7 +1913,7 @@ export function PurchaseOrderList({
   const updateStatus = async (
     poId: string,
     status: "ORDERED" | "SHIPPED" | "RECEIVED" | "CANCELLED",
-  ) => {
+  ): Promise<PurchaseOrderDetail | null> => {
     try {
       const res = await authFetch(`/api/stock/purchase-orders/${poId}`, {
         method: "PATCH",
@@ -1869,17 +1923,24 @@ export function PurchaseOrderList({
       const data = await res.json();
       if (!res.ok) {
         toast.error(data?.message ?? t(uiLocale, "purchase.statusUpdate.error.failed"));
-        return;
+        return null;
       }
       toast.success(
         `${t(uiLocale, "purchase.statusUpdate.toast.success.prefix")}${statusConfig[status].label}${t(uiLocale, "purchase.statusUpdate.toast.success.suffix")}`,
       );
-      invalidatePoDetailCache(poId);
+      const updatedPo =
+        (data?.purchaseOrder as PurchaseOrderDetail | undefined) ?? null;
+      if (updatedPo) {
+        poDetailCacheRef.current.set(poId, updatedPo);
+      } else {
+        invalidatePoDetailCache(poId);
+      }
       await reloadFirstPage();
-      setSelectedPO(null);
       router.refresh();
+      return updatedPo;
     } catch {
       toast.error(t(uiLocale, "purchase.error.serverUnreachable"));
+      return null;
     }
   };
 
@@ -3259,6 +3320,43 @@ export function PurchaseOrderList({
                               )}
                             </select>
                           </div>
+                          <div className="space-y-1">
+                            <label className="text-[11px] text-slate-500">
+                              {t(uiLocale, "purchase.field.priceInputMode.label")}
+                            </label>
+                            <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1">
+                              {(["UNIT", "TOTAL"] as const).map((mode) => (
+                                <button
+                                  key={mode}
+                                  type="button"
+                                  className={`rounded-md px-2 py-1.5 text-[11px] font-medium transition ${
+                                    item.priceInputMode === mode
+                                      ? "bg-white text-slate-900 shadow-sm"
+                                      : "text-slate-500"
+                                  }`}
+                                  onClick={() =>
+                                    setItems((prev) =>
+                                      prev.map((draftItem) =>
+                                        draftItem.productId === item.productId
+                                          ? switchPurchaseItemPriceInputMode(
+                                              draftItem,
+                                              mode,
+                                            )
+                                          : draftItem,
+                                      ),
+                                    )
+                                  }
+                                >
+                                  {t(
+                                    uiLocale,
+                                    mode === "UNIT"
+                                      ? "purchase.field.priceInputMode.unit"
+                                      : "purchase.field.priceInputMode.total",
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                           <div className="grid grid-cols-2 gap-2">
 	                          <div>
 	                            <label className="text-[11px] text-slate-500">
@@ -3280,20 +3378,30 @@ export function PurchaseOrderList({
                           </div>
 	                          <div>
 	                            <label className="text-[11px] text-slate-500">
-	                              {t(uiLocale, "purchase.field.unitPrice.prefix")}
-	                              {currencySymbol(purchaseCurrency)}
+	                              {t(
+                                  uiLocale,
+                                  item.priceInputMode === "UNIT"
+                                    ? "purchase.field.unitPrice.label"
+                                    : "purchase.field.lineTotal.label",
+                                )}{" "}
+                                ({currencySymbol(purchaseCurrency)})
 	                            </label>
                             <input
                               className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
                               type="number"
                               inputMode="numeric"
-                              value={item.unitCostPurchase}
+                              value={getPurchaseItemPriceInputValue(item)}
                               placeholder="0"
                               onChange={(e) =>
-                                updateItem(
-                                  item.productId,
-                                  "unitCostPurchase",
-                                  e.target.value,
+                                setItems((prev) =>
+                                  prev.map((draftItem) =>
+                                    draftItem.productId === item.productId
+                                      ? updatePurchaseItemPriceInput(
+                                          draftItem,
+                                          e.target.value,
+                                        )
+                                      : draftItem,
+                                  ),
                                 )
                               }
                             />
@@ -3308,16 +3416,23 @@ export function PurchaseOrderList({
                           {item.baseUnitCode}
                         </p>
                         <p className="mt-1 text-right text-xs text-slate-500">
-                          ={" "}
+                          {item.priceInputMode === "UNIT"
+                            ? `${t(uiLocale, "purchase.field.lineTotal.short")} = `
+                            : `${t(uiLocale, "purchase.field.unitPrice.short")} ≈ `}
                           {fmtPrice(
                             Math.round(
-                              (Number(item.qtyOrdered) || 0) *
-                                (Number(item.unitCostPurchase) || 0) *
-                                effectiveRate,
+                              (item.priceInputMode === "UNIT"
+                                ? getPurchaseItemResolvedLineTotal(item)
+                                : getPurchaseItemResolvedUnitCost(item)) * effectiveRate,
                             ),
                             storeCurrency,
                             numberLocale,
                           )}
+                          {item.priceInputMode === "TOTAL" ? (
+                            <span className="ml-1">
+                              / {getPurchaseUnitLabel(item.unitCode, item.unitNameTh)}
+                            </span>
+                          ) : null}
                         </p>
                       </div>
                     ))}
@@ -3754,7 +3869,7 @@ function PODetailSheet({
   onUpdateStatus: (
     poId: string,
     status: "ORDERED" | "SHIPPED" | "RECEIVED" | "CANCELLED",
-  ) => void;
+  ) => Promise<PurchaseOrderDetail | null>;
 }) {
   const router = useRouter();
   const uiLocale = useUiLocale();
@@ -3935,8 +4050,17 @@ function PODetailSheet({
   ) => {
     if (!po) return;
     setUpdating(true);
-    await onUpdateStatus(po.id, newStatus);
-    setUpdating(false);
+    try {
+      const updatedPo = await onUpdateStatus(po.id, newStatus);
+      if (updatedPo) {
+        setPo(updatedPo);
+        onCacheUpdate(updatedPo);
+      } else {
+        await refreshDetail(po.id, true);
+      }
+    } finally {
+      setUpdating(false);
+    }
   };
 
   const retryLoadDetail = useCallback(async () => {
@@ -4261,6 +4385,8 @@ function PODetailSheet({
         multiplierToBase: item.multiplierToBase,
         qtyOrdered: String(item.qtyOrdered),
         unitCostPurchase: String(item.unitCostPurchase),
+        lineTotalPurchase: String(item.unitCostPurchase * item.qtyOrdered),
+        priceInputMode: "UNIT",
       })),
     });
     setIsEditMode(true);
@@ -4300,7 +4426,7 @@ function PODetailSheet({
               productId: item.productId,
               unitId: item.unitId,
               qtyOrdered: Number(item.qtyOrdered) || 1,
-              unitCostPurchase: Number(item.unitCostPurchase) || 0,
+              unitCostPurchase: getPurchaseItemResolvedUnitCost(item),
             })),
           }
         : {
@@ -5111,6 +5237,36 @@ function PODetailSheet({
                               {item.productSku}
                             </p>
                             <div className="mt-1 space-y-2">
+                              <div className="grid grid-cols-2 gap-1 rounded-md bg-slate-100 p-1">
+                                {(["UNIT", "TOTAL"] as const).map((mode) => (
+                                  <button
+                                    key={mode}
+                                    type="button"
+                                    className={`rounded px-2 py-1 text-[10px] font-medium transition ${
+                                      item.priceInputMode === mode
+                                        ? "bg-white text-slate-900 shadow-sm"
+                                        : "text-slate-500"
+                                    }`}
+                                    onClick={() =>
+                                      setEditForm((prev) => ({
+                                        ...prev,
+                                        items: prev.items.map((x, i) =>
+                                          i === index
+                                            ? switchPurchaseItemPriceInputMode(x, mode)
+                                            : x,
+                                        ),
+                                      }))
+                                    }
+                                  >
+                                    {t(
+                                      uiLocale,
+                                      mode === "UNIT"
+                                        ? "purchase.field.priceInputMode.unit"
+                                        : "purchase.field.priceInputMode.total",
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
                               <select
                                 className="h-8 w-full rounded-md border border-slate-200 px-2 text-xs outline-none focus:ring-2 focus:ring-primary"
                                 value={item.unitId}
@@ -5166,13 +5322,13 @@ function PODetailSheet({
                               <input
                                 type="number"
                                 className="h-8 w-full rounded-md border border-slate-200 px-2 text-xs outline-none focus:ring-2 focus:ring-primary"
-                                value={item.unitCostPurchase}
+                                value={getPurchaseItemPriceInputValue(item)}
                                 onChange={(e) =>
                                   setEditForm((prev) => ({
                                     ...prev,
                                     items: prev.items.map((x, i) =>
                                       i === index
-                                        ? { ...x, unitCostPurchase: e.target.value }
+                                        ? updatePurchaseItemPriceInput(x, e.target.value)
                                         : x,
                                     ),
                                   }))
@@ -5186,6 +5342,23 @@ function PODetailSheet({
                                 (Number(item.qtyOrdered) || 0) * item.multiplierToBase
                               ).toLocaleString(numberLocale)}{" "}
                               {item.baseUnitCode}
+                            </p>
+                            <p className="mt-1 text-[10px] text-slate-500">
+                              {item.priceInputMode === "UNIT"
+                                ? `${t(uiLocale, "purchase.field.lineTotal.short")} = `
+                                : `${t(uiLocale, "purchase.field.unitPrice.short")} ≈ `}
+                              {fmtPrice(
+                                item.priceInputMode === "UNIT"
+                                  ? getPurchaseItemResolvedLineTotal(item)
+                                  : getPurchaseItemResolvedUnitCost(item),
+                                poPurchaseCurrency,
+                                numberLocale,
+                              )}
+                              {item.priceInputMode === "TOTAL" ? (
+                                <span className="ml-1">
+                                  / {getPurchaseUnitLabel(item.unitCode, item.unitNameTh)}
+                                </span>
+                              ) : null}
                             </p>
                           </div>
                         ))}

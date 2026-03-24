@@ -44,6 +44,14 @@ export type ProductCostTracking = {
   reference: string | null;
 };
 
+export type ProductLatestPurchaseOrderCost = {
+  costBase: number;
+  updatedAt: string | null;
+  actorName: string | null;
+  reference: string | null;
+  reason: string | null;
+};
+
 export type ProductListItem = {
   id: string;
   sku: string;
@@ -70,6 +78,7 @@ export type ProductListItem = {
   stockReserved: number;
   stockAvailable: number;
   costTracking: ProductCostTracking;
+  latestPurchaseOrderCost: ProductLatestPurchaseOrderCost | null;
   active: boolean;
   createdAt: string;
   conversions: ProductConversionView[];
@@ -181,6 +190,7 @@ const mapProductRows = (rows: ProductRowWithConversion[]): ProductListItem[] => 
           reason: null,
           reference: null,
         },
+        latestPurchaseOrderCost: null,
         active: Boolean(row.active),
         createdAt: row.createdAt,
         conversions: [],
@@ -236,8 +246,16 @@ const getMetadataText = (metadata: Record<string, unknown> | null, key: string) 
 async function getLatestCostTrackingByProductIds(
   storeId: string,
   productIds: string[],
-): Promise<Map<string, ProductCostTracking>> {
-  if (productIds.length === 0) return new Map();
+): Promise<{
+  trackingByProductId: Map<string, ProductCostTracking>;
+  latestPurchaseOrderCostByProductId: Map<string, ProductLatestPurchaseOrderCost>;
+}> {
+  if (productIds.length === 0) {
+    return {
+      trackingByProductId: new Map(),
+      latestPurchaseOrderCostByProductId: new Map(),
+    };
+  }
 
   const rows = await db
     .select({
@@ -262,8 +280,12 @@ async function getLatestCostTrackingByProductIds(
     .orderBy(desc(auditEvents.occurredAt));
 
   const trackingByProductId = new Map<string, ProductCostTracking>();
+  const latestPurchaseOrderCostByProductId = new Map<
+    string,
+    ProductLatestPurchaseOrderCost
+  >();
   for (const row of rows) {
-    if (!row.entityId || trackingByProductId.has(row.entityId)) continue;
+    if (!row.entityId) continue;
     const metadata = parseAuditMetadata(row.metadata);
     const source: ProductCostTrackingSource =
       row.action === "product.cost.manual_update"
@@ -272,22 +294,43 @@ async function getLatestCostTrackingByProductIds(
           ? "PURCHASE_ORDER"
           : "UNKNOWN";
 
-    trackingByProductId.set(row.entityId, {
-      source,
-      updatedAt: row.occurredAt ?? null,
-      actorName: row.actorName ?? null,
-      reason:
-        source === "MANUAL"
-          ? getMetadataText(metadata, "reason")
-          : getMetadataText(metadata, "note"),
-      reference:
-        source === "PURCHASE_ORDER"
-          ? getMetadataText(metadata, "poNumber")
-          : null,
-    });
+    if (!trackingByProductId.has(row.entityId)) {
+      trackingByProductId.set(row.entityId, {
+        source,
+        updatedAt: row.occurredAt ?? null,
+        actorName: row.actorName ?? null,
+        reason:
+          source === "MANUAL"
+            ? getMetadataText(metadata, "reason")
+            : getMetadataText(metadata, "note"),
+        reference:
+          source === "PURCHASE_ORDER"
+            ? getMetadataText(metadata, "poNumber")
+            : null,
+      });
+    }
+
+    if (
+      row.action === "product.cost.auto_from_po" &&
+      !latestPurchaseOrderCostByProductId.has(row.entityId)
+    ) {
+      const nextCostBase = metadata?.nextCostBase;
+      if (typeof nextCostBase === "number" && Number.isFinite(nextCostBase)) {
+        latestPurchaseOrderCostByProductId.set(row.entityId, {
+          costBase: Math.round(nextCostBase),
+          updatedAt: row.occurredAt ?? null,
+          actorName: row.actorName ?? null,
+          reference: getMetadataText(metadata, "poNumber"),
+          reason: getMetadataText(metadata, "note"),
+        });
+      }
+    }
   }
 
-  return trackingByProductId;
+  return {
+    trackingByProductId,
+    latestPurchaseOrderCostByProductId,
+  };
 }
 
 const buildProductsWhere = ({
@@ -377,7 +420,7 @@ async function listStoreProductsByIds(
     .leftJoin(productUnits, eq(productUnits.productId, products.id))
     .leftJoin(conversionUnits, eq(productUnits.unitId, conversionUnits.id))
     .where(and(eq(products.storeId, storeId), inArray(products.id, productIds)));
-  const [balances, costTrackingByProductId] = await Promise.all([
+  const [balances, costAuditSummary] = await Promise.all([
     getInventoryBalancesByStoreForProducts(storeId, productIds),
     getLatestCostTrackingByProductIds(storeId, productIds),
   ]);
@@ -392,7 +435,11 @@ async function listStoreProductsByIds(
       stockOnHand: balance?.onHand ?? 0,
       stockReserved: balance?.reserved ?? 0,
       stockAvailable: balance?.available ?? 0,
-      costTracking: costTrackingByProductId.get(item.id) ?? item.costTracking,
+      costTracking:
+        costAuditSummary.trackingByProductId.get(item.id) ?? item.costTracking,
+      latestPurchaseOrderCost:
+        costAuditSummary.latestPurchaseOrderCostByProductId.get(item.id) ??
+        item.latestPurchaseOrderCost,
     };
   });
 }

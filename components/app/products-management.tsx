@@ -4636,6 +4636,20 @@ export function ProductsManagement({
                 {/* Tab — ต้นทุน 🔒 */}
                 {detailTab === "cost" && canViewCost && (
                   <div className="space-y-3">
+                    {(() => {
+                      const latestPurchaseOrderCost =
+                        detailProduct.latestPurchaseOrderCost;
+                      const isManualOverrideActive =
+                        detailProduct.costTracking.source === "MANUAL" &&
+                        latestPurchaseOrderCost !== null &&
+                        detailProduct.costBase !== latestPurchaseOrderCost.costBase;
+                      const overrideDelta =
+                        latestPurchaseOrderCost !== null
+                          ? detailProduct.costBase - latestPurchaseOrderCost.costBase
+                          : 0;
+
+                      return (
+                        <>
                     {editingCost ? (
                       <div className="space-y-2">
                         <label className="text-xs font-medium text-slate-700">
@@ -4714,6 +4728,79 @@ export function ProductsManagement({
                             </p>
                           </div>
                         </div>
+
+                        {latestPurchaseOrderCost ? (
+                          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-slate-700">
+                                  {t(
+                                    uiLocale,
+                                    "products.detail.cost.latestPurchaseOrderCost.title",
+                                  )}
+                                </p>
+                                <p className="mt-1 text-[11px] text-slate-500">
+                                  {t(
+                                    uiLocale,
+                                    "products.detail.cost.latestPurchaseOrderCost.updatedAt",
+                                  )}{" "}
+                                  <span className="font-medium text-slate-700">
+                                    {fmtDateTime(
+                                      latestPurchaseOrderCost.updatedAt,
+                                      dateLocale,
+                                    )}
+                                  </span>
+                                  {latestPurchaseOrderCost.reference ? (
+                                    <>
+                                      {" · "}
+                                      {t(
+                                        uiLocale,
+                                        "products.detail.cost.latestPurchaseOrderCost.reference",
+                                      )}{" "}
+                                      <span className="font-medium text-slate-700">
+                                        {latestPurchaseOrderCost.reference}
+                                      </span>
+                                    </>
+                                  ) : null}
+                                </p>
+                                {isManualOverrideActive ? (
+                                  <p className="mt-1 text-[11px] font-medium text-amber-700">
+                                    {t(
+                                      uiLocale,
+                                      "products.detail.cost.overrideActive",
+                                    )}{" "}
+                                    {overrideDelta > 0 ? "+" : ""}
+                                    {fmtPrice(
+                                      overrideDelta,
+                                      currency,
+                                      numberLocale,
+                                    )}
+                                  </p>
+                                ) : (
+                                  <p className="mt-1 text-[11px] text-emerald-700">
+                                    {t(
+                                      uiLocale,
+                                      "products.detail.cost.usingPurchaseOrderCost",
+                                    )}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-semibold text-slate-900">
+                                  {fmtPrice(
+                                    latestPurchaseOrderCost.costBase,
+                                    currency,
+                                    numberLocale,
+                                  )}
+                                </p>
+                                <p className="text-[10px] text-slate-500">
+                                  {t(uiLocale, "products.detail.cost.costPerBaseUnit")} /{" "}
+                                  {detailProduct.baseUnitCode}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
 
                         {/* Profit summary */}
                         {detailProduct.priceBase > 0 && (
@@ -4802,6 +4889,9 @@ export function ProductsManagement({
                         )}
                       </>
                     )}
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
 

@@ -1385,3 +1385,6 @@ npm run build
 3. เพิ่มช่องทางส่งแจ้งเตือนถัดไป (email/push) โดย reuse notification_inbox เป็น source-of-truth
 4. เพิ่ม outbox worker สำหรับส่งข้อความ shipping label ไป Facebook/WhatsApp
 - PO detail modal บน mobile ปรับ badge สถานะให้ใช้ `self-start` แล้ว เพื่อให้ `ຮັບແລ້ວ`/status อื่นเป็น fit-content ไม่ stretch เต็มความกว้าง; action buttons ยังคง stack เต็มความกว้างตามเดิม
+- PO detail modal เปลี่ยน behavior ของ action status update แล้ว: หลัง `ORDERED/SHIPPED/RECEIVED/CANCELLED` สำเร็จ จะไม่ปิด modal หลักอีก แต่จะคง sheet ไว้และอัปเดตข้อมูล PO เดิมต่อทันที
+- Product detail tab `ต้นทุน` แสดง `ต้นทุนจาก PO ล่าสุด` เป็นบรรทัดรองแล้ว โดยอิง audit `product.cost.auto_from_po`; ถ้า current cost ถูก manual override และต่างจาก PO cost ล่าสุด จะมีข้อความเตือนว่า override อยู่พร้อม delta
+- PO create/edit เพิ่มโหมดกรอกราคา `ต่อหน่วย / ยอดรวมรายการ` ต่อ item แล้ว; ใช้เพื่อรองรับเคสคัดลอกราคารวมจาก marketplace แต่ระบบยัง submit `unitCostPurchase` เดิมเข้า backend
