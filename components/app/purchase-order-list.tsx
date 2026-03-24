@@ -3450,13 +3450,13 @@ export function PurchaseOrderList({
                               ))}
                             </div>
                           </div>
-                          <div className="grid grid-cols-2 gap-2">
-	                          <div className="space-y-1">
+                          <div className="grid grid-cols-2 items-start gap-2">
+	                          <div className="min-w-0 space-y-1">
 	                            <label className="flex min-h-[2rem] items-end text-[11px] text-slate-500">
 	                              {t(uiLocale, "purchase.field.qty")}
 	                            </label>
                             <input
-                              className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
+                              className="h-9 w-full appearance-none rounded-lg border border-slate-200 px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
                               type="number"
                               inputMode="numeric"
                               value={item.qtyOrdered}
@@ -3469,7 +3469,7 @@ export function PurchaseOrderList({
                               }
                             />
                           </div>
-	                          <div className="space-y-1">
+	                          <div className="min-w-0 space-y-1">
 	                            <label className="flex min-h-[2rem] items-end text-[11px] text-slate-500">
 	                              {t(
                                   uiLocale,
@@ -3480,7 +3480,7 @@ export function PurchaseOrderList({
                                 ({currencySymbol(purchaseCurrency)})
 	                            </label>
                             <input
-                              className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
+                              className="h-9 w-full appearance-none rounded-lg border border-slate-200 px-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
                               type="number"
                               inputMode="numeric"
                               value={getPurchaseItemPriceInputValue(item)}
@@ -5630,14 +5630,14 @@ function PODetailSheet({
                                   ),
                                 )}
                               </select>
-                              <div className="grid grid-cols-2 gap-2">
-                                <div className="space-y-1">
+                              <div className="grid grid-cols-2 items-start gap-2">
+                                <div className="min-w-0 space-y-1">
                                   <label className="flex min-h-[1.75rem] items-end text-[10px] text-slate-500">
                                     {t(uiLocale, "purchase.field.qty")}
                                   </label>
                                   <input
                                     type="number"
-                                    className="h-8 w-full rounded-md border border-slate-200 px-2 text-xs outline-none focus:ring-2 focus:ring-primary"
+                                    className="h-8 w-full appearance-none rounded-md border border-slate-200 px-2 text-xs outline-none focus:ring-2 focus:ring-primary"
                                     value={item.qtyOrdered}
                                     onChange={(e) =>
                                       setEditForm((prev) => ({
@@ -5651,7 +5651,7 @@ function PODetailSheet({
                                     }
                                   />
                                 </div>
-                                <div className="space-y-1">
+                                <div className="min-w-0 space-y-1">
                                   <label className="flex min-h-[1.75rem] items-end text-[10px] text-slate-500">
                                     {t(
                                       uiLocale,
@@ -5663,7 +5663,7 @@ function PODetailSheet({
                                   </label>
                                   <input
                                     type="number"
-                                    className="h-8 w-full rounded-md border border-slate-200 px-2 text-xs outline-none focus:ring-2 focus:ring-primary"
+                                    className="h-8 w-full appearance-none rounded-md border border-slate-200 px-2 text-xs outline-none focus:ring-2 focus:ring-primary"
                                     value={getPurchaseItemPriceInputValue(item)}
                                     placeholder="0"
                                     onChange={(e) =>

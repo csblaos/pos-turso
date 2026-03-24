@@ -1398,3 +1398,4 @@ npm run build
 - PO create/edit ปรับ UX ของช่อง `ยอดรวมรายการ` แล้ว: ตอนสลับเข้า mode นี้จะไม่ auto ยัด `0` ค้างใน input ถ้ายังไม่มีราคาจริง และใน edit form ก็ใช้ placeholder `0` เหมือนช่อง `ราคาต่อหน่วย`
 - แก้ bug ของ create PO flow ที่ปุ่มสร้างแล้วเปลี่ยนสถานะต่อทันทีเคยส่ง `unitCostPurchase = 0` เมื่อผู้ใช้กรอกแบบ `ยอดรวมรายการ`; ตอนนี้ทุก create path ใช้ `getPurchaseItemResolvedUnitCost(...)` เหมือนกันแล้ว ทำให้ยอด PO และ settle payment ไม่เพี้ยนเป็น 0
 - PO item editor ใน create/edit ล็อก label row ของ `จำนวน` และ `ราคา` ให้สูงเท่ากันแล้ว พร้อมเพิ่ม label ชัดใน edit modal ด้วย เพื่อลดอาการ input ขยับตำแหน่งเมื่อสลับโหมดราคา
+- PO item editor บน mobile คง `จำนวน`/`ราคา` ไว้แถวเดียว 2 คอลัมน์ตาม UX เดิม แต่เพิ่ม `min-w-0` + `appearance-none` ให้ number inputs และคง label row สูงเท่ากัน เพื่อกันอาการ input ดูขยับตำแหน่งตอนกรอกค่าหรือสลับโหมดราคา
