@@ -115,7 +115,13 @@ type PurchaseOrderListProps = {
   pdfConfig?: Partial<PoPdfConfig>;
 };
 
-type StatusFilter = "ALL" | "OPEN" | PurchaseOrderListItem["status"];
+type StatusFilter =
+  | "ALL"
+  | "OPEN"
+  | "PENDING_RATE"
+  | "PENDING_PAYMENT"
+  | "DONE"
+  | PurchaseOrderListItem["status"];
 type PurchaseWorkspace = "OPERATIONS" | "MONTH_END" | "SUPPLIER_AP";
 type KpiShortcut = "OPEN_PO" | "PENDING_RATE" | "OVERDUE_AP" | "OUTSTANDING_AP";
 type SavedPurchasePreset = {
@@ -143,6 +149,9 @@ function isPurchaseStatusFilter(value: string | null): value is StatusFilter {
   return (
     value === "ALL" ||
     value === "OPEN" ||
+    value === "PENDING_RATE" ||
+    value === "PENDING_PAYMENT" ||
+    value === "DONE" ||
     value === "DRAFT" ||
     value === "ORDERED" ||
     value === "SHIPPED" ||
@@ -258,6 +267,14 @@ type PendingRateQueueItem = {
   dueDate: string | null;
   paymentStatus: "UNPAID" | "PARTIAL" | "PAID";
   itemCount: number;
+  totalCostPurchase: number;
+  totalPaidBase: number;
+  shippingCostOriginal: number;
+  shippingCostCurrency: StoreCurrency;
+  shippingCost: number;
+  otherCostOriginal: number;
+  otherCostCurrency: StoreCurrency;
+  otherCost: number;
   totalCostBase: number;
   outstandingBase: number;
 };
@@ -295,8 +312,40 @@ type DraftPurchaseItem = {
 
 type PurchaseExtraCostCurrency = StoreCurrency;
 
+const PURCHASE_OUTSTANDING_EPSILON_BASE = 5;
+
 function fmtPrice(amount: number, currency: StoreCurrency, numberLocale?: string): string {
   return `${currencySymbol(currency)}${amount.toLocaleString(numberLocale)}`;
+}
+
+function normalizePurchaseOutstandingPreview(totalPaidBase: number, grandTotalBase: number) {
+  const rawOutstanding = grandTotalBase - totalPaidBase;
+  if (rawOutstanding <= PURCHASE_OUTSTANDING_EPSILON_BASE) {
+    return 0;
+  }
+  return rawOutstanding;
+}
+
+function estimatePendingQueueAmountBase(
+  amountOriginal: number,
+  currency: StoreCurrency,
+  linkedPurchaseCurrency: StoreCurrency,
+  currentRate: number | null,
+  fallbackBase: number,
+  storeCurrency: StoreCurrency,
+) {
+  if (currency === storeCurrency) {
+    return fallbackBase;
+  }
+  if (
+    currency === linkedPurchaseCurrency &&
+    currentRate &&
+    currentRate > 0 &&
+    amountOriginal > 0
+  ) {
+    return Math.round(amountOriginal * currentRate);
+  }
+  return fallbackBase;
 }
 
 function CurrencyAmountStack({
@@ -306,6 +355,7 @@ function CurrencyAmountStack({
   secondaryCurrency,
   numberLocale,
   align = "right",
+  layout = "stack",
   primaryClassName = "font-medium",
 }: {
   primaryAmount: number;
@@ -314,16 +364,21 @@ function CurrencyAmountStack({
   secondaryCurrency?: StoreCurrency | null;
   numberLocale?: string;
   align?: "left" | "right";
+  layout?: "stack" | "inline";
   primaryClassName?: string;
 }) {
-  const wrapperClassName =
-    align === "left"
-      ? "inline-flex flex-col items-start"
-      : "inline-flex flex-col items-end text-right";
   const shouldShowSecondary =
     secondaryAmount != null &&
     secondaryCurrency != null &&
     secondaryCurrency !== primaryCurrency;
+  const wrapperClassName =
+    layout === "inline"
+      ? align === "left"
+        ? "inline-flex items-center gap-1.5"
+        : "inline-flex items-center justify-end gap-1.5 text-right"
+      : align === "left"
+        ? "inline-flex flex-col items-start"
+        : "inline-flex flex-col items-end text-right";
 
   return (
     <span className={wrapperClassName}>
@@ -331,7 +386,13 @@ function CurrencyAmountStack({
         {fmtPrice(primaryAmount, primaryCurrency, numberLocale)}
       </span>
       {shouldShowSecondary ? (
-        <span className="text-[11px] font-normal text-slate-500">
+        <span
+          className={
+            layout === "inline"
+              ? "whitespace-nowrap text-[11px] font-normal text-slate-500"
+              : "text-[11px] font-normal text-slate-500"
+          }
+        >
           ≈ {fmtPrice(secondaryAmount, secondaryCurrency, numberLocale)}
         </span>
       ) : null}
@@ -415,6 +476,9 @@ function syncPurchaseLinkedCurrency(params: {
 }): PurchaseExtraCostCurrency {
   const { nextPurchaseCurrency, previousPurchaseCurrency, currentCurrency, storeCurrency } =
     params;
+  if (currentCurrency === storeCurrency) {
+    return storeCurrency;
+  }
   if (currentCurrency === previousPurchaseCurrency) {
     return nextPurchaseCurrency;
   }
@@ -703,6 +767,129 @@ function sortPendingQueueForSettlement(
   });
 }
 
+function derivePurchaseListPaymentStatus(
+  totalPaidBase: number,
+  grandTotalBase: number,
+): PurchaseOrderListItem["paymentStatus"] {
+  if (totalPaidBase <= 0) return "UNPAID";
+  if (grandTotalBase > 0 && totalPaidBase >= grandTotalBase) return "PAID";
+  return "PARTIAL";
+}
+
+function toPurchaseOrderListItemFromDetail(
+  po: PurchaseOrderDetail,
+  storeCurrency: StoreCurrency,
+): PurchaseOrderListItem {
+  const purchaseCurrency = parseStoreCurrency(po.purchaseCurrency, storeCurrency);
+  const totalCostPurchase = po.items.reduce(
+    (sum, item) => sum + item.unitCostPurchase * item.qtyOrdered,
+    0,
+  );
+  const grandTotalBase = po.totalCostBase + po.shippingCost + po.otherCost;
+
+  return {
+    id: po.id,
+    poNumber: po.poNumber,
+    supplierName: po.supplierName,
+    firstItemName: po.items[0]?.productName ?? null,
+    purchaseCurrency,
+    exchangeRate: po.exchangeRate,
+    exchangeRateInitial: po.exchangeRateInitial,
+    exchangeRateLockedAt: po.exchangeRateLockedAt,
+    paymentStatus: derivePurchaseListPaymentStatus(po.totalPaidBase, grandTotalBase),
+    paidAt: po.paidAt,
+    dueDate: po.dueDate,
+    status: po.status as PurchaseOrderListItem["status"],
+    itemCount: po.items.length,
+    totalCostPurchase,
+    totalCostBase: po.totalCostBase,
+    totalPaidBase: po.totalPaidBase,
+    outstandingBase: Math.max(0, grandTotalBase - po.totalPaidBase),
+    shippingCostOriginal: po.shippingCostOriginal,
+    shippingCostCurrency: po.shippingCostCurrency,
+    shippingCost: po.shippingCost,
+    otherCostOriginal: po.otherCostOriginal,
+    otherCostCurrency: po.otherCostCurrency,
+    otherCost: po.otherCost,
+    orderedAt: po.orderedAt,
+    expectedAt: po.expectedAt,
+    shippedAt: po.shippedAt,
+    receivedAt: po.receivedAt,
+    cancelledAt: null,
+    createdAt: po.createdAt,
+  };
+}
+
+function getPurchaseOrderCardItemSummary(
+  po: PurchaseOrderListItem,
+  uiLocale: UiLocale,
+  numberLocale: string,
+): string | null {
+  if (po.itemCount <= 0) {
+    return null;
+  }
+  if (!po.firstItemName) {
+    return `${po.itemCount.toLocaleString(numberLocale)} ${t(uiLocale, "purchase.items")}`;
+  }
+  if (po.itemCount === 1) {
+    return po.firstItemName;
+  }
+  return `${po.firstItemName} +${(po.itemCount - 1).toLocaleString(numberLocale)}`;
+}
+
+function getPurchaseOrderListCostRows(
+  po: PurchaseOrderListItem,
+  storeCurrency: StoreCurrency,
+) {
+  const rows: Array<{
+    labelKey: "purchase.summary.products" | "purchase.summary.shipping" | "purchase.summary.other";
+    primaryAmount: number;
+    primaryCurrency: StoreCurrency;
+    secondaryAmount?: number | null;
+    secondaryCurrency?: StoreCurrency | null;
+  }> = [];
+
+  const hasProducts =
+    po.itemCount > 0 || po.totalCostPurchase > 0 || po.totalCostBase > 0;
+  if (hasProducts) {
+    const showsPurchaseCurrencyPrimary =
+      po.purchaseCurrency !== storeCurrency && po.totalCostPurchase > 0;
+    rows.push({
+      labelKey: "purchase.summary.products",
+      primaryAmount: showsPurchaseCurrencyPrimary ? po.totalCostPurchase : po.totalCostBase,
+      primaryCurrency: showsPurchaseCurrencyPrimary ? po.purchaseCurrency : storeCurrency,
+      secondaryAmount: showsPurchaseCurrencyPrimary ? po.totalCostBase : null,
+      secondaryCurrency: showsPurchaseCurrencyPrimary ? storeCurrency : null,
+    });
+  }
+
+  if (po.shippingCost > 0) {
+    const showsOriginalShipping =
+      po.shippingCostCurrency !== storeCurrency && po.shippingCostOriginal > 0;
+    rows.push({
+      labelKey: "purchase.summary.shipping",
+      primaryAmount: showsOriginalShipping ? po.shippingCostOriginal : po.shippingCost,
+      primaryCurrency: showsOriginalShipping ? po.shippingCostCurrency : storeCurrency,
+      secondaryAmount: showsOriginalShipping ? po.shippingCost : null,
+      secondaryCurrency: showsOriginalShipping ? storeCurrency : null,
+    });
+  }
+
+  if (po.otherCost > 0) {
+    const showsOriginalOther =
+      po.otherCostCurrency !== storeCurrency && po.otherCostOriginal > 0;
+    rows.push({
+      labelKey: "purchase.summary.other",
+      primaryAmount: showsOriginalOther ? po.otherCostOriginal : po.otherCost,
+      primaryCurrency: showsOriginalOther ? po.otherCostCurrency : storeCurrency,
+      secondaryAmount: showsOriginalOther ? po.otherCost : null,
+      secondaryCurrency: showsOriginalOther ? storeCurrency : null,
+    });
+  }
+
+  return rows;
+}
+
 export function PurchaseOrderList({
   purchaseOrders: initialList,
   activeStoreId,
@@ -768,6 +955,13 @@ export function PurchaseOrderList({
   const [activeKpiShortcut, setActiveKpiShortcut] = useState<KpiShortcut | null>(null);
   const [apPanelPreset, setApPanelPreset] = useState<PurchaseApPanelPreset | null>(null);
   const [savedPresets, setSavedPresets] = useState<SavedPurchasePreset[]>([]);
+  const hasLoadedFreshPurchaseListRef = useRef(false);
+
+  useEffect(() => {
+    setPoList(initialList);
+    setPoPage(1);
+    setHasMore(initialHasMore);
+  }, [initialHasMore, initialList]);
   const [pendingRateQueue, setPendingRateQueue] = useState<PendingRateQueueItem[]>([]);
   const [isLoadingPendingQueue, setIsLoadingPendingQueue] = useState(false);
   const [pendingQueueError, setPendingQueueError] = useState<string | null>(null);
@@ -778,13 +972,13 @@ export function PurchaseOrderList({
   const [isBulkMonthEndMode, setIsBulkMonthEndMode] = useState(false);
   const [bulkRateInput, setBulkRateInput] = useState("");
   const [bulkPaidAtInput, setBulkPaidAtInput] = useState("");
-  const [bulkStatementTotalInput, setBulkStatementTotalInput] = useState("");
   const [bulkReferenceInput, setBulkReferenceInput] = useState("");
   const [bulkNoteInput, setBulkNoteInput] = useState("");
   const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
   const [bulkProgressText, setBulkProgressText] = useState<string | null>(null);
   const [bulkErrors, setBulkErrors] = useState<string[]>([]);
   const pendingScrollRestoreRef = useRef<{ x: number; y: number } | null>(null);
+  const pendingWorkspacePostLoadScrollYRef = useRef<number | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isCreateCloseConfirmOpen, setIsCreateCloseConfirmOpen] = useState(false);
   const [selectedPO, setSelectedPO] = useState<string | null>(null);
@@ -792,6 +986,7 @@ export function PurchaseOrderList({
   const poDetailPendingRef = useRef<Map<string, Promise<PoDetailLoadResult>>>(
     new Map(),
   );
+  const [poDetailCacheVersion, setPoDetailCacheVersion] = useState(0);
 
   /* ── Create wizard state ── */
   const [wizardStep, setWizardStep] = useState(1);
@@ -1031,6 +1226,9 @@ export function PurchaseOrderList({
       if (nextWorkspace === workspaceTab) {
         return;
       }
+      if (typeof window !== "undefined") {
+        pendingWorkspacePostLoadScrollYRef.current = window.scrollY;
+      }
       setWorkspaceTab(nextWorkspace);
       if (!options?.preserveShortcut) {
         setActiveKpiShortcut(null);
@@ -1236,12 +1434,42 @@ export function PurchaseOrderList({
 
   /* ── Filtered list ── */
   const filteredList = useMemo(() => {
+    const isPendingRate = (po: PurchaseOrderListItem) =>
+      po.status === "RECEIVED" &&
+      po.purchaseCurrency !== storeCurrency &&
+      !po.exchangeRateLockedAt;
+    const isDone = (po: PurchaseOrderListItem) =>
+      po.status === "RECEIVED" && !isPendingRate(po) && (po.outstandingBase ?? 0) <= 0;
+
     if (statusFilter === "ALL") return poList;
     if (statusFilter === "OPEN") {
-      return poList.filter((po) => po.status !== "RECEIVED" && po.status !== "CANCELLED");
+      // "Open" = any not-done work item, including received-but-pending-rate/payment.
+      return poList.filter((po) => po.status !== "CANCELLED" && !isDone(po));
+    }
+    if (statusFilter === "PENDING_RATE") {
+      return poList.filter(
+        (po) => isPendingRate(po),
+      );
+    }
+    if (statusFilter === "PENDING_PAYMENT") {
+      return poList.filter((po) => {
+        if (po.status !== "RECEIVED") return false;
+        if ((po.outstandingBase ?? 0) <= 0) return false;
+        if (isPendingRate(po)) return false;
+        return po.paymentStatus !== "PAID";
+      });
+    }
+    if (statusFilter === "DONE") {
+      return poList.filter((po) => {
+        return isDone(po);
+      });
     }
     return poList.filter((po) => po.status === statusFilter);
-  }, [poList, statusFilter]);
+  }, [poList, statusFilter, storeCurrency]);
+  const poListById = useMemo(
+    () => new Map(poList.map((po) => [po.id, po])),
+    [poList],
+  );
   const selectedPendingQueueSet = useMemo(
     () => new Set(selectedPendingQueueIds),
     [selectedPendingQueueIds],
@@ -1264,50 +1492,117 @@ export function PurchaseOrderList({
     [selectedPendingQueueItems],
   );
   const bulkAllocationPreview = useMemo(() => {
-    const hasStatementTotal = bulkStatementTotalInput.trim().length > 0;
-    const parsedStatementTotal = Math.round(Number(bulkStatementTotalInput));
-    const statementTotal =
-      hasStatementTotal &&
-      Number.isFinite(parsedStatementTotal) &&
-      parsedStatementTotal > 0
-        ? parsedStatementTotal
-        : null;
-    const invalidStatementTotal =
-      hasStatementTotal &&
-      (!Number.isFinite(parsedStatementTotal) || parsedStatementTotal <= 0);
-    const totalOutstanding = sortedSelectedPendingQueueItems.reduce(
-      (sum, item) => sum + Math.max(0, Math.round(item.outstandingBase)),
-      0,
-    );
-    let remainingBudget = statementTotal ?? Number.POSITIVE_INFINITY;
+    void poDetailCacheVersion;
+    const parsedRateInput = Math.round(Number(bulkRateInput));
+    const effectiveRate =
+      Number.isFinite(parsedRateInput) && parsedRateInput > 0 ? parsedRateInput : null;
     const rows = sortedSelectedPendingQueueItems.map((item) => {
-      const outstanding = Math.max(0, Math.round(item.outstandingBase));
-      const planned = Math.max(0, Math.min(outstanding, remainingBudget));
-      if (Number.isFinite(remainingBudget)) {
-        remainingBudget = Math.max(0, remainingBudget - planned);
+      const cachedDetail = poDetailCacheRef.current.get(item.id);
+      if (cachedDetail) {
+        const productBase =
+          cachedDetail.purchaseCurrency === storeCurrency || !effectiveRate
+            ? cachedDetail.totalCostBase
+            : cachedDetail.items.reduce((sum, detailItem) => {
+                const unitCostBase = Math.round(
+                  (detailItem.unitCostPurchase * effectiveRate) / detailItem.multiplierToBase,
+                );
+                return sum + unitCostBase * detailItem.qtyBaseOrdered;
+              }, 0);
+        const shippingBase = estimatePendingQueueAmountBase(
+          cachedDetail.shippingCostOriginal,
+          cachedDetail.shippingCostCurrency,
+          cachedDetail.purchaseCurrency as StoreCurrency,
+          effectiveRate,
+          cachedDetail.shippingCost,
+          storeCurrency,
+        );
+        const otherBase = estimatePendingQueueAmountBase(
+          cachedDetail.otherCostOriginal,
+          cachedDetail.otherCostCurrency,
+          cachedDetail.purchaseCurrency as StoreCurrency,
+          effectiveRate,
+          cachedDetail.otherCost,
+          storeCurrency,
+        );
+        const outstanding = Math.max(
+          0,
+          Math.round(
+            normalizePurchaseOutstandingPreview(
+              cachedDetail.totalPaidBase,
+              productBase + shippingBase + otherBase,
+            ),
+          ),
+        );
+        return {
+          id: item.id,
+          poNumber: item.poNumber,
+          dueDate: item.dueDate,
+          supplierName: item.supplierName,
+          productBase,
+          shippingBase,
+          otherBase,
+          outstanding,
+          planned: outstanding,
+        };
       }
+
+      const productBase =
+        item.purchaseCurrency === storeCurrency
+          ? item.totalCostBase
+          : effectiveRate && effectiveRate > 0
+            ? Math.round(item.totalCostPurchase * effectiveRate)
+            : item.totalCostBase;
+      const shippingBase = estimatePendingQueueAmountBase(
+        item.shippingCostOriginal,
+        item.shippingCostCurrency,
+        item.purchaseCurrency,
+        effectiveRate,
+        item.shippingCost,
+        storeCurrency,
+      );
+      const otherBase = estimatePendingQueueAmountBase(
+        item.otherCostOriginal,
+        item.otherCostCurrency,
+        item.purchaseCurrency,
+        effectiveRate,
+        item.otherCost,
+        storeCurrency,
+      );
+      const outstanding = Math.max(
+        0,
+        Math.round(
+          normalizePurchaseOutstandingPreview(
+            item.totalPaidBase,
+            productBase + shippingBase + otherBase,
+          ),
+        ),
+      );
       return {
         id: item.id,
         poNumber: item.poNumber,
         dueDate: item.dueDate,
         supplierName: item.supplierName,
+        productBase,
+        shippingBase,
+        otherBase,
         outstanding,
-        planned,
+        planned: outstanding,
       };
     });
+    const totalOutstanding = rows.reduce(
+      (sum, row) => {
+        return sum + Math.max(0, Math.round(row.outstanding));
+      },
+      0,
+    );
     const plannedTotal = rows.reduce((sum, row) => sum + row.planned, 0);
     return {
-      hasStatementTotal,
-      statementTotal,
-      invalidStatementTotal,
       totalOutstanding,
       plannedTotal,
-      remainingUnallocated:
-        statementTotal === null ? 0 : Math.max(0, statementTotal - plannedTotal),
       outstandingAfter: Math.max(0, totalOutstanding - plannedTotal),
       rows,
     };
-  }, [bulkStatementTotalInput, sortedSelectedPendingQueueItems]);
+  }, [bulkRateInput, poDetailCacheVersion, sortedSelectedPendingQueueItems, storeCurrency]);
 
   const loadPoDetail = useCallback(
     async (
@@ -1333,6 +1628,7 @@ export function PurchaseOrderList({
         try {
           const res = await authFetch(
             `/api/stock/purchase-orders/${encodeURIComponent(poId)}`,
+            { cache: "no-store" },
           );
           const data = (await res.json().catch(() => null)) as
             | {
@@ -1355,6 +1651,7 @@ export function PurchaseOrderList({
 
           const purchaseOrder = data.purchaseOrder as PurchaseOrderDetail;
           poDetailCacheRef.current.set(poId, purchaseOrder);
+          setPoDetailCacheVersion((prev) => prev + 1);
           return { purchaseOrder, error: null };
         } catch {
           return {
@@ -1378,18 +1675,37 @@ export function PurchaseOrderList({
 
   const upsertPoDetailCache = useCallback((purchaseOrder: PurchaseOrderDetail) => {
     poDetailCacheRef.current.set(purchaseOrder.id, purchaseOrder);
+    setPoDetailCacheVersion((prev) => prev + 1);
   }, []);
 
   const invalidatePoDetailCache = useCallback((poId: string) => {
     poDetailCacheRef.current.delete(poId);
     poDetailPendingRef.current.delete(poId);
+    setPoDetailCacheVersion((prev) => prev + 1);
   }, []);
+
+  const upsertPoListFromDetail = useCallback(
+    (purchaseOrder: PurchaseOrderDetail) => {
+      const nextRow = toPurchaseOrderListItemFromDetail(purchaseOrder, storeCurrency);
+      setPoList((prev) => {
+        const index = prev.findIndex((item) => item.id === nextRow.id);
+        if (index === -1) {
+          return [nextRow, ...prev];
+        }
+        const next = [...prev];
+        next[index] = nextRow;
+        return next;
+      });
+    },
+    [storeCurrency],
+  );
 
   const loadPurchaseOrders = useCallback(
     async (page: number, replace = false) => {
       try {
         const res = await authFetch(
           `/api/stock/purchase-orders?page=${page}&pageSize=${pageSize}`,
+          { cache: "no-store" },
         );
         const data = (await res.json().catch(() => null)) as
           | {
@@ -1442,6 +1758,7 @@ export function PurchaseOrderList({
       const query = params.toString();
       const res = await authFetch(
         `/api/stock/purchase-orders/pending-rate${query ? `?${query}` : ""}`,
+        { cache: "no-store" },
       );
       const data = (await res.json().catch(() => null)) as
         | {
@@ -1508,8 +1825,48 @@ export function PurchaseOrderList({
     if (!isPurchaseTabActive) {
       return;
     }
+    if (hasLoadedFreshPurchaseListRef.current) {
+      return;
+    }
+    hasLoadedFreshPurchaseListRef.current = true;
+    void reloadFirstPage();
+  }, [isPurchaseTabActive, reloadFirstPage]);
+
+  useEffect(() => {
+    if (!isPurchaseTabActive) {
+      return;
+    }
     void loadPendingQueue();
   }, [isPurchaseTabActive, loadPendingQueue]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      pendingWorkspacePostLoadScrollYRef.current = null;
+      return;
+    }
+
+    const pendingY = pendingWorkspacePostLoadScrollYRef.current;
+    if (pendingY == null) {
+      return;
+    }
+
+    const isWorkspaceStillLoading =
+      workspaceTab === "OPERATIONS"
+        ? isRefreshingList
+        : workspaceTab === "MONTH_END"
+          ? isLoadingPendingQueue
+          : false;
+
+    if (isWorkspaceStillLoading) {
+      return;
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: pendingY });
+    });
+    pendingWorkspacePostLoadScrollYRef.current = null;
+    return () => window.cancelAnimationFrame(rafId);
+  }, [isLoadingPendingQueue, isRefreshingList, workspaceTab]);
 
   useEffect(() => {
     setSelectedPendingQueueIds((prev) =>
@@ -1544,14 +1901,21 @@ export function PurchaseOrderList({
       return;
     }
     setBulkRateInput("");
-    setBulkStatementTotalInput("");
     setBulkReferenceInput("");
     setBulkNoteInput("");
     setBulkErrors([]);
     setBulkProgressText(null);
     setBulkPaidAtInput(new Date().toISOString().slice(0, 10));
     setIsBulkMonthEndMode(true);
-  }, [hasMixedPendingCurrencies, selectedPendingQueueItems.length, uiLocale]);
+    void Promise.allSettled(
+      selectedPendingQueueItems.map((item) => loadPoDetail(item.id, { preferCache: true })),
+    );
+  }, [
+    hasMixedPendingCurrencies,
+    loadPoDetail,
+    selectedPendingQueueItems,
+    uiLocale,
+  ]);
 
   const submitBulkMonthEnd = useCallback(async () => {
     if (sortedSelectedPendingQueueItems.length === 0) {
@@ -1569,23 +1933,10 @@ export function PurchaseOrderList({
       return;
     }
 
-    const paymentReference = bulkReferenceInput.trim();
-    if (!paymentReference) {
-      toast.error(t(uiLocale, "purchase.monthEnd.bulk.validation.referenceRequired"));
-      return;
-    }
+    const paymentReference = bulkReferenceInput.trim() || undefined;
 
     const paymentNote = bulkNoteInput.trim();
     const paidAt = bulkPaidAtInput.trim();
-    const hasStatementTotal = bulkStatementTotalInput.trim().length > 0;
-    const parsedStatementTotal = Math.round(Number(bulkStatementTotalInput));
-    if (
-      hasStatementTotal &&
-      (!Number.isFinite(parsedStatementTotal) || parsedStatementTotal <= 0)
-    ) {
-      toast.error(t(uiLocale, "purchase.monthEnd.bulk.validation.statementTotalInvalid"));
-      return;
-    }
 
     setIsBulkSubmitting(true);
     setBulkErrors([]);
@@ -1595,10 +1946,6 @@ export function PurchaseOrderList({
     let settledCount = 0;
     let finalizedCount = 0;
     let settledAmountTotal = 0;
-    let remainingStatementBudget = hasStatementTotal
-      ? Math.max(0, parsedStatementTotal)
-      : null;
-
     try {
       for (let i = 0; i < sortedSelectedPendingQueueItems.length; i += 1) {
         const item = sortedSelectedPendingQueueItems[i]!;
@@ -1618,7 +1965,9 @@ export function PurchaseOrderList({
               exchangeRate,
               note:
                 paymentNote ||
-                `${t(uiLocale, "purchase.monthEnd.bulk.noteTemplate.prefix")} ${paymentReference}`,
+                (paymentReference
+                  ? `${t(uiLocale, "purchase.monthEnd.bulk.noteTemplate.prefix")} ${paymentReference}`
+                  : undefined),
             }),
           },
         );
@@ -1645,10 +1994,7 @@ export function PurchaseOrderList({
           settledCount += 1;
           continue;
         }
-        const settleAmount =
-          remainingStatementBudget === null
-            ? outstandingAmount
-            : Math.min(outstandingAmount, remainingStatementBudget);
+        const settleAmount = outstandingAmount;
         if (!Number.isFinite(settleAmount) || settleAmount <= 0) {
           continue;
         }
@@ -1681,9 +2027,6 @@ export function PurchaseOrderList({
         if (settleData?.purchaseOrder) {
           poDetailCacheRef.current.set(item.id, settleData.purchaseOrder);
         }
-        if (remainingStatementBudget !== null) {
-          remainingStatementBudget = Math.max(0, remainingStatementBudget - settleAmount);
-        }
         settledAmountTotal += settleAmount;
         settledCount += 1;
       }
@@ -1696,11 +2039,6 @@ export function PurchaseOrderList({
       if (settledCount > 0) {
         toast.success(
           `${t(uiLocale, "purchase.monthEnd.bulk.toast.settled.prefix")} ${settledCount}/${sortedSelectedPendingQueueItems.length} ${t(uiLocale, "purchase.items")} (${t(uiLocale, "purchase.monthEnd.bulk.toast.total.prefix")} ${fmtPrice(settledAmountTotal, storeCurrency, numberLocale)})`,
-        );
-      }
-      if ((remainingStatementBudget ?? 0) > 0) {
-        toast(
-          `${t(uiLocale, "purchase.monthEnd.bulk.toast.remainingStatement.prefix")} ${fmtPrice(remainingStatementBudget ?? 0, storeCurrency, numberLocale)}`,
         );
       }
       if (errors.length > 0) {
@@ -1725,7 +2063,6 @@ export function PurchaseOrderList({
     bulkNoteInput,
     bulkPaidAtInput,
     bulkRateInput,
-    bulkStatementTotalInput,
     bulkReferenceInput,
     hasMixedPendingCurrencies,
     loadPoDetail,
@@ -2080,10 +2417,24 @@ export function PurchaseOrderList({
     for (const po of poList) {
       counts[po.status] = (counts[po.status] ?? 0) + 1;
     }
-    counts.OPEN =
-      (counts.DRAFT ?? 0) + (counts.ORDERED ?? 0) + (counts.SHIPPED ?? 0);
+    const isPendingRate = (po: PurchaseOrderListItem) =>
+      po.status === "RECEIVED" &&
+      po.purchaseCurrency !== storeCurrency &&
+      !po.exchangeRateLockedAt;
+    const isDone = (po: PurchaseOrderListItem) =>
+      po.status === "RECEIVED" && !isPendingRate(po) && (po.outstandingBase ?? 0) <= 0;
+
+    counts.OPEN = poList.filter((po) => po.status !== "CANCELLED" && !isDone(po)).length;
+    counts.PENDING_RATE = poList.filter((po) => isPendingRate(po)).length;
+    counts.PENDING_PAYMENT = poList.filter((po) => {
+      if (po.status !== "RECEIVED") return false;
+      if ((po.outstandingBase ?? 0) <= 0) return false;
+      if (isPendingRate(po)) return false;
+      return po.paymentStatus !== "PAID";
+    }).length;
+    counts.DONE = poList.filter((po) => isDone(po)).length;
     return counts;
-  }, [poList]);
+  }, [poList, storeCurrency]);
   const workspaceSummary = useMemo(() => {
     const today = new Date();
     const startOfToday = new Date(
@@ -2098,8 +2449,15 @@ export function PurchaseOrderList({
     let dueSoonPoCount = 0;
     let outstandingBase = 0;
 
+    const isPendingRate = (po: PurchaseOrderListItem) =>
+      po.status === "RECEIVED" &&
+      po.purchaseCurrency !== storeCurrency &&
+      !po.exchangeRateLockedAt;
+    const isDone = (po: PurchaseOrderListItem) =>
+      po.status === "RECEIVED" && !isPendingRate(po) && (po.outstandingBase ?? 0) <= 0;
+
     for (const po of poList) {
-      if (po.status !== "CANCELLED" && po.status !== "RECEIVED") {
+      if (po.status !== "CANCELLED" && !isDone(po)) {
         openPoCount += 1;
       }
 
@@ -2134,7 +2492,7 @@ export function PurchaseOrderList({
       dueSoonPoCount,
       outstandingBase,
     };
-  }, [pendingRateQueue.length, poList]);
+  }, [pendingRateQueue.length, poList, storeCurrency]);
   const activeKpiShortcutLabel = useMemo(() => {
     if (activeKpiShortcut === "OPEN_PO") return t(uiLocale, "purchase.kpiShortcut.OPEN_PO.active");
     if (activeKpiShortcut === "PENDING_RATE") {
@@ -2552,176 +2910,31 @@ export function PurchaseOrderList({
                 {t(uiLocale, "purchase.monthEnd.mixedCurrencies")}
               </p>
             ) : null}
-            {isBulkMonthEndMode ? (
-              <div className="space-y-2 rounded-lg border border-amber-300 bg-white p-3">
-                <p className="text-xs font-semibold text-amber-800">
-                  {t(uiLocale, "purchase.monthEnd.bulk.panel.title")}
-                </p>
-                <p className="text-[11px] text-amber-700/90">
-                  {t(uiLocale, "purchase.monthEnd.bulk.panel.subtitle")}
-                </p>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-slate-600">
-                      {t(uiLocale, "purchase.monthEnd.bulk.field.exchangeRate.label")} (1{" "}
-                      {selectedPendingCurrency ?? "-"} = ? {storeCurrency})
-                    </label>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      className="h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-300"
-                      value={bulkRateInput}
-                      onChange={(event) => setBulkRateInput(event.target.value)}
-                      placeholder="0"
-                      disabled={isBulkSubmitting}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-slate-600">
-                      {t(uiLocale, "purchase.monthEnd.bulk.field.paidAt.label")}
-                    </label>
-                    <input
-                      type="date"
-                      className="po-date-input h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-300"
-                      value={bulkPaidAtInput}
-                      onChange={(event) => setBulkPaidAtInput(event.target.value)}
-                      disabled={isBulkSubmitting}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-slate-600">
-                      {t(uiLocale, "purchase.monthEnd.bulk.field.statementTotal.labelOptional")}
-                    </label>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      className="h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-300"
-                      value={bulkStatementTotalInput}
-                      onChange={(event) => setBulkStatementTotalInput(event.target.value)}
-                      placeholder="0"
-                      disabled={isBulkSubmitting}
-                    />
-                    <p className="text-[10px] text-slate-500">
-                      {t(uiLocale, "purchase.monthEnd.bulk.field.statementTotal.help")}
-                    </p>
-                  </div>
-                  <div className="space-y-1 sm:col-span-2">
-                    <label className="text-[11px] text-slate-600">
-                      {t(uiLocale, "purchase.monthEnd.bulk.field.reference.labelRequired")}
-                    </label>
-                    <input
-                      className="h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-300"
-                      value={bulkReferenceInput}
-                      onChange={(event) => setBulkReferenceInput(event.target.value)}
-                      placeholder={t(uiLocale, "purchase.monthEnd.bulk.field.reference.placeholder")}
-                      disabled={isBulkSubmitting}
-                    />
-                  </div>
-                  <div className="space-y-1 sm:col-span-2">
-                    <label className="text-[11px] text-slate-600">
-                      {t(uiLocale, "purchase.monthEnd.bulk.field.note.labelOptional")}
-                    </label>
-                    <input
-                      className="h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-300"
-                      value={bulkNoteInput}
-                      onChange={(event) => setBulkNoteInput(event.target.value)}
-                      placeholder={t(uiLocale, "purchase.monthEnd.bulk.field.note.placeholder")}
-                      disabled={isBulkSubmitting}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50/50 p-2">
-                  <p className="text-[11px] font-medium text-amber-800">
-                    {t(uiLocale, "purchase.monthEnd.bulk.preview.title")}
-                  </p>
-                  <p className="text-[11px] text-amber-800">
-                    {t(uiLocale, "purchase.monthEnd.bulk.preview.selectedOutstanding.prefix")}{" "}
-                    {fmtPrice(bulkAllocationPreview.totalOutstanding, storeCurrency, numberLocale)}
-                    {" · "}
-                    {t(uiLocale, "purchase.monthEnd.bulk.preview.willSettle.prefix")}{" "}
-                    {fmtPrice(bulkAllocationPreview.plannedTotal, storeCurrency, numberLocale)}
-                    {" · "}
-                    {t(uiLocale, "purchase.monthEnd.bulk.preview.remainingOutstanding.prefix")}{" "}
-                    {fmtPrice(bulkAllocationPreview.outstandingAfter, storeCurrency, numberLocale)}
-                  </p>
-                  {bulkAllocationPreview.statementTotal !== null ? (
-                    <p className="text-[11px] text-amber-800">
-                      {t(uiLocale, "purchase.monthEnd.bulk.preview.unmatchedStatement.prefix")}{" "}
-                      {fmtPrice(
-                        bulkAllocationPreview.remainingUnallocated,
-                        storeCurrency,
-                        numberLocale,
-                      )}
-                    </p>
-                  ) : null}
-                  {bulkAllocationPreview.invalidStatementTotal ? (
-                    <p className="text-[11px] text-red-600">
-                      {t(uiLocale, "purchase.monthEnd.bulk.preview.statementTotalInvalid")}
-                    </p>
-                  ) : null}
-                  <div className="max-h-24 space-y-0.5 overflow-y-auto pr-1">
-                    {bulkAllocationPreview.rows.map((row) => (
-                      <p key={row.id} className="text-[11px] text-amber-800">
-                        {row.poNumber}
-                        {row.supplierName ? ` · ${row.supplierName}` : ""}
-                        {row.dueDate
-                          ? ` · ${t(uiLocale, "purchase.label.dueDate")} ${formatDate(row.dueDate, dateLocale)}`
-                          : ""}
-                        {" · "}
-                        {t(uiLocale, "purchase.monthEnd.bulk.preview.match.prefix")}{" "}
-                        {fmtPrice(row.planned, storeCurrency, numberLocale)}
-                        {" / "}
-                        {t(uiLocale, "purchase.monthEnd.bulk.preview.outstanding.prefix")}{" "}
-                        {fmtPrice(row.outstanding, storeCurrency, numberLocale)}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-                {bulkProgressText ? (
-                  <p className="text-[11px] text-amber-700">{bulkProgressText}</p>
-                ) : null}
-                {bulkErrors.length > 0 ? (
-                  <div className="space-y-1 rounded-md border border-red-200 bg-red-50 p-2">
-                    <p className="text-[11px] font-medium text-red-700">
-                      {t(uiLocale, "purchase.monthEnd.bulk.errors.title.prefix")} (
-                      {bulkErrors.length.toLocaleString(numberLocale)})
-                    </p>
-                    <ul className="max-h-24 list-disc space-y-0.5 overflow-y-auto pl-4 text-[11px] text-red-700">
-                      {bulkErrors.map((error, index) => (
-                        <li key={`${error}-${index}`}>{error}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9 border-amber-200 bg-white text-xs text-amber-700 hover:bg-amber-50"
-                    onClick={() => setIsBulkMonthEndMode(false)}
-                    disabled={isBulkSubmitting}
-                  >
-                    {t(uiLocale, "common.action.cancel")}
-                  </Button>
-                  <Button
-                    type="button"
-                    className="h-9 bg-amber-600 text-xs text-white hover:bg-amber-700"
-                    onClick={() => {
-                      void submitBulkMonthEnd();
-                    }}
-                    disabled={isBulkSubmitting || hasMixedPendingCurrencies}
-                  >
-                    {isBulkSubmitting ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      t(uiLocale, "purchase.monthEnd.bulk.cta.confirm")
-                    )}
-                  </Button>
-                </div>
-              </div>
-            ) : null}
             <div className="max-h-72 space-y-1.5 overflow-y-auto">
-              {pendingRateQueue.map((item) => (
+              {pendingRateQueue.map((item) => {
+                const listFallback = poListById.get(item.id);
+                const productTotalPurchase =
+                  item.totalCostPurchase > 0
+                    ? item.totalCostPurchase
+                    : (listFallback?.totalCostPurchase ?? 0);
+                const productTotalBase =
+                  item.totalCostBase > 0 ? item.totalCostBase : (listFallback?.totalCostBase ?? 0);
+                const showOriginalPurchaseAmount =
+                  item.purchaseCurrency !== storeCurrency && productTotalPurchase > 0;
+                const shippingCostOriginal =
+                  item.shippingCostOriginal > 0
+                    ? item.shippingCostOriginal
+                    : (listFallback?.shippingCostOriginal ?? 0);
+                const shippingCostCurrency =
+                  shippingCostOriginal > 0
+                    ? item.shippingCostCurrency
+                    : (listFallback?.shippingCostCurrency ?? storeCurrency);
+                const shippingCostBase =
+                  item.shippingCost > 0 ? item.shippingCost : (listFallback?.shippingCost ?? 0);
+                const showOriginalShippingAmount =
+                  shippingCostCurrency !== storeCurrency && shippingCostOriginal > 0;
+
+                return (
                 <div
                   key={item.id}
                   className="flex items-start gap-2 rounded-lg border border-amber-200 bg-white px-2.5 py-2"
@@ -2753,15 +2966,74 @@ export function PurchaseOrderList({
                         {item.dueDate
                           ? ` · ${t(uiLocale, "purchase.label.dueDate")} ${formatDate(item.dueDate, dateLocale)}`
                           : ""}
-                        {" · "}
-                        {t(uiLocale, "purchase.label.outstanding")}{" "}
-                        {fmtPrice(item.outstandingBase, storeCurrency, numberLocale)}
                       </p>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-slate-500">
+                        <span>{t(uiLocale, "purchase.summary.products")}</span>
+                        <CurrencyAmountStack
+                          primaryAmount={
+                            showOriginalPurchaseAmount
+                              ? productTotalPurchase
+                              : productTotalBase
+                          }
+                          primaryCurrency={
+                            showOriginalPurchaseAmount
+                              ? item.purchaseCurrency
+                              : storeCurrency
+                          }
+                          secondaryAmount={
+                            showOriginalPurchaseAmount ? productTotalBase : null
+                          }
+                          secondaryCurrency={
+                            showOriginalPurchaseAmount ? storeCurrency : null
+                          }
+                          numberLocale={numberLocale}
+                          align="left"
+                          layout="inline"
+                          primaryClassName="text-[11px] font-medium text-slate-700"
+                        />
+                        {shippingCostBase > 0 ? (
+                          <>
+                            <span className="text-slate-300">·</span>
+                            <span>{t(uiLocale, "purchase.summary.shipping")}</span>
+                            <CurrencyAmountStack
+                              primaryAmount={
+                                showOriginalShippingAmount
+                                  ? shippingCostOriginal
+                                  : shippingCostBase
+                              }
+                              primaryCurrency={
+                                showOriginalShippingAmount
+                                  ? shippingCostCurrency
+                                  : storeCurrency
+                              }
+                              secondaryAmount={
+                                showOriginalShippingAmount ? shippingCostBase : null
+                              }
+                              secondaryCurrency={
+                                showOriginalShippingAmount ? storeCurrency : null
+                              }
+                              numberLocale={numberLocale}
+                              align="left"
+                              layout="inline"
+                              primaryClassName="text-[11px] font-medium text-slate-700"
+                            />
+                          </>
+                        ) : null}
+                      </div>
+                      {item.outstandingBase > 0 ? (
+                        <p className="mt-0.5 text-[11px] text-slate-500">
+                          {t(uiLocale, "purchase.label.outstanding")}{" "}
+                          <span className="font-medium text-slate-700">
+                            {fmtPrice(item.outstandingBase, storeCurrency, numberLocale)}
+                          </span>
+                        </p>
+                      ) : null}
                     </div>
                     <ChevronRight className="h-4 w-4 shrink-0 text-amber-500" />
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -2805,6 +3077,15 @@ export function PurchaseOrderList({
           [
             { id: "ALL" as StatusFilter, label: t(uiLocale, "purchase.filter.all") },
             { id: "OPEN" as StatusFilter, label: t(uiLocale, "purchase.filter.open") },
+            {
+              id: "PENDING_RATE" as StatusFilter,
+              label: t(uiLocale, "purchase.filter.pendingRate"),
+            },
+            {
+              id: "PENDING_PAYMENT" as StatusFilter,
+              label: t(uiLocale, "purchase.filter.pendingPayment"),
+            },
+            { id: "DONE" as StatusFilter, label: t(uiLocale, "purchase.filter.done") },
             { id: "DRAFT" as StatusFilter, label: getPurchaseStatusLabel(uiLocale, "DRAFT") },
             { id: "ORDERED" as StatusFilter, label: getPurchaseStatusLabel(uiLocale, "ORDERED") },
             { id: "SHIPPED" as StatusFilter, label: getPurchaseStatusLabel(uiLocale, "SHIPPED") },
@@ -2869,6 +3150,12 @@ export function PurchaseOrderList({
               ? t(uiLocale, "purchase.empty.all")
               : statusFilter === "OPEN"
                 ? t(uiLocale, "purchase.empty.open")
+                : statusFilter === "PENDING_RATE"
+                  ? t(uiLocale, "purchase.empty.pendingRate")
+                  : statusFilter === "PENDING_PAYMENT"
+                    ? t(uiLocale, "purchase.empty.pendingPayment")
+                    : statusFilter === "DONE"
+                      ? t(uiLocale, "purchase.empty.done")
                 : t(uiLocale, "purchase.empty.status")}
           </p>
           {canCreate && (statusFilter === "ALL" || statusFilter === "OPEN") && (
@@ -2889,6 +3176,8 @@ export function PurchaseOrderList({
             const Icon = cfg.icon;
             const isExchangeRatePending =
               po.purchaseCurrency !== storeCurrency && !po.exchangeRateLockedAt;
+            const itemSummary = getPurchaseOrderCardItemSummary(po, uiLocale, numberLocale);
+            const costRows = getPurchaseOrderListCostRows(po, storeCurrency);
             const remaining =
               po.expectedAt && po.status !== "RECEIVED" && po.status !== "CANCELLED"
                 ? daysUntil(po.expectedAt)
@@ -2919,6 +3208,11 @@ export function PurchaseOrderList({
                         {po.supplierName} ({po.purchaseCurrency})
                       </p>
                     )}
+                    {itemSummary && (
+                      <p className="mt-1 truncate text-xs text-slate-700">
+                        {itemSummary}
+                      </p>
+                    )}
                     {isExchangeRatePending && (
                       <p className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
                         {t(uiLocale, "purchase.badge.pendingRate")}
@@ -2941,21 +3235,39 @@ export function PurchaseOrderList({
                             : t(uiLocale, "purchase.paymentStatus.UNPAID")}
                       </p>
                     )}
-                    <p className="mt-1 text-xs text-slate-500">
-                      {po.itemCount.toLocaleString(numberLocale)} {t(uiLocale, "purchase.items")} ·{" "}
-                      {fmtPrice(
-                        po.totalCostBase + po.shippingCost + po.otherCost,
-                        storeCurrency,
-                        numberLocale,
-                      )}
-                      {po.status === "RECEIVED" ? (
-                        <>
-                          {" · "}
-                          {t(uiLocale, "purchase.label.outstanding")}{" "}
-                          {fmtPrice(po.outstandingBase, storeCurrency, numberLocale)}
-                        </>
+                    <div className="mt-1 space-y-0.5 text-xs text-slate-500">
+                      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                        {costRows.map((row, index) => (
+                          <div
+                            key={row.labelKey}
+                            className="inline-flex items-center gap-1.5"
+                          >
+                            {index > 0 ? <span className="text-slate-300">·</span> : null}
+                            <span>{t(uiLocale, row.labelKey)}</span>
+                            <CurrencyAmountStack
+                              primaryAmount={row.primaryAmount}
+                              primaryCurrency={row.primaryCurrency}
+                              secondaryAmount={row.secondaryAmount}
+                              secondaryCurrency={row.secondaryCurrency}
+                              numberLocale={numberLocale}
+                              align="left"
+                              layout="inline"
+                              primaryClassName="text-xs font-medium text-slate-700"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      {po.status === "RECEIVED" &&
+                      po.paymentStatus !== "PAID" &&
+                      po.outstandingBase > 0 ? (
+                        <div className="text-xs text-slate-500">
+                          <span>{t(uiLocale, "purchase.label.outstanding")} </span>
+                          <span className="font-medium text-slate-700">
+                            {fmtPrice(po.outstandingBase, storeCurrency, numberLocale)}
+                          </span>
+                        </div>
                       ) : null}
-                    </p>
+                    </div>
                   </div>
                   <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
                 </div>
@@ -3105,6 +3417,159 @@ export function PurchaseOrderList({
       )}
       </>
       ) : null}
+
+      <SlideUpSheet
+        isOpen={isBulkMonthEndMode}
+        onClose={() => setIsBulkMonthEndMode(false)}
+        title={t(uiLocale, "purchase.monthEnd.bulk.panel.title")}
+        description={t(uiLocale, "purchase.monthEnd.bulk.panel.subtitle")}
+        closeOnBackdrop={false}
+        disabled={isBulkSubmitting}
+        footer={
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 border-amber-200 bg-white text-xs text-amber-700 hover:bg-amber-50"
+              onClick={() => setIsBulkMonthEndMode(false)}
+              disabled={isBulkSubmitting}
+            >
+              {t(uiLocale, "common.action.cancel")}
+            </Button>
+            <Button
+              type="button"
+              className="h-11 bg-amber-600 text-xs text-white hover:bg-amber-700"
+              onClick={() => {
+                void submitBulkMonthEnd();
+              }}
+              disabled={isBulkSubmitting || hasMixedPendingCurrencies}
+            >
+              {isBulkSubmitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                t(uiLocale, "purchase.monthEnd.bulk.cta.confirm")
+              )}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-[11px] text-slate-600">
+                {t(uiLocale, "purchase.monthEnd.bulk.field.exchangeRate.label")} (1{" "}
+                {selectedPendingCurrency ?? "-"} = ? {storeCurrency})
+              </label>
+              <input
+                type="number"
+                inputMode="decimal"
+                className="h-10 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-amber-300"
+                value={bulkRateInput}
+                onChange={(event) => setBulkRateInput(event.target.value)}
+                placeholder="0"
+                disabled={isBulkSubmitting}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] text-slate-600">
+                {t(uiLocale, "purchase.monthEnd.bulk.field.paidAt.label")}
+              </label>
+              <input
+                type="date"
+                className="po-date-input h-10 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-amber-300"
+                value={bulkPaidAtInput}
+                onChange={(event) => setBulkPaidAtInput(event.target.value)}
+                disabled={isBulkSubmitting}
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <label className="text-[11px] text-slate-600">
+                {t(uiLocale, "purchase.monthEnd.bulk.field.reference.labelRequired")}
+              </label>
+              <input
+                className="h-10 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-amber-300"
+                value={bulkReferenceInput}
+                onChange={(event) => setBulkReferenceInput(event.target.value)}
+                placeholder={t(uiLocale, "purchase.monthEnd.bulk.field.reference.placeholder")}
+                disabled={isBulkSubmitting}
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <label className="text-[11px] text-slate-600">
+                {t(uiLocale, "purchase.monthEnd.bulk.field.note.labelOptional")}
+              </label>
+              <input
+                className="h-10 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-amber-300"
+                value={bulkNoteInput}
+                onChange={(event) => setBulkNoteInput(event.target.value)}
+                placeholder={t(uiLocale, "purchase.monthEnd.bulk.field.note.placeholder")}
+                disabled={isBulkSubmitting}
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/50 p-3">
+            <p className="text-xs font-medium text-amber-800">
+              {t(uiLocale, "purchase.monthEnd.bulk.preview.title")}
+            </p>
+            <p className="text-xs text-amber-800">
+              {t(uiLocale, "purchase.monthEnd.bulk.preview.selectedOutstanding.prefix")}{" "}
+              {fmtPrice(bulkAllocationPreview.totalOutstanding, storeCurrency, numberLocale)}
+              {" · "}
+              {t(uiLocale, "purchase.monthEnd.bulk.preview.willSettle.prefix")}{" "}
+              {fmtPrice(bulkAllocationPreview.plannedTotal, storeCurrency, numberLocale)}
+              {" · "}
+              {t(uiLocale, "purchase.monthEnd.bulk.preview.remainingOutstanding.prefix")}{" "}
+              {fmtPrice(bulkAllocationPreview.outstandingAfter, storeCurrency, numberLocale)}
+            </p>
+            <div className="max-h-32 space-y-1 overflow-y-auto pr-1">
+              {bulkAllocationPreview.rows.map((row) => (
+                <p key={row.id} className="text-[11px] text-amber-800">
+                  {row.poNumber}
+                  {row.supplierName ? ` · ${row.supplierName}` : ""}
+                  {row.dueDate
+                    ? ` · ${t(uiLocale, "purchase.label.dueDate")} ${formatDate(row.dueDate, dateLocale)}`
+                    : ""}
+                  {" · "}
+                  {t(uiLocale, "purchase.summary.products")}{" "}
+                  {fmtPrice(row.productBase, storeCurrency, numberLocale)}
+                  {" · "}
+                  {t(uiLocale, "purchase.summary.shipping")}{" "}
+                  {fmtPrice(row.shippingBase, storeCurrency, numberLocale)}
+                  {row.otherBase > 0 ? (
+                    <>
+                      {" · "}
+                      {t(uiLocale, "purchase.summary.other")}{" "}
+                      {fmtPrice(row.otherBase, storeCurrency, numberLocale)}
+                    </>
+                  ) : null}
+                  {" · "}
+                  {t(uiLocale, "purchase.monthEnd.bulk.preview.match.prefix")}{" "}
+                  {fmtPrice(row.planned, storeCurrency, numberLocale)}
+                  {" / "}
+                  {t(uiLocale, "purchase.monthEnd.bulk.preview.outstanding.prefix")}{" "}
+                  {fmtPrice(row.outstanding, storeCurrency, numberLocale)}
+                </p>
+              ))}
+            </div>
+          </div>
+          {bulkProgressText ? (
+            <p className="text-xs text-amber-700">{bulkProgressText}</p>
+          ) : null}
+          {bulkErrors.length > 0 ? (
+            <div className="space-y-1 rounded-lg border border-red-200 bg-red-50 p-3">
+              <p className="text-xs font-medium text-red-700">
+                {t(uiLocale, "purchase.monthEnd.bulk.errors.title.prefix")} (
+                {bulkErrors.length.toLocaleString(numberLocale)})
+              </p>
+              <ul className="max-h-28 list-disc space-y-0.5 overflow-y-auto pl-4 text-[11px] text-red-700">
+                {bulkErrors.map((error, index) => (
+                  <li key={`${error}-${index}`}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      </SlideUpSheet>
 
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
        * SlideUpSheet — Create PO Wizard
@@ -3755,6 +4220,65 @@ export function PurchaseOrderList({
 	                      {t(uiLocale, "purchase.createWizard.summary.pendingRateHint")}
 	                    </p>
 	                  )}
+                    {items.length > 0 ? (
+                      <div className="mt-2 space-y-1.5 rounded-lg border border-slate-200 bg-white p-2.5">
+                        {items.map((item) => {
+                          const resolvedUnitCost = getPurchaseItemResolvedUnitCost(item);
+                          const resolvedLineTotal = getPurchaseItemResolvedLineTotal(item);
+                          const resolvedBaseLineTotal = Math.round(
+                            resolvedLineTotal * effectiveRate,
+                          );
+
+                          return (
+                            <div
+                              key={item.productId}
+                              className="flex items-start justify-between gap-3 border-b border-slate-100 pb-2 last:border-b-0 last:pb-0"
+                            >
+                              <div className="min-w-0 space-y-0.5">
+                                <p className="truncate text-sm font-medium text-slate-900">
+                                  {item.productName}
+                                </p>
+                                <p className="text-[11px] text-slate-500">
+                                  {(Number(item.qtyOrdered) || 0).toLocaleString(numberLocale)}{" "}
+                                  {getPurchaseUnitLabel(item.unitCode, item.unitNameTh)}
+                                  {" × "}
+                                  {fmtPrice(
+                                    resolvedUnitCost,
+                                    purchaseCurrency,
+                                    numberLocale,
+                                  )}
+                                  {" / "}
+                                  {getPurchaseUnitLabel(item.unitCode, item.unitNameTh)}
+                                </p>
+                              </div>
+                              <CurrencyAmountStack
+                                primaryAmount={
+                                  purchaseCurrency === storeCurrency
+                                    ? resolvedBaseLineTotal
+                                    : resolvedLineTotal
+                                }
+                                primaryCurrency={
+                                  purchaseCurrency === storeCurrency
+                                    ? storeCurrency
+                                    : purchaseCurrency
+                                }
+                                secondaryAmount={
+                                  purchaseCurrency === storeCurrency
+                                    ? null
+                                    : resolvedBaseLineTotal
+                                }
+                                secondaryCurrency={
+                                  purchaseCurrency === storeCurrency
+                                    ? null
+                                    : storeCurrency
+                                }
+                                numberLocale={numberLocale}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
 	                  <div className="mt-2 space-y-1 text-sm">
 	                    <div className="flex justify-between">
 	                      <span className="text-slate-600">
@@ -3786,7 +4310,23 @@ export function PurchaseOrderList({
 	                        <span className="text-slate-600">
 	                          {t(uiLocale, "purchase.summary.shipping")}
 	                        </span>
-	                        <span>{fmtPrice(shipping, storeCurrency, numberLocale)}</span>
+                          <CurrencyAmountStack
+                            primaryAmount={
+                              shippingCostCurrency === storeCurrency ? shippingBase : shipping
+                            }
+                            primaryCurrency={
+                              shippingCostCurrency === storeCurrency
+                                ? storeCurrency
+                                : shippingCostCurrency
+                            }
+                            secondaryAmount={
+                              shippingCostCurrency === storeCurrency ? null : shippingBase
+                            }
+                            secondaryCurrency={
+                              shippingCostCurrency === storeCurrency ? null : storeCurrency
+                            }
+                            numberLocale={numberLocale}
+                          />
 	                      </div>
 	                    )}
 	                    {other > 0 && (
@@ -3794,7 +4334,23 @@ export function PurchaseOrderList({
 	                        <span className="text-slate-600">
 	                          {t(uiLocale, "purchase.summary.other")}
 	                        </span>
-	                        <span>{fmtPrice(other, storeCurrency, numberLocale)}</span>
+                          <CurrencyAmountStack
+                            primaryAmount={
+                              otherCostCurrency === storeCurrency ? otherBase : other
+                            }
+                            primaryCurrency={
+                              otherCostCurrency === storeCurrency
+                                ? storeCurrency
+                                : otherCostCurrency
+                            }
+                            secondaryAmount={
+                              otherCostCurrency === storeCurrency ? null : otherBase
+                            }
+                            secondaryCurrency={
+                              otherCostCurrency === storeCurrency ? null : storeCurrency
+                            }
+                            numberLocale={numberLocale}
+                          />
 	                      </div>
 	                    )}
 	                    <div className="flex justify-between border-t border-slate-200 pt-1 font-semibold">
@@ -3966,6 +4522,7 @@ export function PurchaseOrderList({
         getCachedPoDetail={getCachedPoDetail}
         loadPoDetail={loadPoDetail}
         onCacheUpdate={upsertPoDetailCache}
+        onUpsertListItem={upsertPoListFromDetail}
         onRefreshList={reloadFirstPage}
         onClose={() => setSelectedPO(null)}
         onUpdateStatus={updateStatus}
@@ -3985,6 +4542,7 @@ function PODetailSheet({
   getCachedPoDetail,
   loadPoDetail,
   onCacheUpdate,
+  onUpsertListItem,
   onRefreshList,
   onClose,
   onUpdateStatus,
@@ -4003,6 +4561,7 @@ function PODetailSheet({
     },
   ) => Promise<PoDetailLoadResult>;
   onCacheUpdate: (purchaseOrder: PurchaseOrderDetail) => void;
+  onUpsertListItem: (purchaseOrder: PurchaseOrderDetail) => void;
   onRefreshList: () => Promise<void>;
   onClose: () => void;
   onUpdateStatus: (
@@ -4202,6 +4761,7 @@ function PODetailSheet({
       if (updatedPo) {
         setPo(updatedPo);
         onCacheUpdate(updatedPo);
+        onUpsertListItem(updatedPo);
       } else {
         await refreshDetail(po.id, true);
       }
@@ -4265,12 +4825,23 @@ function PODetailSheet({
 	      }
 
       const updatedPo = data?.purchaseOrder;
+      const shouldStartSettleAfterFinalize =
+        updatedPo?.status === "RECEIVED" && (updatedPo.outstandingBase ?? 0) > 0;
       if (updatedPo) {
         setPo(updatedPo);
         onCacheUpdate(updatedPo);
+        onUpsertListItem(updatedPo);
       }
 	      setIsFinalizeRateMode(false);
 	      setFinalRateNoteInput("");
+        if (shouldStartSettleAfterFinalize) {
+          const today = new Date().toISOString().slice(0, 10);
+          setSettleAmountInput(String(Math.max(0, updatedPo.outstandingBase ?? 0)));
+          setSettlePaidAtInput(today);
+          setSettleReferenceInput("");
+          setSettleNoteInput("");
+          setIsSettleMode(true);
+        }
 	      toast.success(t(uiLocale, "purchase.detail.finalizeRate.toast.success"));
 	      await onRefreshList();
 	      router.refresh();
@@ -4283,6 +4854,7 @@ function PODetailSheet({
 	    finalRateInput,
 	    finalRateNoteInput,
 	    onCacheUpdate,
+	    onUpsertListItem,
 	    onRefreshList,
 	    po,
 	    router,
@@ -4341,6 +4913,7 @@ function PODetailSheet({
       if (updatedPo) {
         setPo(updatedPo);
         onCacheUpdate(updatedPo);
+        onUpsertListItem(updatedPo);
 	      }
 	      setIsSettleMode(false);
 	      toast.success(t(uiLocale, "purchase.detail.settle.toast.success"));
@@ -4353,6 +4926,7 @@ function PODetailSheet({
 	    }
 	  }, [
 	    onCacheUpdate,
+	    onUpsertListItem,
 	    onRefreshList,
 	    po,
 	    router,
@@ -4366,12 +4940,16 @@ function PODetailSheet({
   const startApplyExtraCost = useCallback(() => {
     if (!po) return;
     setExtraCostShippingInput(String(Math.max(0, po.shippingCostOriginal)));
-    setExtraCostShippingCurrency(po.shippingCostCurrency);
+    setExtraCostShippingCurrency(
+      po.shippingCostOriginal > 0 ? po.shippingCostCurrency : storeCurrency,
+    );
     setExtraCostOtherInput(String(Math.max(0, po.otherCostOriginal)));
-    setExtraCostOtherCurrency(po.otherCostCurrency);
+    setExtraCostOtherCurrency(
+      po.otherCostOriginal > 0 ? po.otherCostCurrency : storeCurrency,
+    );
     setExtraCostOtherNoteInput(po.otherCostNote ?? "");
     setIsApplyExtraCostMode(true);
-  }, [po]);
+  }, [po, storeCurrency]);
 
   const submitApplyExtraCost = useCallback(async () => {
     if (!po) return;
@@ -4419,6 +4997,7 @@ function PODetailSheet({
       if (data?.purchaseOrder) {
         setPo(data.purchaseOrder);
         onCacheUpdate(data.purchaseOrder);
+        onUpsertListItem(data.purchaseOrder);
 	      }
 	      setIsApplyExtraCostMode(false);
 	      toast.success(t(uiLocale, "purchase.detail.extraCost.toast.success"));
@@ -4436,6 +5015,7 @@ function PODetailSheet({
 	    extraCostShippingInput,
 	    extraCostShippingCurrency,
 	    onCacheUpdate,
+	    onUpsertListItem,
 	    onRefreshList,
 	    po,
 	    router,
@@ -4471,6 +5051,7 @@ function PODetailSheet({
         if (data?.purchaseOrder) {
           setPo(data.purchaseOrder);
           onCacheUpdate(data.purchaseOrder);
+          onUpsertListItem(data.purchaseOrder);
         }
 	        toast.success(t(uiLocale, "purchase.detail.reversePayment.toast.success"));
 	        await onRefreshList();
@@ -4481,7 +5062,7 @@ function PODetailSheet({
 	        setReversingPaymentId(null);
 	      }
 	    },
-	    [onCacheUpdate, onRefreshList, po, router, uiLocale],
+	    [onCacheUpdate, onUpsertListItem, onRefreshList, po, router, uiLocale],
 	  );
 
   const canEditPO =
@@ -4530,6 +5111,46 @@ function PODetailSheet({
   const extraCostOutstandingPreview = po
     ? extraCostGrandTotalPreview - po.totalPaidBase
     : 0;
+  const finalizeRatePreview = useMemo(() => {
+    if (!po) return null;
+    const nextRate = Math.round(Number(finalRateInput));
+    if (!Number.isFinite(nextRate) || nextRate <= 0) {
+      return null;
+    }
+
+    const productBase = po.items.reduce((sum, item) => {
+      const qtyBaseForCost = Math.max(item.qtyBaseReceived, 0);
+      const nextUnitCostBase = Math.round(
+        (item.unitCostPurchase * nextRate) / item.multiplierToBase,
+      );
+      return sum + nextUnitCostBase * qtyBaseForCost;
+    }, 0);
+
+    const shippingBase = resolvePurchaseExtraCostBasePreview({
+      amountInput: String(po.shippingCostOriginal ?? 0),
+      currency: po.shippingCostCurrency,
+      purchaseCurrency: poPurchaseCurrency,
+      storeCurrency,
+      exchangeRateInput: finalRateInput,
+    });
+    const otherBase = resolvePurchaseExtraCostBasePreview({
+      amountInput: String(po.otherCostOriginal ?? 0),
+      currency: po.otherCostCurrency,
+      purchaseCurrency: poPurchaseCurrency,
+      storeCurrency,
+      exchangeRateInput: finalRateInput,
+    });
+    const newTotalBase = productBase + shippingBase + otherBase;
+    const currentTotalBase = po.totalCostBase + po.shippingCost + po.otherCost;
+
+    return {
+      productBase,
+      shippingBase,
+      otherBase,
+      newTotalBase,
+      deltaBase: newTotalBase - currentTotalBase,
+    };
+  }, [finalRateInput, po, poPurchaseCurrency, storeCurrency]);
 
   const startEdit = () => {
     if (!po) return;
@@ -4627,6 +5248,7 @@ function PODetailSheet({
       const updatedPo = data.purchaseOrder as PurchaseOrderDetail;
 	      setPo(updatedPo);
 	      onCacheUpdate(updatedPo);
+        onUpsertListItem(updatedPo);
 	      setIsEditMode(false);
 	      toast.success(t(uiLocale, "purchase.detail.edit.toast.success"));
 	      router.refresh();
@@ -4895,30 +5517,41 @@ function PODetailSheet({
                       : "border-emerald-200 bg-emerald-50 text-emerald-800"
 	                  }`}
 	                >
-	                  <p className="font-medium">
-	                    {t(uiLocale, "purchase.detail.fx.referenceRate.prefix")} 1{" "}
-	                    {po.purchaseCurrency} = {po.exchangeRate} {storeCurrency}
-	                  </p>
-	                  <p className="mt-1">
-	                    {t(uiLocale, "purchase.detail.fx.initialRate.prefix")} 1{" "}
-	                    {po.purchaseCurrency} = {po.exchangeRateInitial} {storeCurrency}
-	                  </p>
-	                  {isExchangeRatePending ? (
-	                    <p className="mt-1">
-	                      {t(uiLocale, "purchase.detail.fx.status.pending")}
-	                    </p>
-	                  ) : (
-	                    <p className="mt-1">
-	                      {t(uiLocale, "purchase.detail.fx.status.locked.prefix")}
-	                      {po.exchangeRateLockedAt
-	                        ? `${t(uiLocale, "purchase.detail.fx.lockedAt.prefix")} ${formatDate(po.exchangeRateLockedAt, dateLocale)}`
-	                        : ""}
-	                      {po.exchangeRate !== po.exchangeRateInitial
-	                        ? `${t(uiLocale, "purchase.detail.fx.delta.prefix")} ${po.exchangeRate - po.exchangeRateInitial > 0 ? "+" : ""}${po.exchangeRate - po.exchangeRateInitial}`
-	                        : ""}
-	                      {po.exchangeRateLockNote ? ` · ${po.exchangeRateLockNote}` : ""}
-	                    </p>
-	                  )}
+                    <div className="flex items-center justify-between gap-3">
+                      <span
+                        className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                          isExchangeRatePending
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-emerald-100 text-emerald-800"
+                        }`}
+                      >
+                        {isExchangeRatePending
+                          ? t(uiLocale, "purchase.detail.fx.badge.pending")
+                          : t(uiLocale, "purchase.detail.fx.badge.locked")}
+                      </span>
+                      <p className="min-w-0 truncate text-sm font-semibold tabular-nums text-current">
+                        1 {po.purchaseCurrency} ={" "}
+                        {po.exchangeRate.toLocaleString(numberLocale)} {storeCurrency}
+                      </p>
+                    </div>
+
+                    <p className="mt-1.5 text-[11px] tabular-nums text-current/85">
+                      {t(uiLocale, "purchase.detail.fx.meta.initialShort")}{" "}
+                      {po.exchangeRateInitial.toLocaleString(numberLocale)}
+                      {!isExchangeRatePending && po.exchangeRateLockedAt
+                        ? ` · ${t(uiLocale, "purchase.detail.fx.meta.lockedAtShort")} ${formatDate(po.exchangeRateLockedAt, dateLocale)}`
+                        : ` · ${t(uiLocale, "purchase.detail.fx.meta.pendingShort")}`}
+                      {po.exchangeRate !== po.exchangeRateInitial
+                        ? ` · ${t(uiLocale, "purchase.detail.fx.meta.deltaShort")} ${po.exchangeRate - po.exchangeRateInitial > 0 ? "+" : ""}${(po.exchangeRate - po.exchangeRateInitial).toLocaleString(numberLocale)}`
+                        : ""}
+                    </p>
+
+                    {po.exchangeRateLockNote ? (
+                      <p className="mt-1 text-[11px] text-current/85">
+                        {t(uiLocale, "purchase.detail.fx.meta.notePrefix")}{" "}
+                        {po.exchangeRateLockNote}
+                      </p>
+                    ) : null}
 	                </div>
 	              )}
 
@@ -4942,9 +5575,10 @@ function PODetailSheet({
 	                  </p>
 	                  <p className="mt-1">
 	                    {t(uiLocale, "purchase.detail.payment.paidPrefix")}{" "}
-	                    {fmtPrice(po.totalPaidBase, storeCurrency, numberLocale)} ·{" "}
-	                    {t(uiLocale, "purchase.detail.payment.outstandingPrefix")}{" "}
-	                    {fmtPrice(po.outstandingBase, storeCurrency, numberLocale)}
+	                    {fmtPrice(po.totalPaidBase, storeCurrency, numberLocale)}
+                      {po.outstandingBase > 0
+                        ? ` · ${t(uiLocale, "purchase.detail.payment.outstandingPrefix")} ${fmtPrice(po.outstandingBase, storeCurrency, numberLocale)}`
+                        : ""}
 	                  </p>
 	                  {po.paymentStatus === "PAID" || po.paymentStatus === "PARTIAL" ? (
 	                    <p className="mt-1">
@@ -5002,6 +5636,85 @@ function PODetailSheet({
 	                  <p className="text-[11px] text-amber-700/90">
 	                    {t(uiLocale, "purchase.detail.finalizeRate.help")}
 	                  </p>
+                    {finalizeRatePreview ? (
+                      <div className="space-y-2 rounded-lg border border-amber-200 bg-white/80 p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-700">
+                          {t(uiLocale, "purchase.detail.finalizeRate.preview.title")}
+                        </p>
+                        <div className="space-y-1.5 text-xs text-slate-700">
+                          <div className="flex items-center justify-between gap-3">
+                            <span>{t(uiLocale, "purchase.summary.products")}</span>
+                            <CurrencyAmountStack
+                              primaryAmount={finalizeRatePreview.productBase}
+                              primaryCurrency={storeCurrency}
+                              numberLocale={numberLocale}
+                              align="right"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span>{t(uiLocale, "purchase.summary.shipping")}</span>
+                            <CurrencyAmountStack
+                              primaryAmount={finalizeRatePreview.shippingBase}
+                              primaryCurrency={storeCurrency}
+                              numberLocale={numberLocale}
+                              align="right"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span>{t(uiLocale, "purchase.summary.other")}</span>
+                            <CurrencyAmountStack
+                              primaryAmount={finalizeRatePreview.otherBase}
+                              primaryCurrency={storeCurrency}
+                              numberLocale={numberLocale}
+                              align="right"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1 border-t border-amber-200 pt-2">
+                          <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
+                            <span>{t(uiLocale, "purchase.detail.finalizeRate.preview.currentTotal")}</span>
+                            <CurrencyAmountStack
+                              primaryAmount={
+                                po.totalCostBase + po.shippingCost + po.otherCost
+                              }
+                              primaryCurrency={storeCurrency}
+                              numberLocale={numberLocale}
+                              align="right"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-3 text-sm font-semibold text-slate-900">
+                            <span>{t(uiLocale, "purchase.detail.finalizeRate.preview.newTotal")}</span>
+                            <CurrencyAmountStack
+                              primaryAmount={finalizeRatePreview.newTotalBase}
+                              primaryCurrency={storeCurrency}
+                              numberLocale={numberLocale}
+                              align="right"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-3 text-xs">
+                            <span className="text-slate-600">
+                              {t(uiLocale, "purchase.detail.finalizeRate.preview.delta")}
+                            </span>
+                            <span
+                              className={
+                                finalizeRatePreview.deltaBase === 0
+                                  ? "font-medium text-slate-600"
+                                  : finalizeRatePreview.deltaBase > 0
+                                    ? "font-semibold text-amber-700"
+                                    : "font-semibold text-emerald-700"
+                              }
+                            >
+                              {finalizeRatePreview.deltaBase > 0 ? "+" : ""}
+                              {fmtPrice(
+                                finalizeRatePreview.deltaBase,
+                                storeCurrency,
+                                numberLocale,
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
 	                  <div className="grid grid-cols-2 gap-2">
                     <Button
                       type="button"

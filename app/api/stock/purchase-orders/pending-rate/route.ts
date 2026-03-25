@@ -6,6 +6,10 @@ import { stores } from "@/lib/db/schema";
 import { enforcePermission, toRBACErrorResponse } from "@/lib/rbac/access";
 import { getPendingExchangeRateQueue } from "@/server/services/purchase.service";
 
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+} as const;
+
 function toDateStartIso(value: string): string | null {
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
@@ -57,10 +61,15 @@ export async function GET(request: Request) {
       limit,
     });
 
-    return NextResponse.json({
-      ok: true,
-      queue,
-    });
+    return NextResponse.json(
+      {
+        ok: true,
+        queue,
+      },
+      {
+        headers: NO_STORE_HEADERS,
+      },
+    );
   } catch (error) {
     return toRBACErrorResponse(error);
   }

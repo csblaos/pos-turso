@@ -109,13 +109,24 @@ function derivePoPaymentStatus(
   totalPaidBase: number,
   grandTotalBase: number,
 ): "UNPAID" | "PARTIAL" | "PAID" {
+  const normalizedOutstanding = normalizePoOutstandingBase(totalPaidBase, grandTotalBase);
   if (totalPaidBase <= 0) {
     return "UNPAID";
   }
-  if (totalPaidBase >= grandTotalBase) {
+  if (normalizedOutstanding <= 0) {
     return "PAID";
   }
   return "PARTIAL";
+}
+
+const PURCHASE_OUTSTANDING_EPSILON_BASE = 5;
+
+function normalizePoOutstandingBase(totalPaidBase: number, grandTotalBase: number): number {
+  const rawOutstanding = grandTotalBase - totalPaidBase;
+  if (rawOutstanding <= PURCHASE_OUTSTANDING_EPSILON_BASE) {
+    return 0;
+  }
+  return rawOutstanding;
 }
 
 function assertSupportedExtraCostCurrency(params: {
@@ -409,9 +420,11 @@ export async function createPurchaseOrder(params: {
     ? 1
     : Math.round(payload.exchangeRate ?? 1);
   const dueDate = normalizeIsoDateOrNull(payload.dueDate);
+  const shippingCostCurrency = payload.shippingCostCurrency ?? storeCurrency;
+  const otherCostCurrency = payload.otherCostCurrency ?? storeCurrency;
   const shippingCost = resolvePurchaseExtraCost({
     amount: payload.shippingCost,
-    currency: payload.shippingCostCurrency,
+    currency: shippingCostCurrency,
     purchaseCurrency: payload.purchaseCurrency,
     storeCurrency,
     exchangeRate,
@@ -419,7 +432,7 @@ export async function createPurchaseOrder(params: {
   });
   const otherCost = resolvePurchaseExtraCost({
     amount: payload.otherCost,
-    currency: payload.otherCostCurrency,
+    currency: otherCostCurrency,
     purchaseCurrency: payload.purchaseCurrency,
     storeCurrency,
     exchangeRate,
@@ -875,7 +888,7 @@ export async function settlePurchaseOrderPaymentFlow(params: {
       );
     }
     const grandTotalBase = po.totalCostBase + po.shippingCost + po.otherCost;
-    const outstandingBefore = grandTotalBase - po.totalPaidBase;
+    const outstandingBefore = normalizePoOutstandingBase(po.totalPaidBase, grandTotalBase);
     if (outstandingBefore <= 0) {
       throw new PurchaseServiceError(400, "PO นี้บันทึกชำระครบแล้ว");
     }
@@ -1005,9 +1018,12 @@ export async function applyPurchaseOrderExtraCostFlow(params: {
       );
     }
 
+    const shippingCostCurrency = payload.shippingCostCurrency ?? storeCurrency;
+    const otherCostCurrency = payload.otherCostCurrency ?? storeCurrency;
+
     const shippingCost = resolvePurchaseExtraCost({
       amount: payload.shippingCost,
-      currency: payload.shippingCostCurrency,
+      currency: shippingCostCurrency,
       purchaseCurrency: po.purchaseCurrency,
       storeCurrency,
       exchangeRate: po.exchangeRate,
@@ -1015,7 +1031,7 @@ export async function applyPurchaseOrderExtraCostFlow(params: {
     });
     const otherCost = resolvePurchaseExtraCost({
       amount: payload.otherCost,
-      currency: payload.otherCostCurrency,
+      currency: otherCostCurrency,
       purchaseCurrency: po.purchaseCurrency,
       storeCurrency,
       exchangeRate: po.exchangeRate,

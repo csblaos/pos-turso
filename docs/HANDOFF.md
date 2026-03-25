@@ -694,7 +694,8 @@
   - เพิ่ม inner padding ของเนื้อหาใน modal เล็กน้อย (จาก base `16px` เป็น `20px` ต่อด้าน) เพื่อให้หายใจขึ้นและอ่านข้อมูลง่ายขึ้น
 
 - ปรับ default filter ของ `PO Operations`:
-  - ค่าเริ่มต้นในรายการ PO เปลี่ยนจาก `ทั้งหมด` เป็น `งานเปิด (OPEN)` เพื่อลดงานที่ปิดแล้วในมุมมองแรก
+  - ค่าเริ่มต้นในรายการ PO เปลี่ยนจาก `ทั้งหมด` เป็น `งานเปิด (OPEN)` โดย `OPEN` หมายถึงงานค้างทั้งหมด (รวม `RECEIVED` ที่ยัง `รอปิดเรท/รอชำระ`) เพื่อลดงานที่ปิดแล้วในมุมมองแรก
+  - เพิ่ม filter derived ใน `PO Operations`: `รอปิดเรท` (RECEIVED + ต่างสกุล + ยังไม่ล็อกเรท), `รอชำระ` (RECEIVED + outstanding > 0 + ไม่ติดรอปิดเรท), และ `เสร็จแล้ว` (RECEIVED + PAID + ไม่ติดรอปิดเรท)
   - sync URL ของ `poStatus` ให้ถือ `OPEN` เป็น default: ถ้าเป็น `OPEN` จะไม่เขียน query, แต่ถ้าเลือก `ทั้งหมด` หรือสถานะอื่นจะเขียน query เพื่อแชร์/refresh ได้มุมมองเดิม
   - ตอนล้าง shortcut/preset จะกลับมาที่ `OPEN` ตาม default ใหม่ และ empty-state ใน `OPEN` ยังมีปุ่มสร้าง PO ให้ใช้งานต่อได้ทันที
 
@@ -1312,8 +1313,11 @@ npm run build
   - ต้องสร้างสำเร็จและแสดงสถานะ `รอปิดเรท`
 - เปลี่ยน PO เป็น `RECEIVED` แล้วเปิด detail:
   - ต้องเห็นปุ่ม `ปิดเรท`
+  - ถ้าเป็น PO ต่างสกุลเงิน ต้องเห็น block เรทชัดเจนว่า `เรทที่ใช้ตอนนี้`, `เรทตั้งต้น`, และสถานะ `รอปิดเรท/ปิดเรทแล้ว`
 - กด `ปิดเรท` แล้วกรอกเรทจริง:
   - ต้องบันทึกสำเร็จ, badge/ข้อความเปลี่ยนเป็น `ปิดเรทแล้ว` และปุ่ม `ปิดเรท` หาย
+  - ก่อนกดยืนยัน ต้องเห็น preview `สินค้า / ค่าขนส่ง / ค่าอื่น / ยอดรวมหลังปิดเรท / ส่วนต่าง` ใน modal เดียวกัน และตัวเลขต้องขยับตามเรทที่พิมพ์แบบ real-time
+  - หลังปิดเรทสำเร็จ ถ้ายังมี `ยอดค้าง` ระบบจะเปิดฟอร์ม `บันทึกชำระ` ต่อทันที (prefill ยอดค้าง) เพื่อปิดงานต่อเนื่อง
 - PO ที่ `RECEIVED` และต่างสกุลเงิน:
   - ถ้ายัง `รอปิดเรท` ปุ่ม `บันทึกชำระ` ต้องถูก disable/ถูก block ด้วยข้อความชัดเจน
   - หลัง `ปิดเรท` แล้วกด `บันทึกชำระ` ต้องสำเร็จและแสดงสถานะ `ชำระแล้ว`
@@ -1399,3 +1403,52 @@ npm run build
 - แก้ bug ของ create PO flow ที่ปุ่มสร้างแล้วเปลี่ยนสถานะต่อทันทีเคยส่ง `unitCostPurchase = 0` เมื่อผู้ใช้กรอกแบบ `ยอดรวมรายการ`; ตอนนี้ทุก create path ใช้ `getPurchaseItemResolvedUnitCost(...)` เหมือนกันแล้ว ทำให้ยอด PO และ settle payment ไม่เพี้ยนเป็น 0
 - PO item editor ใน create/edit ล็อก label row ของ `จำนวน` และ `ราคา` ให้สูงเท่ากันแล้ว พร้อมเพิ่ม label ชัดใน edit modal ด้วย เพื่อลดอาการ input ขยับตำแหน่งเมื่อสลับโหมดราคา
 - PO item editor บน mobile คง `จำนวน`/`ราคา` ไว้แถวเดียว 2 คอลัมน์ตาม UX เดิม แต่เพิ่ม `min-w-0` + `appearance-none` ให้ number inputs และคง label row สูงเท่ากัน เพื่อกันอาการ input ดูขยับตำแหน่งตอนกรอกค่าหรือสลับโหมดราคา
+- เพิ่ม script [scripts/audit-po-integrity.mjs](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/scripts/audit-po-integrity.mjs) และ npm script `npm run po:audit:integrity` สำหรับตรวจ PO ที่ข้อมูลสินค้า/ต้นทุนเพี้ยนเป็น 0 จากฐานเดิม พร้อมจัดกลุ่ม action recommendation ตาม status (`EDIT_DRAFT`, `CANCEL_AND_RECREATE`, `MANUAL_REPAIR_REQUIRED`)
+- การ์ด list ของ PO ในหน้า `/stock?tab=purchase` ปรับยอดรวมให้ตรงกับ detail แล้ว: list API คืน `totalCostPurchase` เพิ่ม และ UI จะโชว์ยอดซื้อจริงใน `purchaseCurrency` เป็นหลักสำหรับ PO ต่างสกุลเงิน พร้อม `≈` ยอดฐานร้านเป็นค่ารอง
+- `PurchaseOrderList` ตั้ง `cache: "no-store"` ให้ GET ของ `/api/stock/purchase-orders`, `/api/stock/purchase-orders/[poId]`, และ `/api/stock/purchase-orders/pending-rate` แล้ว เพื่อลดอาการหน้า list PO ค้างค่าเก่าหลัง create/receive/settle ขณะที่ detail สดกว่า
+- route GET ของ `/api/stock/purchase-orders`, `/api/stock/purchase-orders/[poId]`, และ `/api/stock/purchase-orders/pending-rate` ส่ง `Cache-Control: no-store` แล้วด้วย เพื่อปิดโอกาสที่ browser/Next cache ฝั่ง response ทำให้การ์ด list PO ค้าง `0 items / $0 / outstanding` ทั้งที่ detail ถูกต้อง
+- ต้นเหตุอีกชั้นของ PO list ไม่ตรง detail คือ `components/app/purchase-order-list.tsx` ใช้ `useState(initialList)` แล้วไม่ sync prop ใหม่จาก `router.refresh()`; เพิ่ม `useEffect` รีเซ็ต `poList/poPage/hasMore` เมื่อ `initialList` เปลี่ยนแล้ว จึงไม่ค้างค่าเก่าระดับ client state อีก
+- เพิ่ม helper แปลง `PurchaseOrderDetail` เป็น `PurchaseOrderListItem` ใน `components/app/purchase-order-list.tsx` แล้ว และให้ `PODetailSheet` upsert แถวใน `poList` ทันทีหลัง `save edit / change status / finalize rate / settle / apply extra cost / reverse payment` เพื่อลดเคส list card ค้าง `0 items / $0 / outstanding` แม้ detail ถูก
+- เพิ่ม force refresh ของ PO list เมื่อแท็บ `/stock?tab=purchase` ถูกเปิดครั้งแรกด้วย `reloadFirstPage()` ผ่าน API `no-store`; ช่วยปิดช่องว่างกรณี `initialPOs` จาก server render stale กว่า detail API
+- การ์ด PO list ปรับ UX เพิ่ม: ถ้า `totalCostPurchase = 0` แต่ยังมี `shipping/other cost` จะไม่โชว์ `$0` เป็นยอดหลักอีก แต่จะใช้ยอดฐานร้านเป็นหลักแทน และ `Outstanding` จะไม่แสดงเมื่อสถานะชำระเป็น `PAID` หรือยอดค้าง `<= 0`
+- การ์ด PO list ดึง `firstItemName` จาก query summary แล้ว และแสดงชื่อสินค้าจริง (`สินค้าแรก + จำนวนที่เหลือ`) เพื่อให้การ์ดอ่านง่ายกว่า `0 items / n items` อย่างเดียว
+- `CurrencyAmountStack` ใน `components/app/purchase-order-list.tsx` รองรับ layout แบบ `inline` แล้ว และการ์ด PO list ใช้โหมดนี้เพื่อให้ยอดต่างสกุลอย่าง `$1 ≈ ₭1` อยู่บรรทัดเดียวกัน ไม่แตกเป็นสองบรรทัดบน card
+- ฟอร์ม `อัปเดตค่าขนส่ง/ค่าอื่น` ใน `PODetailSheet` จะ default สกุลเงินของ `shipping/other cost` ตาม `purchaseCurrency` เมื่อ PO เป็นเงินต่างประเทศและยังไม่มีค่าเดิมแล้ว เพื่อลดเคสบันทึกค่าขนส่งเป็น LAK โดยไม่ตั้งใจ
+- route `POST /api/stock/purchase-orders` normalize `shippingCostCurrency` และ `otherCostCurrency` แล้ว ถ้า request ไม่ส่ง field นี้มา ระบบจะ fallback เป็น `purchaseCurrency` ของ PO แทน `LAK`; ช่วยกันเคส create PO เป็น USD/THB แต่ shipping/other ถูกเก็บเป็น LAK เพราะ schema default เดิม
+- create PO summary ใน `components/app/purchase-order-list.tsx` แสดง mini รายการสินค้าแล้ว: แต่ละบรรทัดมี `ชื่อสินค้า`, `จำนวน × ราคาต่อหน่วยซื้อ`, และ `ยอดต่อบรรทัด` แทนการโชว์แค่ `Products (n items)` + ยอดรวมก้อนเดียว เพื่อให้ผู้ใช้ตรวจ PO ก่อนบันทึกได้ง่ายขึ้น
+- create PO summary ปรับ `Shipping cost` และ `Other cost` ให้แสดง `สกุลเงินจริงที่กรอก` เป็นหลักแล้ว; ถ้าเป็นเงินต่างสกุลจากร้าน จะโชว์ `≈ store currency` เป็นบรรทัดรองเหมือนยอดสินค้า
+- ปรับ PO list card ใน `/stock?tab=purchase` ให้แยกยอด `สินค้า`, `ค่าขนส่ง`, และ `ค่าอื่น` เป็นคนละบรรทัด แทนการสรุปรวมก้อนเดียว เพื่อให้ใบต่างสกุลเงินอ่านง่ายขึ้น เช่น `สินค้า $1 ≈ ₭...` และ `ค่าขนส่ง $1 ≈ ₭...`; ฝั่ง list repo ถูกขยายให้ส่ง `shippingCostOriginal/shippingCostCurrency` และ `otherCostOriginal/otherCostCurrency` มาที่ client แล้ว
+- ปรับ compact layout ของ PO list card เพิ่มเติม: `สินค้า / ค่าขนส่ง / ค่าอื่น` ถูกรวมเป็นบรรทัด summary เดียวคั่นด้วย `·` เพื่อ save area บนมือถือ แต่ `Outstanding` ถูกแยกลงอีกบรรทัดเพื่อให้สถานะการค้างชำระไม่ไปรบกวนการอ่านต้นทุน
+- ปรับ logic `paymentStatus/outstanding` ของ PO ให้ derive จากยอดรวมจริงพร้อม tolerance `5` หน่วยของสกุลร้านแทนการเชื่อค่าใน DB ตรง ๆ เพื่อกันเคส `Paid` แต่ยังเหลือ outstanding 1-2 หน่วยจากการปัดเรท; PO detail จะไม่โชว์ข้อความ outstanding เมื่อยอดค้างถูก normalize เป็นศูนย์
+- ปรับ card ใน workspace `Month-End Close` ให้แสดง `ยอดซื้อจริงตาม purchase currency` เพิ่ม (`สินค้า $... ≈ ₭...`) เพื่อให้ผู้ใช้เห็นว่าต้องปิดเรทให้ยอดต้นฉบับเท่าไร และถ้า outstanding เป็นศูนย์จะซ่อนบรรทัด outstanding ออก
+- เพิ่ม guard ใน card `Month-End Close`: ถ้า queue item ยังไม่มียอดต้นฉบับ (`totalCostPurchase <= 0`) จะไม่แสดง `$0/฿0` หลอก แต่ fallback ไปแสดงยอดฐานร้านแทนชั่วคราว
+- ปรับ `Month-End Close` เพิ่มเติมให้ดึง `shipping original currency` จาก queue/backend แล้ว และถ้า queue summary ยังขาดยอดต้นฉบับของบางใบ จะ fallback จาก `poList` ที่โหลดอยู่เพื่อเลี่ยงการ์ดแบบ `Products ₭0` ทั้งที่ PO จริงมีราคา/ค่าขนส่ง
+- ปรับ compact layout ของ card `Month-End Close` อีกชั้น: `สินค้า ...` และ `ค่าขนส่ง ...` อยู่บรรทัดเดียวกันแบบคั่น `·` เพื่อประหยัดพื้นที่ แต่ `Outstanding` ยังคงแยกอีกบรรทัดเพื่อให้สถานะการเงินชัด
+- เปลี่ยน bulk flow ของ `Month-End Close` จาก panel inline ใต้ toolbar ไปเป็น `SlideUpSheet` เดียวสำหรับ `Finalize rate + batch settle` แล้ว; ภายใน sheet ใช้ฟิลด์/preview/error เดิมทั้งหมด แต่ช่วยคง context ของคิว PO และไม่ดัน list ลงเมื่อเปิดฟอร์มปิดรอบ
+- เพิ่ม preview ใน modal `Finalize exchange rate` ของ PO detail แล้ว: ผู้ใช้เห็น breakdown `สินค้า / ค่าขนส่ง / ค่าอื่น` พร้อม `ยอดรวมปัจจุบัน / ยอดรวมหลังปิดเรท / ส่วนต่าง` ก่อนยืนยัน โดยใช้สูตรเดียวกับ backend ฝั่ง `finalize-rate`
+- ปรับ block เรทใน `PO detail` เป็นแบบ compact เพื่อลดพื้นที่บนมือถือ: แสดง `badge + 1 {currency} = {rate} {storeCurrency}` ในบรรทัดแรก และบรรทัด meta `เริ่มต้น / ปิดเมื่อ / Δ` พร้อม note เฉพาะเมื่อมี
+- ปรับ field ใน `Month-End Close` bulk sheet:
+  - ถอดบล็อก `ยอดที่จะลงชำระรอบนี้` ออกแล้ว เพื่อไม่ให้ซ้ำกับ preview summary ด้านล่าง
+  - `เลขอ้างอิงการจ่าย` เปลี่ยนเป็น optional; ถ้าไม่กรอก ระบบยัง finalize rate + settle ได้ตามปกติ และจะไม่สร้าง note อ้างอิงปลอม
+- ค่าที่แสดงใน `ยอดที่จะลงชำระรอบนี้` และ preview ราย PO จะอัปเดตตาม `rate` ที่พิมพ์อยู่แบบ real-time แล้ว โดยใช้ยอดต้นฉบับของ `สินค้า/ค่าขนส่ง/ค่าอื่น` ร่วมกับ `totalPaidBase` จาก queue แทนการยึด `outstandingBase` เก่าอย่างเดียว
+- preview ราย PO ใน `Month-End Close` bulk sheet แยกโชว์ breakdown `สินค้า / ค่าขนส่ง / ค่าอื่น` ต่อใบแล้ว เพื่อช่วย debug เคสต่างสกุลเงิน เช่น `สินค้า USD + ขนส่ง LAK`; ผู้ใช้จะเห็นได้ทันทีว่า component ที่เป็น `store currency` ไม่ถูก re-rate
+- ปรับ preview `Amount to settle this run` อีกชั้นให้ preload detail ของ PO ที่เลือก แล้วคำนวณด้วยสูตรระดับ item แบบเดียวกับ backend ตอน `finalize-rate` (แปลง `unitCostPurchase -> unitCostBase` ต่อ item ก่อนรวม) เพื่อลด mismatch จากการปัดเศษเมื่อเทียบกับสูตร aggregate เดิม
+- ปรับ default currency ของ `Shipping cost` และ `Other cost` ให้คงเส้นคงวาเป็น `store currency`:
+  - หน้า `Create PO` ใช้ store currency เป็นค่าเริ่มต้นเหมือนเดิม
+  - modal `อัปเดตค่าขนส่ง/ค่าอื่น` ถ้าใบนี้ยังไม่มีค่าเดิม จะ default เป็น store currency แล้ว ไม่เด้งไปตาม purchase currency อัตโนมัติ
+- panel `AP by Supplier` ตั้ง fetch ของ supplier summary/statement เป็น `cache: "no-store"` แล้ว และ API GET ที่เกี่ยวข้องส่ง `Cache-Control: no-store` เพื่อกันตัวเลขค้างจาก payload เก่า
+- การ์ด PO row ใน `AP by Supplier` เปลี่ยนให้โชว์ `ยอดทั้งใบ` (`grandTotalBase`) เป็นตัวเลขหลัก ส่วน `จ่ายแล้ว / ค้าง` ย้ายไปบรรทัดรอง เพื่อให้แยกความหมายระหว่าง total กับ outstanding ชัดขึ้น
+- แก้ `syncPurchaseLinkedCurrency(...)` เพิ่ม: ถ้า `Shipping/Other` ยังอยู่ที่ `store currency` จะคงค่าเดิมไว้เมื่อผู้ใช้สลับ `purchase currency` (เช่น LAK -> USD แล้วค่าขนส่งยังเป็น LAK); การตาม purchase currency จะเกิดเฉพาะเคสที่ผู้ใช้ตั้งให้ cost currency ตาม PO อยู่แล้ว
+- ปรับ backend ให้ fallback currency ตรงกับ UI:
+  - create PO route/service ไม่ default `shipping/other` ไปที่ `purchase currency` แล้ว แต่ใช้ `store currency`
+  - apply-extra-cost route ก็ normalize แบบเดียวกัน
+  - `applyPurchaseOrderExtraCostSchema` เลิก default hardcoded `LAK` แล้ว ให้ route เป็นคนเติม `store currency` แทน
+- ปรับ query `AP by Supplier` ใน `lib/reports/queries.ts` ให้ fallback สำหรับ PO ต่างสกุลที่ `unitCostBase` ฝั่ง item เป็น `0` แต่ยังมียอดซื้อจริง:
+  - derive `product base` จาก `totalCostPurchase × effectiveRate`
+  - ใช้ `exchangeRate` ถ้า lock แล้ว ไม่งั้นใช้ `exchangeRateInitial`
+  - แล้วค่อยรวม `shipping/other` เพื่อคำนวณ `grandTotalBase/outstandingBase`
+  - ย้ายการกรอง `outstanding > 0` มาหลัง map/fallback แล้ว เพื่อไม่ให้ PO ที่ base raw เป็น 0 หลุดออกจาก AP statement ผิดพลาด
+- ปรับ dataset ฝั่ง outstanding/AP ให้ derive `paymentStatus` ใหม่จาก `grandTotalBase` กับ `totalPaidBase` แทนการใช้ `purchase_orders.payment_status` ดิบ เพื่อกันเคส inconsistency เช่น API คืน `PAID` ทั้งที่ `totalPaidBase = 0` และ `outstandingBase > 0`
+- ปรับ `server/services/purchase-ap.service.ts` ให้ workspace/API `AP by Supplier` ใช้ source จาก `listPurchaseOrders()` แทน `getOutstandingPurchaseRows()` แล้ว เพื่อให้ยอดรวม/ยอดค้างตรงกับ `PO Operations` และ PO detail ที่ผู้ใช้เห็นอยู่จริง ลดความเสี่ยงจาก query aggregate คนละเส้นทาง
+- ย้ายฟอร์ม `Bulk settle` ของ `AP by Supplier` จาก inline panel ใต้ statement ไปเป็น `SlideUpSheet` ใน `components/app/purchase-ap-supplier-panel.tsx` แล้ว โดยยัง reuse state/preview/submit logic เดิมทั้งหมด แต่ไม่ดัน list ลงเมื่อเปิดฟอร์ม และคง context ของ statement ไว้เหมือน pattern ใน `Month-End Close`
+- ปรับ `AP by Supplier` bulk settle sheet ให้ตัด field `statement total / Amount to settle this run` ออกแล้ว: ตอนนี้ sheet ใช้ preview summary เป็น source-of-truth และชำระเต็มยอดค้างของ PO ที่เลือกทั้งหมด (`outstandingBase`) โดยไม่รองรับ partial-allocation จากยอด statement ก้อนเดียวใน flow นี้อีก

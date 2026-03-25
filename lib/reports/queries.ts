@@ -130,6 +130,67 @@ export type PurchaseOutstandingRow = {
   exchangeRateLockedAt: string | null;
 };
 
+const PURCHASE_OUTSTANDING_EPSILON_BASE = 5;
+
+function normalizePurchaseOutstandingBase(
+  totalPaidBase: number,
+  grandTotalBase: number,
+): number {
+  const rawOutstanding = grandTotalBase - totalPaidBase;
+  if (rawOutstanding <= PURCHASE_OUTSTANDING_EPSILON_BASE) {
+    return 0;
+  }
+  return rawOutstanding;
+}
+
+function derivePurchaseOutstandingPaymentStatus(
+  totalPaidBase: number,
+  grandTotalBase: number,
+): "UNPAID" | "PARTIAL" | "PAID" {
+  const normalizedOutstanding = normalizePurchaseOutstandingBase(
+    totalPaidBase,
+    grandTotalBase,
+  );
+  if (totalPaidBase <= 0) return "UNPAID";
+  if (normalizedOutstanding <= 0) return "PAID";
+  return "PARTIAL";
+}
+
+function resolvePurchaseOutstandingProductBase(params: {
+  purchaseCurrency: "LAK" | "THB" | "USD";
+  storeCurrency: "LAK" | "THB" | "USD";
+  totalCostBaseRaw: number;
+  totalCostPurchase: number;
+  exchangeRateInitial: number;
+  exchangeRate: number;
+  exchangeRateLockedAt: string | null;
+}): number {
+  const {
+    purchaseCurrency,
+    storeCurrency,
+    totalCostBaseRaw,
+    totalCostPurchase,
+    exchangeRateInitial,
+    exchangeRate,
+    exchangeRateLockedAt,
+  } = params;
+
+  if (totalCostBaseRaw > 0) {
+    return totalCostBaseRaw;
+  }
+  if (purchaseCurrency === storeCurrency || totalCostPurchase <= 0) {
+    return totalCostBaseRaw;
+  }
+
+  const effectiveRate =
+    exchangeRateLockedAt && exchangeRate > 0 ? exchangeRate : exchangeRateInitial;
+  if (!Number.isFinite(effectiveRate) || effectiveRate <= 0) {
+    return totalCostBaseRaw;
+  }
+
+  return Math.round(totalCostPurchase * effectiveRate);
+}
+
 export type PurchaseApAgingSummary = {
   totalOutstandingBase: number;
   bucket0To30: {
@@ -684,13 +745,22 @@ export async function getOutstandingPurchaseRows(
         exchangeRateInitial: purchaseOrders.exchangeRateInitial,
         exchangeRate: purchaseOrders.exchangeRate,
         exchangeRateLockedAt: purchaseOrders.exchangeRateLockedAt,
-        grandTotalBase: sql<number>`(
+        totalCostPurchase: sql<number>`(
+          coalesce((
+            SELECT sum(${purchaseOrderItems.unitCostPurchase} * ${purchaseOrderItems.qtyOrdered})
+            FROM ${purchaseOrderItems}
+            WHERE ${purchaseOrderItems.purchaseOrderId} = ${purchaseOrders.id}
+          ), 0)
+        )`,
+        totalCostBaseRaw: sql<number>`(
           coalesce((
             SELECT sum(${purchaseOrderItems.unitCostBase} * ${purchaseOrderItems.qtyBaseOrdered})
             FROM ${purchaseOrderItems}
             WHERE ${purchaseOrderItems.purchaseOrderId} = ${purchaseOrders.id}
-          ), 0) + ${purchaseOrders.shippingCost} + ${purchaseOrders.otherCost}
+          ), 0)
         )`,
+        shippingCostBase: purchaseOrders.shippingCost,
+        otherCostBase: purchaseOrders.otherCost,
         totalPaidBase: sql<number>`(
           coalesce((
             SELECT sum(case
@@ -747,45 +817,58 @@ export async function getOutstandingPurchaseRows(
         and(
           eq(purchaseOrders.storeId, storeId),
           eq(purchaseOrders.status, "RECEIVED"),
-          sql`(
-            (
-              coalesce((
-                SELECT sum(${purchaseOrderItems.unitCostBase} * ${purchaseOrderItems.qtyBaseOrdered})
-                FROM ${purchaseOrderItems}
-                WHERE ${purchaseOrderItems.purchaseOrderId} = ${purchaseOrders.id}
-              ), 0) + ${purchaseOrders.shippingCost} + ${purchaseOrders.otherCost}
-            ) - coalesce((
-              SELECT sum(case
-                when ${purchaseOrderPayments.entryType} = 'PAYMENT' then ${purchaseOrderPayments.amountBase}
-                when ${purchaseOrderPayments.entryType} = 'REVERSAL' then -${purchaseOrderPayments.amountBase}
-                else 0
-              end)
-              FROM ${purchaseOrderPayments}
-              WHERE ${purchaseOrderPayments.purchaseOrderId} = ${purchaseOrders.id}
-            ), 0)
-          ) > 0`,
         ),
       )
       .orderBy(desc(purchaseOrders.dueDate), desc(purchaseOrders.receivedAt)),
   );
 
-  return rows.map((row) => ({
-    poId: row.poId,
-    poNumber: row.poNumber,
-    supplierName: row.supplierName,
-    purchaseCurrency: row.purchaseCurrency as "LAK" | "THB" | "USD",
-    dueDate: row.dueDate,
-    receivedAt: row.receivedAt,
-    paymentStatus: row.paymentStatus as "UNPAID" | "PARTIAL" | "PAID",
-    grandTotalBase: Number(row.grandTotalBase ?? 0),
-    totalPaidBase: Number(row.totalPaidBase ?? 0),
-    outstandingBase: Number(row.outstandingBase ?? 0),
-    ageDays: Number(row.ageDays ?? 0),
-    fxDeltaBase: Number(row.fxDeltaBase ?? 0),
-    exchangeRateInitial: Number(row.exchangeRateInitial ?? 1),
-    exchangeRate: Number(row.exchangeRate ?? 1),
-    exchangeRateLockedAt: row.exchangeRateLockedAt,
-  }));
+  return rows
+    .map((row) => ({
+      ...(() => {
+      const totalCostPurchase = Number(row.totalCostPurchase ?? 0);
+      const totalCostBaseRaw = Number(row.totalCostBaseRaw ?? 0);
+      const shippingCostBase = Number(row.shippingCostBase ?? 0);
+      const otherCostBase = Number(row.otherCostBase ?? 0);
+      const totalPaidBase = Number(row.totalPaidBase ?? 0);
+      const totalCostBase = resolvePurchaseOutstandingProductBase({
+        purchaseCurrency: row.purchaseCurrency as "LAK" | "THB" | "USD",
+        storeCurrency,
+        totalCostBaseRaw,
+        totalCostPurchase,
+        exchangeRateInitial: Number(row.exchangeRateInitial ?? 1),
+        exchangeRate: Number(row.exchangeRate ?? 1),
+        exchangeRateLockedAt: row.exchangeRateLockedAt,
+      });
+      const grandTotalBase = totalCostBase + shippingCostBase + otherCostBase;
+      const outstandingBase = normalizePurchaseOutstandingBase(
+        totalPaidBase,
+        grandTotalBase,
+      );
+      const paymentStatus = derivePurchaseOutstandingPaymentStatus(
+        totalPaidBase,
+        grandTotalBase,
+      );
+
+      return {
+        grandTotalBase,
+        totalPaidBase,
+        outstandingBase,
+        paymentStatus,
+      };
+      })(),
+      poId: row.poId,
+      poNumber: row.poNumber,
+      supplierName: row.supplierName,
+      purchaseCurrency: row.purchaseCurrency as "LAK" | "THB" | "USD",
+      dueDate: row.dueDate,
+      receivedAt: row.receivedAt,
+      ageDays: Number(row.ageDays ?? 0),
+      fxDeltaBase: Number(row.fxDeltaBase ?? 0),
+      exchangeRateInitial: Number(row.exchangeRateInitial ?? 1),
+      exchangeRate: Number(row.exchangeRate ?? 1),
+      exchangeRateLockedAt: row.exchangeRateLockedAt,
+    }))
+    .filter((row) => row.outstandingBase > 0);
 }
 
 export async function getPurchaseApAgingSummary(

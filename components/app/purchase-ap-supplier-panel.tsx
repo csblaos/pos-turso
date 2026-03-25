@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 
 import { Button } from "@/components/ui/button";
+import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch } from "@/lib/auth/client-token";
 import { currencySymbol } from "@/lib/finance/store-financial";
 import type { StoreCurrency } from "@/lib/finance/store-financial";
@@ -399,7 +400,6 @@ export function PurchaseApSupplierPanel({
   const [bulkPaidAtInput, setBulkPaidAtInput] = useState("");
   const [bulkReferenceInput, setBulkReferenceInput] = useState("");
   const [bulkNoteInput, setBulkNoteInput] = useState("");
-  const [bulkStatementTotalInput, setBulkStatementTotalInput] = useState("");
   const [bulkProgressText, setBulkProgressText] = useState<string | null>(null);
   const [bulkErrors, setBulkErrors] = useState<string[]>([]);
 
@@ -461,6 +461,7 @@ export function PurchaseApSupplierPanel({
       const query = params.toString();
       const res = await authFetch(
         `/api/stock/purchase-orders/ap-by-supplier${query ? `?${query}` : ""}`,
+        { cache: "no-store" },
       );
       const data = (await res.json().catch(() => null)) as
         | {
@@ -516,6 +517,7 @@ export function PurchaseApSupplierPanel({
 
       const res = await authFetch(
         `/api/stock/purchase-orders/ap-by-supplier/statement?${params.toString()}`,
+        { cache: "no-store" },
       );
       const data = (await res.json().catch(() => null)) as
         | {
@@ -661,25 +663,10 @@ export function PurchaseApSupplierPanel({
     });
   }, [selectedRows]);
   const bulkAllocationPreview = useMemo(() => {
-    const hasStatementTotal = bulkStatementTotalInput.trim().length > 0;
-    const parsedStatementTotal = Math.round(Number(bulkStatementTotalInput));
-    const statementTotal =
-      hasStatementTotal && Number.isFinite(parsedStatementTotal) && parsedStatementTotal > 0
-        ? parsedStatementTotal
-        : null;
-    const invalidStatementTotal =
-      hasStatementTotal &&
-      (!Number.isFinite(parsedStatementTotal) || parsedStatementTotal <= 0);
-
     let plannedTotal = 0;
-    let remainingBudget = statementTotal ?? Number.POSITIVE_INFINITY;
     const rows = sortedSelectedRows.map((row) => {
-      const plannedAmount = Math.max(
-        0,
-        Math.min(Math.round(row.outstandingBase), remainingBudget),
-      );
+      const plannedAmount = Math.max(0, Math.round(row.outstandingBase));
       plannedTotal += plannedAmount;
-      remainingBudget = Math.max(0, remainingBudget - plannedAmount);
       return {
         poId: row.poId,
         poNumber: row.poNumber,
@@ -695,13 +682,9 @@ export function PurchaseApSupplierPanel({
       rows,
       totalOutstanding,
       plannedTotal,
-      statementTotal,
-      invalidStatementTotal,
-      remainingUnallocated:
-        statementTotal === null ? 0 : Math.max(0, statementTotal - plannedTotal),
       outstandingAfter: Math.max(0, totalOutstanding - plannedTotal),
     };
-  }, [bulkStatementTotalInput, sortedSelectedRows]);
+  }, [sortedSelectedRows]);
 
   const resetSupplierSearch = useCallback(() => {
     setSupplierSearchInput("");
@@ -743,7 +726,6 @@ export function PurchaseApSupplierPanel({
     setBulkPaidAtInput(new Date().toISOString().slice(0, 10));
     setBulkReferenceInput("");
     setBulkNoteInput("");
-    setBulkStatementTotalInput("");
     setBulkErrors([]);
     setBulkProgressText(null);
     setIsBulkSettleMode(true);
@@ -760,24 +742,11 @@ export function PurchaseApSupplierPanel({
       return;
     }
 
-    const hasStatementTotal = bulkStatementTotalInput.trim().length > 0;
-    const parsedStatementTotal = Math.round(Number(bulkStatementTotalInput));
-    if (
-      hasStatementTotal &&
-      (!Number.isFinite(parsedStatementTotal) || parsedStatementTotal <= 0)
-    ) {
-      toast.error(t(uiLocale, "purchase.monthEnd.bulk.validation.statementTotalInvalid"));
-      return;
-    }
-
     const paymentNote = bulkNoteInput.trim();
     const paidAt = bulkPaidAtInput.trim();
     const errors: string[] = [];
     let settledCount = 0;
     let settledAmountTotal = 0;
-    let remainingStatementBudget = hasStatementTotal
-      ? Math.max(0, parsedStatementTotal)
-      : null;
 
     setIsBulkSettling(true);
     setBulkErrors([]);
@@ -791,10 +760,7 @@ export function PurchaseApSupplierPanel({
         );
 
         const outstandingAmount = Math.max(0, Math.round(row.outstandingBase));
-        const settleAmount =
-          remainingStatementBudget === null
-            ? outstandingAmount
-            : Math.min(outstandingAmount, remainingStatementBudget);
+        const settleAmount = outstandingAmount;
         if (!Number.isFinite(settleAmount) || settleAmount <= 0) {
           continue;
         }
@@ -827,9 +793,6 @@ export function PurchaseApSupplierPanel({
           continue;
         }
 
-        if (remainingStatementBudget !== null) {
-          remainingStatementBudget = Math.max(0, remainingStatementBudget - settleAmount);
-        }
         settledAmountTotal += settleAmount;
         settledCount += 1;
       }
@@ -837,11 +800,6 @@ export function PurchaseApSupplierPanel({
       if (settledCount > 0) {
         toast.success(
           `${t(uiLocale, "purchase.monthEnd.bulk.toast.settled.prefix")} ${settledCount}/${sortedSelectedRows.length} ${t(uiLocale, "purchase.items")} (${t(uiLocale, "purchase.monthEnd.bulk.toast.total.prefix")} ${formatMoney(settledAmountTotal)})`,
-        );
-      }
-      if ((remainingStatementBudget ?? 0) > 0) {
-        toast(
-          `${t(uiLocale, "purchase.monthEnd.bulk.toast.remainingStatement.prefix")} ${formatMoney(remainingStatementBudget ?? 0)}`,
         );
       }
       if (errors.length > 0) {
@@ -867,7 +825,6 @@ export function PurchaseApSupplierPanel({
     bulkNoteInput,
     bulkPaidAtInput,
     bulkReferenceInput,
-    bulkStatementTotalInput,
     formatMoney,
     loadStatement,
     loadSupplierSummary,
@@ -1204,132 +1161,6 @@ export function PurchaseApSupplierPanel({
             </div>
           )}
 
-          {isBulkSettleMode ? (
-            <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-2.5">
-              <p className="text-xs font-semibold text-emerald-800">
-                {t(uiLocale, "purchase.ap.bulk.title")}
-              </p>
-              <p className="text-[11px] text-emerald-700/90">
-                {t(uiLocale, "purchase.monthEnd.bulk.panel.subtitle")}
-              </p>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="space-y-1">
-                  <label className="text-[11px] text-emerald-700">
-                    {t(uiLocale, "purchase.monthEnd.bulk.field.paidAt.label")}
-                  </label>
-                  <input
-                    type="date"
-                    className="h-8 w-full rounded-md border border-emerald-200 bg-white px-2 text-xs outline-none focus:ring-2 focus:ring-emerald-300"
-                    value={bulkPaidAtInput}
-                    onChange={(event) => setBulkPaidAtInput(event.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] text-emerald-700">
-                    {t(uiLocale, "purchase.monthEnd.bulk.field.reference.labelRequired")}
-                  </label>
-                  <input
-                    className="h-8 w-full rounded-md border border-emerald-200 bg-white px-2 text-xs outline-none focus:ring-2 focus:ring-emerald-300"
-                    value={bulkReferenceInput}
-                    onChange={(event) => setBulkReferenceInput(event.target.value)}
-                    placeholder={t(uiLocale, "purchase.monthEnd.bulk.field.reference.placeholder")}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] text-emerald-700">
-                    {t(uiLocale, "purchase.monthEnd.bulk.field.statementTotal.labelOptional")}
-                  </label>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    className="h-8 w-full rounded-md border border-emerald-200 bg-white px-2 text-xs outline-none focus:ring-2 focus:ring-emerald-300"
-                    value={bulkStatementTotalInput}
-                    onChange={(event) => setBulkStatementTotalInput(event.target.value)}
-                    placeholder={t(uiLocale, "purchase.monthEnd.bulk.field.statementTotal.help")}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] text-emerald-700">
-                    {t(uiLocale, "purchase.monthEnd.bulk.field.note.labelOptional")}
-                  </label>
-                  <input
-                    className="h-8 w-full rounded-md border border-emerald-200 bg-white px-2 text-xs outline-none focus:ring-2 focus:ring-emerald-300"
-                    value={bulkNoteInput}
-                    onChange={(event) => setBulkNoteInput(event.target.value)}
-                    placeholder={t(uiLocale, "purchase.monthEnd.bulk.field.note.placeholder")}
-                  />
-                </div>
-              </div>
-              <div className="rounded-md border border-emerald-200 bg-white p-2">
-                <p className="text-[11px] text-slate-600">
-                  {t(uiLocale, "purchase.monthEnd.bulk.preview.selectedOutstanding.prefix")}{" "}
-                  {formatMoney(bulkAllocationPreview.totalOutstanding)}
-                  {" · "}
-                  {t(uiLocale, "purchase.monthEnd.bulk.preview.willSettle.prefix")}{" "}
-                  {formatMoney(bulkAllocationPreview.plannedTotal)}
-                  {" · "}
-                  {t(uiLocale, "purchase.monthEnd.bulk.preview.remainingOutstanding.prefix")}{" "}
-                  {formatMoney(bulkAllocationPreview.outstandingAfter)}
-                </p>
-                {bulkAllocationPreview.statementTotal !== null ? (
-                  <p className="mt-1 text-[11px] text-slate-600">
-                    {t(uiLocale, "purchase.monthEnd.bulk.preview.unmatchedStatement.prefix")}{" "}
-                    {formatMoney(bulkAllocationPreview.remainingUnallocated)}
-                  </p>
-                ) : null}
-                {bulkAllocationPreview.invalidStatementTotal ? (
-                  <p className="mt-1 text-[11px] text-red-600">
-                    {t(uiLocale, "purchase.monthEnd.bulk.preview.statementTotalInvalid")}
-                  </p>
-                ) : null}
-              </div>
-              {bulkProgressText ? (
-                <p className="text-[11px] text-emerald-700">{bulkProgressText}</p>
-              ) : null}
-              {bulkErrors.length > 0 ? (
-                <div className="space-y-1 rounded-md border border-red-200 bg-red-50 p-2">
-                  <p className="text-[11px] font-semibold text-red-700">
-                    {t(uiLocale, "purchase.monthEnd.bulk.errors.title.prefix")} ({bulkErrors.length})
-                  </p>
-                  <ul className="space-y-0.5 text-[11px] text-red-700">
-                    {bulkErrors.map((error, index) => (
-                      <li key={`${error}-${index}`}>• {error}</li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-8 border-emerald-200 bg-white text-xs text-emerald-700 hover:bg-emerald-100"
-                  onClick={() => setIsBulkSettleMode(false)}
-                  disabled={isBulkSettling}
-                >
-                  {t(uiLocale, "common.action.cancel")}
-                </Button>
-                <Button
-                  type="button"
-                  className="h-8 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
-                  onClick={() => {
-                    void submitBulkSettle();
-                  }}
-                  disabled={
-                    isBulkSettling ||
-                    selectedPoIds.length === 0 ||
-                    bulkAllocationPreview.invalidStatementTotal
-                  }
-                >
-                  {isBulkSettling ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    t(uiLocale, "purchase.ap.bulk.cta.confirm")
-                  )}
-                </Button>
-              </div>
-            </div>
-          ) : null}
-
           {isLoadingStatement ? (
             <p className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-3 text-xs text-slate-500">
               {t(uiLocale, "purchase.ap.statement.loading")}
@@ -1388,11 +1219,18 @@ export function PurchaseApSupplierPanel({
                     </div>
                     <div className="text-right">
                       <p className="text-xs font-semibold text-slate-900">
-                        {formatMoney(row.outstandingBase)}
+                        {formatMoney(row.grandTotalBase)}
                       </p>
                       <p className="text-[11px] text-slate-500">
                         {t(uiLocale, "purchase.detail.payment.paidPrefix")}{" "}
                         {formatMoney(row.totalPaidBase)}
+                        {row.outstandingBase > 0 ? (
+                          <>
+                            {" · "}
+                            {t(uiLocale, "purchase.label.outstanding")}{" "}
+                            {formatMoney(row.outstandingBase)}
+                          </>
+                        ) : null}
                       </p>
                     </div>
                   </div>
@@ -1403,6 +1241,116 @@ export function PurchaseApSupplierPanel({
           )}
         </div>
       </div>
+
+      <SlideUpSheet
+        isOpen={isBulkSettleMode}
+        onClose={() => setIsBulkSettleMode(false)}
+        title={t(uiLocale, "purchase.ap.bulk.title")}
+        description={t(uiLocale, "purchase.monthEnd.bulk.panel.subtitle")}
+        closeOnBackdrop={false}
+        disabled={isBulkSettling}
+        footer={
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 border-emerald-200 bg-white text-xs text-emerald-700 hover:bg-emerald-50"
+              onClick={() => setIsBulkSettleMode(false)}
+              disabled={isBulkSettling}
+            >
+              {t(uiLocale, "common.action.cancel")}
+            </Button>
+            <Button
+              type="button"
+              className="h-10 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
+              onClick={() => {
+                void submitBulkSettle();
+              }}
+              disabled={isBulkSettling || selectedPoIds.length === 0}
+            >
+              {isBulkSettling ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                t(uiLocale, "purchase.ap.bulk.cta.confirm")
+              )}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-[11px] text-slate-600">
+                {t(uiLocale, "purchase.monthEnd.bulk.field.paidAt.label")}
+              </label>
+              <input
+                type="date"
+                className="h-10 w-full rounded-lg border border-emerald-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-300"
+                value={bulkPaidAtInput}
+                onChange={(event) => setBulkPaidAtInput(event.target.value)}
+                disabled={isBulkSettling}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] text-slate-600">
+                {t(uiLocale, "purchase.monthEnd.bulk.field.reference.labelRequired")}
+              </label>
+              <input
+                className="h-10 w-full rounded-lg border border-emerald-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-300"
+                value={bulkReferenceInput}
+                onChange={(event) => setBulkReferenceInput(event.target.value)}
+                placeholder={t(uiLocale, "purchase.monthEnd.bulk.field.reference.placeholder")}
+                disabled={isBulkSettling}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] text-slate-600">
+                {t(uiLocale, "purchase.monthEnd.bulk.field.note.labelOptional")}
+              </label>
+              <input
+                className="h-10 w-full rounded-lg border border-emerald-200 bg-white px-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-300"
+                value={bulkNoteInput}
+                onChange={(event) => setBulkNoteInput(event.target.value)}
+                placeholder={t(uiLocale, "purchase.monthEnd.bulk.field.note.placeholder")}
+                disabled={isBulkSettling}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
+            <p className="text-xs font-medium text-emerald-800">
+              {t(uiLocale, "purchase.monthEnd.bulk.preview.title")}
+            </p>
+            <p className="text-xs text-emerald-800">
+              {t(uiLocale, "purchase.monthEnd.bulk.preview.selectedOutstanding.prefix")}{" "}
+              {formatMoney(bulkAllocationPreview.totalOutstanding)}
+              {" · "}
+              {t(uiLocale, "purchase.monthEnd.bulk.preview.willSettle.prefix")}{" "}
+              {formatMoney(bulkAllocationPreview.plannedTotal)}
+              {" · "}
+              {t(uiLocale, "purchase.monthEnd.bulk.preview.remainingOutstanding.prefix")}{" "}
+              {formatMoney(bulkAllocationPreview.outstandingAfter)}
+            </p>
+          </div>
+
+          {bulkProgressText ? (
+            <p className="text-xs text-emerald-700">{bulkProgressText}</p>
+          ) : null}
+          {bulkErrors.length > 0 ? (
+            <div className="space-y-1 rounded-lg border border-red-200 bg-red-50 p-3">
+              <p className="text-xs font-medium text-red-700">
+                {t(uiLocale, "purchase.monthEnd.bulk.errors.title.prefix")} (
+                {bulkErrors.length.toLocaleString()})
+              </p>
+              <ul className="max-h-28 list-disc space-y-0.5 overflow-y-auto pl-4 text-[11px] text-red-700">
+                {bulkErrors.map((error, index) => (
+                  <li key={`${error}-${index}`}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      </SlideUpSheet>
     </div>
   );
 }

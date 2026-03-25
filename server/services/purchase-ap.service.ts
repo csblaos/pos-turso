@@ -4,10 +4,8 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { stores } from "@/lib/db/schema";
-import {
-  getOutstandingPurchaseRows,
-  type PurchaseOutstandingRow,
-} from "@/lib/reports/queries";
+import type { PurchaseOutstandingRow } from "@/lib/reports/queries";
+import { listPurchaseOrders } from "@/server/repositories/purchase.repo";
 
 const UNKNOWN_SUPPLIER_KEY = "__unspecified_supplier__";
 const DUE_SOON_DAYS = 7;
@@ -119,6 +117,16 @@ function calculateDaysUntilDate(dateKey: string, todayKey: string): number {
   return Math.round((dueMs - todayMs) / MS_PER_DAY);
 }
 
+function calculateAgeDaysFromAnchor(
+  anchorDate: string | null,
+  todayKey: string,
+): number {
+  if (!anchorDate) return 0;
+  const anchorKey = toDateKey(anchorDate);
+  if (!anchorKey) return 0;
+  return Math.max(0, -calculateDaysUntilDate(anchorKey, todayKey));
+}
+
 function resolveDueMeta(
   dueDate: string | null,
   todayKey: string,
@@ -219,6 +227,52 @@ async function getStoreCurrency(storeId: string): Promise<"LAK" | "THB" | "USD">
   return (storeRow?.currency ?? "LAK") as "LAK" | "THB" | "USD";
 }
 
+async function getPurchaseApBaseRows(
+  storeId: string,
+  storeCurrency: "LAK" | "THB" | "USD",
+): Promise<PurchaseOutstandingRow[]> {
+  const rows = await listPurchaseOrders(storeId);
+  const todayKey = getTodayDateKey();
+
+  return rows
+    .filter((row) => row.status === "RECEIVED")
+    .map((row) => {
+      const grandTotalBase = row.totalCostBase + row.shippingCost + row.otherCost;
+      const paymentStatus =
+        row.totalPaidBase <= 0
+          ? "UNPAID"
+          : row.outstandingBase <= 0
+            ? "PAID"
+            : "PARTIAL";
+      const ageAnchor = row.dueDate ?? row.receivedAt ?? row.createdAt;
+      const fxDeltaBase =
+        row.purchaseCurrency !== storeCurrency &&
+        row.exchangeRateLockedAt &&
+        row.exchangeRate !== row.exchangeRateInitial
+          ? (row.exchangeRate - row.exchangeRateInitial) * row.totalCostPurchase
+          : 0;
+
+      return {
+        poId: row.id,
+        poNumber: row.poNumber,
+        supplierName: row.supplierName,
+        purchaseCurrency: row.purchaseCurrency,
+        dueDate: row.dueDate,
+        receivedAt: row.receivedAt,
+        paymentStatus,
+        grandTotalBase,
+        totalPaidBase: row.totalPaidBase,
+        outstandingBase: row.outstandingBase,
+        ageDays: calculateAgeDaysFromAnchor(ageAnchor, todayKey),
+        fxDeltaBase,
+        exchangeRateInitial: row.exchangeRateInitial,
+        exchangeRate: row.exchangeRate,
+        exchangeRateLockedAt: row.exchangeRateLockedAt,
+      } satisfies PurchaseOutstandingRow;
+    })
+    .filter((row) => row.outstandingBase > 0);
+}
+
 export async function getPurchaseApSupplierSummary(params: {
   storeId: string;
   q?: string;
@@ -227,7 +281,7 @@ export async function getPurchaseApSupplierSummary(params: {
   const limit = Math.min(200, Math.max(1, params.limit ?? 100));
   const q = params.q?.trim().toLowerCase() ?? "";
   const storeCurrency = await getStoreCurrency(params.storeId);
-  const rows = await getOutstandingPurchaseRows(params.storeId, storeCurrency);
+  const rows = await getPurchaseApBaseRows(params.storeId, storeCurrency);
   const todayKey = getTodayDateKey();
 
   const supplierMap = new Map<string, PurchaseApSupplierSummaryItem>();
@@ -301,7 +355,7 @@ export async function getPurchaseApSupplierStatement(params: {
   const supplierKey = params.supplierKey.trim().toLowerCase();
 
   const storeCurrency = await getStoreCurrency(params.storeId);
-  const baseRows = await getOutstandingPurchaseRows(params.storeId, storeCurrency);
+  const baseRows = await getPurchaseApBaseRows(params.storeId, storeCurrency);
   const todayKey = getTodayDateKey();
 
   const rows = baseRows
@@ -372,7 +426,7 @@ export async function getPurchaseApDueReminders(params: {
 }) {
   const limit = Math.min(500, Math.max(1, params.limit ?? 10));
   const storeCurrency = await getStoreCurrency(params.storeId);
-  const baseRows = await getOutstandingPurchaseRows(params.storeId, storeCurrency);
+  const baseRows = await getPurchaseApBaseRows(params.storeId, storeCurrency);
   const todayKey = getTodayDateKey();
 
   const reminderRows = baseRows

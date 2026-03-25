@@ -72,10 +72,10 @@
 | `/api/stock/products` | `GET` | `Permission:inventory.view` | stock products (pagination: `page`,`pageSize`; รองรับ filter `categoryId`) |
 | `/api/stock/movements` | `GET` | `Permission:inventory.view` | default: คืน `products + movements` สำหรับ stock overview; รองรับโหมด history (`view=history`) พร้อม query `page`,`pageSize`,`type`,`q`,`productId`,`dateFrom`,`dateTo` เพื่อ list movement แบบ server-side pagination/filter |
 | `/api/stock/movements` | `POST` | `Permission:inventory.create` | create movement (payload ใช้เฉพาะ `qty/unit/movementType/adjustMode/note`; ถ้าส่ง field กลุ่มต้นทุน/เรท เช่น `cost`,`costBase`,`rate`,`exchangeRate` จะถูก reject 400) |
-| `/api/stock/purchase-orders` | `GET` | `Permission:inventory.view` | list PO |
+| `/api/stock/purchase-orders` | `GET` | `Permission:inventory.view` | list PO (row summary คืน `itemCount`, `totalCostPurchase`, `totalCostBase`, `outstandingBase`; UI list ใช้ `totalCostPurchase` เป็นยอดหลักเมื่อ PO ต่างสกุลเงิน) |
 | `/api/stock/purchase-orders` | `POST` | `Permission:inventory.create` | create PO (foreign currency รองรับสร้างแบบยังไม่ปิดเรทได้ โดยไม่ส่ง `exchangeRate`; item payload ต้องส่ง `unitId`,`qtyOrdered`,`unitCostPurchase`; extra cost รองรับ `shippingCostCurrency`/`otherCostCurrency` แต่จำกัดเฉพาะ `storeCurrency` หรือ `purchaseCurrency`; backend จะ snapshot `multiplier_to_base`,`qty_base_*` และเก็บ `*_cost_original` + `*_cost_currency`) |
-| `/api/stock/purchase-orders/ap-by-supplier` | `GET` | `Permission:inventory.view` | summary เจ้าหนี้ค้างจ่ายราย supplier (รองรับ `q`,`limit`) |
-| `/api/stock/purchase-orders/ap-by-supplier/statement` | `GET` | `Permission:inventory.view` | statement AP ราย supplier (ต้องส่ง `supplierKey`; รองรับ `paymentStatus`,`dueFilter`,`dueFrom`,`dueTo`,`q`,`limit`) |
+| `/api/stock/purchase-orders/ap-by-supplier` | `GET` | `Permission:inventory.view` | summary เจ้าหนี้ค้างจ่ายราย supplier (รองรับ `q`,`limit`) และตอบ `Cache-Control: no-store` |
+| `/api/stock/purchase-orders/ap-by-supplier/statement` | `GET` | `Permission:inventory.view` | statement AP ราย supplier (ต้องส่ง `supplierKey`; รองรับ `paymentStatus`,`dueFilter`,`dueFrom`,`dueTo`,`q`,`limit`) และตอบ `Cache-Control: no-store` |
 | `/api/stock/purchase-orders/ap-by-supplier/export-csv` | `GET` | `Permission:inventory.view` | export CSV statement ราย supplier ตาม filter |
 | `/api/stock/purchase-orders/pending-rate` | `GET` | `Permission:inventory.view` | คิว PO ที่ `RECEIVED` และยัง `รอปิดเรท` รองรับ filter `supplier`,`receivedFrom`,`receivedTo`,`limit` |
 | `/api/stock/purchase-orders/[poId]` | `GET` | `Permission:inventory.view` | PO detail (item row คืน `unitId`,`purchaseUnitCode`,`multiplierToBase`,`qtyBaseOrdered`,`qtyBaseReceived`,`baseUnitCode`; PO level คืน `shippingCostOriginal/shippingCostCurrency/otherCostOriginal/otherCostCurrency` เพิ่ม) |
@@ -143,3 +143,11 @@
 
 - Route ที่ไม่มี `enforcePermission()` ไม่ได้แปลว่า public เสมอไป ให้ดู guard ภายใน route
 - Route หลักบางตัว (เช่น `/api/orders/[orderId]`) ใช้ permission เพิ่มเติมแบบ dynamic ผ่าน `hasPermission()` ตาม action
+- `GET /api/stock/purchase-orders`
+  - PO list item ถูกขยายให้คืนข้อมูล original extra-cost currency เพิ่มเติม (`shippingCostOriginal`, `shippingCostCurrency`, `otherCostOriginal`, `otherCostCurrency`) เพื่อให้การ์ด list แสดง `สินค้า / ค่าขนส่ง / ค่าอื่น` ตามสกุลเงินจริงและมี `≈ store currency` เป็นบรรทัดรองได้ตรงกับ PO detail
+- `GET /api/stock/purchase-orders/pending-rate`
+  - queue item คืน `totalCostPurchase`, `totalPaidBase`, `shippingCostOriginal/shippingCostCurrency/shippingCost`, และ `otherCostOriginal/otherCostCurrency/otherCost` แล้ว เพื่อให้การ์ด/preview ใน `Month-End Close` แสดงยอดจริงตามสกุลต้นฉบับ และคำนวณ `ยอดที่จะลงชำระ` ตาม rate ที่กรอกแบบ real-time ได้
+- `POST /api/stock/purchase-orders`
+  - ถ้า request ไม่ส่ง `shippingCostCurrency/otherCostCurrency` ระบบจะ fallback เป็น `store currency` (ไม่ใช่ `purchase currency`) เพื่อให้ตรงกับ default UX ของหน้า create PO
+- `POST /api/stock/purchase-orders/[poId]/apply-extra-cost`
+  - route จะ normalize `shippingCostCurrency/otherCostCurrency` เป็น `store currency` เมื่อ request ไม่ส่งค่า และ schema ไม่ hardcode `LAK` แล้ว

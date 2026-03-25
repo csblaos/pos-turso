@@ -19,10 +19,17 @@ export async function GET(request: Request) {
       limit,
     });
 
-    return NextResponse.json({
-      ok: true,
-      ...result,
-    });
+    return NextResponse.json(
+      {
+        ok: true,
+        ...result,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      },
+    );
   } catch (error) {
     return toRBACErrorResponse(error);
   }

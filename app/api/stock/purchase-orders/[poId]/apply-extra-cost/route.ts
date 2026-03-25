@@ -149,12 +149,20 @@ export async function POST(request: Request, { params }: RouteParams) {
       .where(eq(stores.id, storeId))
       .limit(1);
 
+    const storeCurrency = storeRow?.currency ?? "LAK";
+
+    const normalizedPayload = {
+      ...parsed.data,
+      shippingCostCurrency: parsed.data.shippingCostCurrency ?? storeCurrency,
+      otherCostCurrency: parsed.data.otherCostCurrency ?? storeCurrency,
+    };
+
     const po = await applyPurchaseOrderExtraCostFlow({
       poId,
       storeId,
       userId: session.userId,
-      storeCurrency: storeRow?.currency ?? "LAK",
-      payload: parsed.data,
+      storeCurrency,
+      payload: normalizedPayload,
       audit: {
         actorName: session.displayName,
         actorRole: session.activeRoleName,

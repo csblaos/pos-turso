@@ -18,6 +18,10 @@ import {
 import { db } from "@/lib/db/client";
 import { stores } from "@/lib/db/schema";
 
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+} as const;
+
 export async function GET(request: Request) {
   try {
     const { storeId } = await enforcePermission("inventory.view");
@@ -32,13 +36,18 @@ export async function GET(request: Request) {
     const hasMore = rows.length > pageSize;
     const purchaseOrders = rows.slice(0, pageSize);
 
-    return NextResponse.json({
-      ok: true,
-      purchaseOrders,
-      page,
-      pageSize,
-      hasMore,
-    });
+    return NextResponse.json(
+      {
+        ok: true,
+        purchaseOrders,
+        page,
+        pageSize,
+        hasMore,
+      },
+      {
+        headers: NO_STORE_HEADERS,
+      },
+    );
   } catch (error) {
     return toRBACErrorResponse(error);
   }
@@ -162,11 +171,19 @@ export async function POST(request: Request) {
 
     const storeCurrency = storeRow?.currency ?? "LAK";
 
+    const normalizedPayload = {
+      ...parsed.data,
+      shippingCostCurrency:
+        parsed.data.shippingCostCurrency ?? storeCurrency,
+      otherCostCurrency:
+        parsed.data.otherCostCurrency ?? storeCurrency,
+    };
+
     const po = await createPurchaseOrder({
       storeId,
       userId: session.userId,
       storeCurrency,
-      payload: parsed.data,
+      payload: normalizedPayload,
       audit: {
         actorName: session.displayName,
         actorRole: session.activeRoleName,

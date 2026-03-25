@@ -23,13 +23,19 @@ import {
 } from "@/server/services/idempotency.service";
 
 type RouteParams = { params: Promise<{ poId: string }> };
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+} as const;
 
 export async function GET(_request: Request, { params }: RouteParams) {
   try {
     const { storeId } = await enforcePermission("inventory.view");
     const { poId } = await params;
     const po = await getPurchaseOrderDetail(poId, storeId);
-    return NextResponse.json({ ok: true, purchaseOrder: po });
+    return NextResponse.json(
+      { ok: true, purchaseOrder: po },
+      { headers: NO_STORE_HEADERS },
+    );
   } catch (error) {
     if (error instanceof PurchaseServiceError) {
       return NextResponse.json(

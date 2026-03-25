@@ -10,9 +10,9 @@ export const createPurchaseOrderSchema = z.object({
     .optional(),
   exchangeRateLockNote: z.string().trim().max(240).optional().or(z.literal("")),
   shippingCost: z.coerce.number().int().min(0).default(0),
-  shippingCostCurrency: z.enum(["LAK", "THB", "USD"]).default("LAK"),
+  shippingCostCurrency: z.enum(["LAK", "THB", "USD"]).optional(),
   otherCost: z.coerce.number().int().min(0).default(0),
-  otherCostCurrency: z.enum(["LAK", "THB", "USD"]).default("LAK"),
+  otherCostCurrency: z.enum(["LAK", "THB", "USD"]).optional(),
   otherCostNote: z.string().trim().max(240).optional().or(z.literal("")),
   note: z.string().trim().max(500).optional().or(z.literal("")),
   expectedAt: z.string().trim().optional().or(z.literal("")),
@@ -81,12 +81,12 @@ export const applyPurchaseOrderExtraCostSchema = z.object({
     .number({ message: "กรุณากรอกค่าขนส่ง" })
     .int("ค่าขนส่งต้องเป็นจำนวนเต็ม")
     .min(0, "ค่าขนส่งต้องไม่ติดลบ"),
-  shippingCostCurrency: z.enum(["LAK", "THB", "USD"]).default("LAK"),
+  shippingCostCurrency: z.enum(["LAK", "THB", "USD"]).optional(),
   otherCost: z.coerce
     .number({ message: "กรุณากรอกค่าอื่นๆ" })
     .int("ค่าอื่นๆ ต้องเป็นจำนวนเต็ม")
     .min(0, "ค่าอื่นๆ ต้องไม่ติดลบ"),
-  otherCostCurrency: z.enum(["LAK", "THB", "USD"]).default("LAK"),
+  otherCostCurrency: z.enum(["LAK", "THB", "USD"]).optional(),
   otherCostNote: z.string().trim().max(240).optional().or(z.literal("")),
 });
 
