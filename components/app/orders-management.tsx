@@ -717,7 +717,11 @@ export function OrdersManagement(props: OrdersManagementProps) {
     return 'ui-sans-serif, -apple-system, "Segoe UI", sans-serif';
   }, [uiLocale]);
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const rawSearchParams = useSearchParams();
+  const searchParams = useMemo(
+    () => rawSearchParams ?? new URLSearchParams(),
+    [rawSearchParams],
+  );
   const [isTabPending, startTabTransition] = useTransition();
   const [showScannerPermissionSheet, setShowScannerPermissionSheet] = useState(false);
   const [showScannerSheet, setShowScannerSheet] = useState(false);

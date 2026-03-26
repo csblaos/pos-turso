@@ -113,9 +113,6 @@ export default async function ProductsPage({
           <h1 className="text-xl font-semibold">{t(uiLocale, "tab.products")}</h1>
           <ProductsHeaderRefreshButton />
         </div>
-        <p className="text-sm text-muted-foreground">
-          {t(uiLocale, "products.page.subtitle")}
-        </p>
       </header>
 
       <ProductsManagement

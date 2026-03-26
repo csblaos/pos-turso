@@ -145,7 +145,7 @@ export function AppTopNav({
   isSuperadmin,
   uiLocale,
 }: AppTopNavProps) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
   const router = useRouter();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [canUseFullscreen, setCanUseFullscreen] = useState(false);
@@ -645,7 +645,7 @@ export function AppTopNav({
             {isNotificationOpen && isDesktopViewport ? (
               <div
                 ref={notificationPanelRef}
-                className="absolute right-0 top-11 z-30 flex w-[min(24rem,calc(100vw-1rem))] max-h-[68dvh] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl sm:max-h-[32rem]"
+                className="absolute right-0 top-11 z-[60] flex w-[min(24rem,calc(100vw-1rem))] max-h-[68dvh] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl sm:max-h-[32rem]"
               >
                 {renderNotificationPanelContent()}
               </div>

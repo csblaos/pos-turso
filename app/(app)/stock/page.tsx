@@ -98,6 +98,7 @@ export default async function StockPage({
     const canInbound = isPermissionGranted(permissionKeys, "inventory.in");
     const canAdjust = isPermissionGranted(permissionKeys, "inventory.adjust");
     const canPostMovement = canCreate && (canInbound || canAdjust);
+    const canUpdateCost = isPermissionGranted(permissionKeys, "products.cost.update");
 
     if (!canView) {
       return (
@@ -179,9 +180,6 @@ export default async function StockPage({
       <section className="space-y-4">
         <header className="space-y-1">
           <h1 className="text-xl font-semibold">{t(uiLocale, "stock.page.title")}</h1>
-          <p className="text-sm text-muted-foreground">
-            {t(uiLocale, "stock.page.subtitle")}
-          </p>
         </header>
 
         <StockTabs
@@ -192,6 +190,7 @@ export default async function StockPage({
               canCreate={canPostMovement}
               canAdjust={canAdjust}
               canInbound={canInbound}
+              canUpdateCost={canUpdateCost}
             />
           }
           inventoryTab={

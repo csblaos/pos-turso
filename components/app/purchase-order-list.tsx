@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Clock,
   ChevronLeft,
+  Search,
   Download,
   Loader2,
   Package,
@@ -907,8 +908,12 @@ export function PurchaseOrderList({
   const statusConfig = useMemo(() => getPurchaseStatusConfig(uiLocale), [uiLocale]);
 
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const pathname = usePathname() ?? "/";
+  const rawSearchParams = useSearchParams();
+  const searchParams = useMemo(
+    () => rawSearchParams ?? new URLSearchParams(),
+    [rawSearchParams],
+  );
   const isPurchaseTabActive = searchParams.get("tab") === "purchase";
   const workspaceFromQuery = useMemo(() => {
     const raw = searchParams.get(PURCHASE_WORKSPACE_QUERY_KEY);
@@ -965,7 +970,7 @@ export function PurchaseOrderList({
   const [pendingRateQueue, setPendingRateQueue] = useState<PendingRateQueueItem[]>([]);
   const [isLoadingPendingQueue, setIsLoadingPendingQueue] = useState(false);
   const [pendingQueueError, setPendingQueueError] = useState<string | null>(null);
-  const [pendingSupplierFilter, setPendingSupplierFilter] = useState("");
+  const [pendingQueueQuery, setPendingQueueQuery] = useState("");
   const [pendingReceivedFrom, setPendingReceivedFrom] = useState("");
   const [pendingReceivedTo, setPendingReceivedTo] = useState("");
   const [selectedPendingQueueIds, setSelectedPendingQueueIds] = useState<string[]>([]);
@@ -1744,8 +1749,8 @@ export function PurchaseOrderList({
     setIsLoadingPendingQueue(true);
     try {
       const params = new URLSearchParams();
-      if (pendingSupplierFilter.trim()) {
-        params.set("supplier", pendingSupplierFilter.trim());
+      if (pendingQueueQuery.trim()) {
+        params.set("q", pendingQueueQuery.trim());
       }
       if (pendingReceivedFrom) {
         params.set("receivedFrom", pendingReceivedFrom);
@@ -1780,7 +1785,7 @@ export function PurchaseOrderList({
     } finally {
       setIsLoadingPendingQueue(false);
     }
-  }, [pendingReceivedFrom, pendingReceivedTo, pendingSupplierFilter, uiLocale]);
+  }, [pendingQueueQuery, pendingReceivedFrom, pendingReceivedTo, uiLocale]);
 
   const reloadFirstPage = useCallback(async () => {
     setIsRefreshingList(true);
@@ -2652,6 +2657,7 @@ export function PurchaseOrderList({
               {
                 id: "OPERATIONS" as PurchaseWorkspace,
                 label: t(uiLocale, "purchase.workspace.operations.label"),
+                labelShort: t(uiLocale, "purchase.workspace.operations.labelShort"),
                 icon: ShoppingCart,
                 desc: t(uiLocale, "purchase.workspace.operations.desc"),
                 badge: workspaceSummary.openPoCount,
@@ -2659,6 +2665,7 @@ export function PurchaseOrderList({
               {
                 id: "MONTH_END" as PurchaseWorkspace,
                 label: t(uiLocale, "purchase.workspace.monthEnd.label"),
+                labelShort: t(uiLocale, "purchase.workspace.monthEnd.labelShort"),
                 icon: Banknote,
                 desc: t(uiLocale, "purchase.workspace.monthEnd.desc"),
                 badge: workspaceSummary.pendingRateCount,
@@ -2666,6 +2673,7 @@ export function PurchaseOrderList({
               {
                 id: "SUPPLIER_AP" as PurchaseWorkspace,
                 label: t(uiLocale, "purchase.workspace.supplierAp.label"),
+                labelShort: t(uiLocale, "purchase.workspace.supplierAp.labelShort"),
                 icon: FileText,
                 desc: t(uiLocale, "purchase.workspace.supplierAp.desc"),
                 badge: workspaceSummary.overduePoCount,
@@ -2684,9 +2692,10 @@ export function PurchaseOrderList({
                     : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
                 }`}
                 onClick={() => handleWorkspaceChange(workspace.id)}
+                title={workspace.label}
               >
                 <WorkspaceIcon className="h-3.5 w-3.5" />
-                <span className="text-xs font-semibold">{workspace.label}</span>
+                <span className="text-xs font-semibold">{workspace.labelShort}</span>
                 {workspace.badge > 0 ? (
                   <span
                     className={`inline-flex min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold ${
@@ -2736,93 +2745,84 @@ export function PurchaseOrderList({
         <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
           <div className="space-y-1">
             <label className="text-[11px] text-amber-700">{t(uiLocale, "purchase.monthEnd.filter.supplier.label")}</label>
-            <input
-              className="h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-300"
-              placeholder={t(uiLocale, "purchase.monthEnd.filter.supplier.placeholder")}
-              value={pendingSupplierFilter}
-              onChange={(event) => setPendingSupplierFilter(event.target.value)}
-            />
-          </div>
-          <div className="space-y-1 min-w-0">
-            <label className="text-[11px] text-amber-700">{t(uiLocale, "purchase.monthEnd.filter.receivedFrom.label")}</label>
-            <PurchaseDatePickerField
-              uiLocale={uiLocale}
-              value={pendingReceivedFrom}
-              onChange={setPendingReceivedFrom}
-              triggerClassName="h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-left text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-300 flex items-center justify-between gap-2"
-              placeholder={t(uiLocale, "common.datePicker.placeholder")}
-              ariaLabel={t(uiLocale, "purchase.monthEnd.filter.receivedFrom.aria")}
-            />
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
-                onClick={() => applyPendingQueueDateShortcut("receivedFrom", "TODAY")}
-              >
-                {t(uiLocale, "purchase.dateShortcut.today")}
-              </button>
-              <button
-                type="button"
-                className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
-                onClick={() => applyPendingQueueDateShortcut("receivedFrom", "PLUS_7")}
-              >
-                {t(uiLocale, "purchase.dateShortcut.plus7")}
-              </button>
-              <button
-                type="button"
-                className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
-                onClick={() => applyPendingQueueDateShortcut("receivedFrom", "END_OF_MONTH")}
-              >
-                {t(uiLocale, "purchase.dateShortcut.endOfMonth")}
-              </button>
-              <button
-                type="button"
-                className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
-                onClick={() => applyPendingQueueDateShortcut("receivedFrom", "CLEAR")}
-              >
-                {t(uiLocale, "purchase.dateShortcut.clear")}
-              </button>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-600/60" />
+              <input
+                className="h-9 w-full rounded-lg border border-amber-200 bg-white pl-8 pr-2.5 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-300"
+                placeholder={t(uiLocale, "purchase.monthEnd.filter.supplier.placeholder")}
+                value={pendingQueueQuery}
+                onChange={(event) => setPendingQueueQuery(event.target.value)}
+              />
             </div>
           </div>
-          <div className="space-y-1 min-w-0">
-            <label className="text-[11px] text-amber-700">{t(uiLocale, "purchase.monthEnd.filter.receivedTo.label")}</label>
-            <PurchaseDatePickerField
-              uiLocale={uiLocale}
-              value={pendingReceivedTo}
-              onChange={setPendingReceivedTo}
-              triggerClassName="h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-left text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-300 flex items-center justify-between gap-2"
-              placeholder={t(uiLocale, "common.datePicker.placeholder")}
-              ariaLabel={t(uiLocale, "purchase.monthEnd.filter.receivedTo.aria")}
-            />
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
-                onClick={() => applyPendingQueueDateShortcut("receivedTo", "TODAY")}
-              >
-                {t(uiLocale, "purchase.dateShortcut.today")}
-              </button>
-              <button
-                type="button"
-                className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
-                onClick={() => applyPendingQueueDateShortcut("receivedTo", "PLUS_7")}
-              >
-                {t(uiLocale, "purchase.dateShortcut.plus7")}
-              </button>
-              <button
-                type="button"
-                className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
-                onClick={() => applyPendingQueueDateShortcut("receivedTo", "END_OF_MONTH")}
-              >
-                {t(uiLocale, "purchase.dateShortcut.endOfMonth")}
-              </button>
-              <button
-                type="button"
-                className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
-                onClick={() => applyPendingQueueDateShortcut("receivedTo", "CLEAR")}
-              >
-                {t(uiLocale, "purchase.dateShortcut.clear")}
-              </button>
+          <div className="grid grid-cols-2 gap-2 md:col-span-2">
+            <div className="min-w-0 space-y-1">
+              <label className="text-[11px] text-amber-700">{t(uiLocale, "purchase.monthEnd.filter.receivedFrom.label")}</label>
+              <PurchaseDatePickerField
+                uiLocale={uiLocale}
+                value={pendingReceivedFrom}
+                onChange={setPendingReceivedFrom}
+                triggerClassName="h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-left text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-300 flex items-center justify-between gap-2"
+                placeholder={t(uiLocale, "common.datePicker.placeholder")}
+                ariaLabel={t(uiLocale, "purchase.monthEnd.filter.receivedFrom.aria")}
+              />
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
+                  onClick={() => applyPendingQueueDateShortcut("receivedFrom", "TODAY")}
+                >
+                  {t(uiLocale, "purchase.dateShortcut.today")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
+                  onClick={() => applyPendingQueueDateShortcut("receivedFrom", "END_OF_MONTH")}
+                >
+                  {t(uiLocale, "purchase.dateShortcut.endOfMonth")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
+                  onClick={() => applyPendingQueueDateShortcut("receivedFrom", "CLEAR")}
+                >
+                  {t(uiLocale, "purchase.dateShortcut.clear")}
+                </button>
+              </div>
+            </div>
+            <div className="min-w-0 space-y-1">
+              <label className="text-[11px] text-amber-700">{t(uiLocale, "purchase.monthEnd.filter.receivedTo.label")}</label>
+              <PurchaseDatePickerField
+                uiLocale={uiLocale}
+                value={pendingReceivedTo}
+                onChange={setPendingReceivedTo}
+                triggerClassName="h-9 w-full rounded-lg border border-amber-200 bg-white px-2.5 text-left text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-300 flex items-center justify-between gap-2"
+                placeholder={t(uiLocale, "common.datePicker.placeholder")}
+                ariaLabel={t(uiLocale, "purchase.monthEnd.filter.receivedTo.aria")}
+              />
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
+                  onClick={() => applyPendingQueueDateShortcut("receivedTo", "TODAY")}
+                >
+                  {t(uiLocale, "purchase.dateShortcut.today")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
+                  onClick={() => applyPendingQueueDateShortcut("receivedTo", "END_OF_MONTH")}
+                >
+                  {t(uiLocale, "purchase.dateShortcut.endOfMonth")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
+                  onClick={() => applyPendingQueueDateShortcut("receivedTo", "CLEAR")}
+                >
+                  {t(uiLocale, "purchase.dateShortcut.clear")}
+                </button>
+              </div>
             </div>
           </div>
         </div>

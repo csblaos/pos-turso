@@ -48,7 +48,7 @@ const getGridColumnsClass = (tabCount: number) => {
 const HIDE_NAV_PATH_PREFIXES = ["/orders/new"];
 
 export function BottomTabNav({ permissionKeys, storeType, uiLocale }: BottomTabNavProps) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "/";
   const router = useRouter();
   const [optimisticPath, setOptimisticPath] = useState<string | null>(null);
   const [, startTransition] = useTransition();

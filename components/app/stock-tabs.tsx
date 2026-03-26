@@ -61,7 +61,7 @@ export function StockTabs({
 }: StockTabsProps) {
   const router = useRouter();
   const uiLocale = useUiLocale();
-  const searchParams = useSearchParams();
+  const searchParams = useSearchParams() ?? new URLSearchParams();
   const tabFromQuery = searchParams.get("tab");
   const initialActiveTab: TabId = isTabId(tabFromQuery)
     ? tabFromQuery

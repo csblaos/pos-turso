@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, ChevronRight, CircleAlert, Languages, Loader2 } from "lucide-react";
+import { Check, CheckCircle2, ChevronRight, CircleAlert, Languages, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -111,6 +111,10 @@ export function AccountLanguageSettings({ locale, initialUiLocale }: AccountLang
       }
 
       router.refresh();
+
+      if (!data?.warning) {
+        setIsSheetOpen(false);
+      }
     } catch {
       setErrorMessage(t(locale, "settings.language.error.serverUnreachable"));
     } finally {
@@ -118,15 +122,17 @@ export function AccountLanguageSettings({ locale, initialUiLocale }: AccountLang
     }
   };
 
-  const fieldClassName =
-    "h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-900 outline-none ring-primary focus:ring-2 disabled:bg-slate-100";
-
   return (
     <>
       <button
         type="button"
         className="group w-full overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition-colors hover:bg-slate-50"
-        onClick={() => setIsSheetOpen(true)}
+        onClick={() => {
+          setIsSheetOpen(true);
+          setSuccessMessage(null);
+          setWarningMessage(null);
+          setErrorMessage(null);
+        }}
       >
         <div className="flex min-h-14 items-center gap-3 px-4 py-3">
           <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
@@ -159,22 +165,50 @@ export function AccountLanguageSettings({ locale, initialUiLocale }: AccountLang
       >
         <div className="space-y-4">
           <div className="space-y-2">
-            <label className="text-xs text-muted-foreground" htmlFor="account-language">
+            <p className="text-xs text-muted-foreground">
               {t(locale, "settings.language.title")}
-            </label>
-            <select
-              id="account-language"
-              value={uiLocale}
-              onChange={(event) => setUiLocale(event.target.value as UiLocale)}
-              className={fieldClassName}
-              disabled={isSaving}
+            </p>
+
+            <div
+              role="radiogroup"
+              aria-label={t(locale, "settings.language.title")}
+              className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
             >
-              {uiLocaleValues.map((option) => (
-                <option key={option} value={option}>
-                  {getLocaleOptionLabel(option)}
-                </option>
-              ))}
-            </select>
+              {uiLocaleValues.map((option) => {
+                const isSelected = option === uiLocale;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSelected}
+                    disabled={isSaving}
+                    onClick={() => {
+                      setUiLocale(option);
+                      setSuccessMessage(null);
+                      setWarningMessage(null);
+                      setErrorMessage(null);
+                    }}
+                    className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors ${
+                      isSaving ? "cursor-not-allowed opacity-60" : "hover:bg-slate-50"
+                    }`}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-slate-900">
+                        {getLocaleOptionLabel(option)}
+                      </span>
+                    </span>
+                    <span
+                      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${
+                        isSelected ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-400"
+                      }`}
+                    >
+                      {isSelected ? <Check className="h-4 w-4" /> : null}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}

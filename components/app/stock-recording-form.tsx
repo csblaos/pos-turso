@@ -35,6 +35,7 @@ type StockRecordingFormProps = {
   canCreate: boolean;
   canAdjust: boolean;
   canInbound: boolean;
+  canUpdateCost: boolean;
 };
 
 type MovementType = "IN" | "ADJUST" | "RETURN";
@@ -78,10 +79,15 @@ export function StockRecordingForm({
   canCreate,
   canAdjust,
   canInbound,
+  canUpdateCost,
 }: StockRecordingFormProps) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const pathname = usePathname() ?? "/";
+  const rawSearchParams = useSearchParams();
+  const searchParams = useMemo(
+    () => rawSearchParams ?? new URLSearchParams(),
+    [rawSearchParams],
+  );
   const uiLocale = useUiLocale();
   const numberLocale = uiLocaleToDateLocale(uiLocale);
   const isRecordingTabActive = searchParams.get("tab") === "recording";
@@ -147,6 +153,11 @@ export function StockRecordingForm({
   const [isUsageGuideOpen, setIsUsageGuideOpen] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const productItemsRef = useRef(productItems);
+
+  useEffect(() => {
+    productItemsRef.current = productItems;
+  }, [productItems]);
 
   const fetchCurrentStock = useCallback(async (prodId: string) => {
     setLoadingStock(true);
@@ -215,32 +226,36 @@ export function StockRecordingForm({
     const nextMovementType = parseMovementTypeQuery(
       searchParams.get(RECORDING_MOVEMENT_QUERY_KEY),
     );
-    if (
-      nextMovementType &&
-      movementTypeOptions.includes(nextMovementType) &&
-      nextMovementType !== movementType
-    ) {
-      setMovementType(nextMovementType);
+    if (nextMovementType && movementTypeOptions.includes(nextMovementType)) {
+      setMovementType((current) => (current === nextMovementType ? current : nextMovementType));
     }
 
-    const nextProductId =
-      searchParams.get(RECORDING_PRODUCT_QUERY_KEY)?.trim() ?? "";
-    if (!nextProductId || nextProductId === productId) {
+    const nextProductId = searchParams.get(RECORDING_PRODUCT_QUERY_KEY)?.trim() ?? "";
+    if (!nextProductId) {
       return;
     }
-    if (productItems.some((item) => item.productId === nextProductId)) {
-      setProductId(nextProductId);
-      void fetchCurrentStock(nextProductId);
+
+    if (!productItemsRef.current.some((item) => item.productId === nextProductId)) {
+      return;
     }
+
+    setProductId((current) => (current === nextProductId ? current : nextProductId));
   }, [
-    fetchCurrentStock,
-    movementType,
     movementTypeOptions,
-    productId,
-    productItems,
     isRecordingTabActive,
     searchParams,
   ]);
+
+  useEffect(() => {
+    if (!isRecordingTabActive) {
+      return;
+    }
+    if (!productId) {
+      setCurrentStock(null);
+      return;
+    }
+    void fetchCurrentStock(productId);
+  }, [fetchCurrentStock, isRecordingTabActive, productId]);
 
   useEffect(() => {
     if (!isRecordingTabActive) {
@@ -483,10 +498,9 @@ export function StockRecordingForm({
       setShowSearchDropdown(false);
       setShowProductPicker(false);
       setProductPickerQuery("");
-      void fetchCurrentStock(nextProductId);
       focusQtyInput();
     },
-    [fetchCurrentStock, focusQtyInput],
+    [focusQtyInput],
   );
 
   const selectProductFromSearch = (product: ProductListItem) => {
@@ -531,6 +545,17 @@ export function StockRecordingForm({
     params.set("tab", "purchase");
     router.push(`?${params.toString()}`);
   }, [router]);
+
+  const jumpToProductCost = useCallback(() => {
+    if (!selectedProduct) {
+      return;
+    }
+
+    const params = new URLSearchParams();
+    params.set("status", "all");
+    params.set("q", selectedProduct.sku?.trim() ? selectedProduct.sku : selectedProduct.name);
+    router.push(`/products?${params.toString()}`);
+  }, [router, selectedProduct]);
 
   const handleBarcodeResult = async (barcode: string) => {
     setShowScanner(false);
@@ -667,53 +692,73 @@ export function StockRecordingForm({
         }}
       />
 
-      {/* Help Text Box */}
-      <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="font-semibold text-blue-900">
+      <article className="rounded-xl border bg-white p-3 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-900">
               {t(uiLocale, "stock.recording.help.title")}
             </p>
-            <p className="mt-1 text-xs text-blue-800">
-              {t(uiLocale, "stock.recording.help.subtitle")}
-            </p>
+            {!isUsageGuideOpen ? (
+              <p className="mt-0.5 truncate text-xs text-slate-600">
+                {t(uiLocale, "stock.recording.help.subtitle")}
+              </p>
+            ) : null}
           </div>
           <button
             type="button"
             onClick={() => setIsUsageGuideOpen((current) => !current)}
             aria-expanded={isUsageGuideOpen}
-            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-blue-200 bg-white px-2 py-1 text-xs font-medium text-blue-800 transition hover:bg-blue-100"
+            aria-controls="stock-recording-help-details"
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border bg-white px-2 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
           >
             {isUsageGuideOpen
               ? t(uiLocale, "stock.recording.help.toggle.hide")
               : t(uiLocale, "stock.recording.help.toggle.show")}
-            {isUsageGuideOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            {isUsageGuideOpen ? (
+              <ChevronUp className="h-3 w-3" />
+            ) : (
+              <ChevronDown className="h-3 w-3" />
+            )}
           </button>
         </div>
-        {isUsageGuideOpen ? (
-          <ul className="mt-2 space-y-1 text-xs text-blue-700">
-            <li>{t(uiLocale, "stock.recording.help.bullet.stockTake")}</li>
-            <li>{t(uiLocale, "stock.recording.help.bullet.returnFromCustomer")}</li>
-            <li>{t(uiLocale, "stock.recording.help.bullet.transferBetweenBranches")}</li>
-            <li>{t(uiLocale, "stock.recording.help.bullet.freeSample")}</li>
-          </ul>
-        ) : null}
-      </div>
 
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-        <p className="font-semibold">{t(uiLocale, "stock.recording.hint.purchaseTab.title")}</p>
-        <p className="mt-1">
-          {t(uiLocale, "stock.recording.hint.purchaseTab.description")}
-        </p>
-        <Button
-          type="button"
-          variant="outline"
-          className="mt-2 h-8 border-amber-200 bg-white px-3 text-xs text-amber-800 hover:bg-amber-100"
-          onClick={jumpToPurchaseTab}
-        >
-          {t(uiLocale, "stock.recording.hint.purchaseTab.cta")}
-        </Button>
-      </div>
+        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-2 text-xs">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="font-medium leading-snug text-amber-900 sm:min-w-0 sm:truncate">
+              {t(uiLocale, "stock.recording.hint.purchaseTab.title")}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-7 self-start border-amber-200 bg-white px-2 text-[11px] text-amber-800 hover:bg-amber-100 sm:shrink-0 sm:self-auto"
+              onClick={jumpToPurchaseTab}
+            >
+              {t(uiLocale, "stock.recording.hint.purchaseTab.cta")}
+            </Button>
+          </div>
+          {isUsageGuideOpen ? (
+            <p className="mt-1 text-amber-800">
+              {t(uiLocale, "stock.recording.hint.purchaseTab.description")}
+            </p>
+          ) : null}
+        </div>
+
+        <div id="stock-recording-help-details">
+          {isUsageGuideOpen ? (
+            <div className="mt-2 space-y-2">
+              <p className="text-xs text-slate-700">
+                {t(uiLocale, "stock.recording.help.subtitle")}
+              </p>
+              <ul className="space-y-1 text-xs text-slate-700">
+                <li>{t(uiLocale, "stock.recording.help.bullet.stockTake")}</li>
+                <li>{t(uiLocale, "stock.recording.help.bullet.returnFromCustomer")}</li>
+                <li>{t(uiLocale, "stock.recording.help.bullet.transferBetweenBranches")}</li>
+                <li>{t(uiLocale, "stock.recording.help.bullet.freeSample")}</li>
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      </article>
 
       {quickPresets.length > 0 ? (
         <article className="space-y-2 rounded-xl border bg-white p-3 shadow-sm">
@@ -811,16 +856,18 @@ export function StockRecordingForm({
               </Button>
             </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-2 h-9 w-full text-xs sm:hidden"
-              onClick={() => setShowProductPicker(true)}
-              disabled={loading || productItems.length === 0}
-            >
-              {t(uiLocale, "stock.recording.productPicker.open.prefix")} (
-              {productItems.length.toLocaleString(numberLocale)})
-            </Button>
+            <div className="mt-2 flex">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 w-full text-xs sm:ml-auto sm:w-auto sm:px-3"
+                onClick={() => setShowProductPicker(true)}
+                disabled={loading || productItems.length === 0}
+              >
+                {t(uiLocale, "stock.recording.productPicker.open.prefix")} (
+                {productItems.length.toLocaleString(numberLocale)})
+              </Button>
+            </div>
 
             {showSearchDropdown && searchResults.length > 0 && (
               <div className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-lg border bg-white shadow-lg">
@@ -947,18 +994,16 @@ export function StockRecordingForm({
 
         {/* Warning for IN type */}
         {movementType === "IN" && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs">
-            <p className="font-semibold text-amber-900">
-              {t(uiLocale, "stock.recording.warning.in.title")}
-            </p>
-            <p className="mt-1 text-amber-700">{t(uiLocale, "stock.recording.warning.in.description")}</p>
+          <div className="flex justify-end">
             <Button
               type="button"
               variant="outline"
-              className="mt-2 h-8 border-amber-200 bg-white px-3 text-xs text-amber-800 hover:bg-amber-100"
-              onClick={jumpToPurchaseTab}
+              className="h-7 px-2 text-[11px]"
+              onClick={jumpToProductCost}
+              disabled={!selectedProduct || !canUpdateCost}
+              title={t(uiLocale, "stock.recording.action.editCostInProducts")}
             >
-              {t(uiLocale, "stock.recording.hint.purchaseTab.cta")}
+              {t(uiLocale, "stock.recording.action.editCostInProducts")}
             </Button>
           </div>
         )}

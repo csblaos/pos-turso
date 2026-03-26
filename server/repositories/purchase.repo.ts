@@ -469,12 +469,12 @@ export async function getPurchaseOrderById(
 export async function listPendingExchangeRateQueue(params: {
   storeId: string;
   storeCurrency: "LAK" | "THB" | "USD";
-  supplierQuery?: string;
+  query?: string;
   receivedFrom?: string;
   receivedTo?: string;
   limit?: number;
 }): Promise<PendingExchangeRateQueueItem[]> {
-  const { storeId, storeCurrency, supplierQuery, receivedFrom, receivedTo } = params;
+  const { storeId, storeCurrency, query, receivedFrom, receivedTo } = params;
   const limit = Math.min(200, Math.max(10, params.limit ?? 50));
 
   const filters = [
@@ -484,10 +484,15 @@ export async function listPendingExchangeRateQueue(params: {
     sql`${purchaseOrders.exchangeRateLockedAt} is null`,
   ];
 
-  const normalizedSupplierQuery = supplierQuery?.trim().toLowerCase() ?? "";
-  if (normalizedSupplierQuery.length > 0) {
+  const normalizedQuery = query?.trim().toLowerCase() ?? "";
+  if (normalizedQuery.length > 0) {
+    const like = `%${normalizedQuery}%`;
     filters.push(
-      sql`lower(coalesce(${purchaseOrders.supplierName}, '')) like ${`%${normalizedSupplierQuery}%`}`,
+      sql`(
+        lower(coalesce(${purchaseOrders.supplierName}, '')) like ${like}
+        OR lower(${purchaseOrders.poNumber}) like ${like}
+        OR lower(coalesce(${purchaseOrders.note}, '')) like ${like}
+      )`,
     );
   }
   if (receivedFrom) {

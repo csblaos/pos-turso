@@ -24,7 +24,7 @@ const isTabActive = (pathname: string, href: string) => {
 
 export function SystemAdminBottomNav() {
   const uiLocale = useUiLocale();
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "/";
   const router = useRouter();
   const [optimisticPath, setOptimisticPath] = useState<string | null>(null);
   const [, startTransition] = useTransition();

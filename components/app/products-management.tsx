@@ -267,8 +267,12 @@ export function ProductsManagement({
   initialStatusFilter,
 }: ProductsManagementProps) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const pathname = usePathname() ?? "/";
+  const rawSearchParams = useSearchParams();
+  const searchParams = useMemo(
+    () => rawSearchParams ?? new URLSearchParams(),
+    [rawSearchParams],
+  );
   const uiLocale = useUiLocale();
   const dateLocale = uiLocaleToDateLocale(uiLocale);
   const numberLocale = dateLocale;
@@ -291,6 +295,8 @@ export function ProductsManagement({
   /* ── Filter / search ── */
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
+  const searchStickyBarRef = useRef<HTMLDivElement | null>(null);
+  const [isSearchBarStuck, setIsSearchBarStuck] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialStatusFilter);
   const [sortOption, setSortOption] = useState<SortOption>("newest");
@@ -470,6 +476,14 @@ export function ProductsManagement({
     setStatusFilter((prev) => (prev === statusFromQuery ? prev : statusFromQuery));
   }, [searchParams]);
 
+  const queryFromUrl = searchParams.get("q")?.trim() ?? "";
+  useEffect(() => {
+    if (!queryFromUrl) {
+      return;
+    }
+    setQuery((prev) => (prev === queryFromUrl ? prev : queryFromUrl));
+  }, [queryFromUrl]);
+
   useLayoutEffect(() => {
     if (!detailContentRef.current) return;
     const nextHeight = detailContentRef.current.getBoundingClientRect().height;
@@ -489,6 +503,41 @@ export function ProductsManagement({
       if (unsavedCloseConfirmCloseTimerRef.current !== null) {
         window.clearTimeout(unsavedCloseConfirmCloseTimerRef.current);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    const updateStuckState = () => {
+      const stickyEl = searchStickyBarRef.current;
+      if (!stickyEl) return;
+
+      const top = stickyEl.getBoundingClientRect().top;
+      const nextStuck = top <= 0.5;
+      setIsSearchBarStuck((prev) => (prev === nextStuck ? prev : nextStuck));
+    };
+
+    let rafId: number | null = null;
+    const scheduleUpdate = () => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        updateStuckState();
+      });
+    };
+
+    scheduleUpdate();
+
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate, { passive: true });
+    document.addEventListener("scroll", scheduleUpdate, { passive: true, capture: true });
+
+    return () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+      document.removeEventListener("scroll", scheduleUpdate, true);
     };
   }, []);
 
@@ -2790,7 +2839,14 @@ export function ProductsManagement({
       </div>
 
       {/* ── Sticky search bar ── */}
-      <div className="sticky top-0 z-10 -mx-1 bg-slate-50/90 px-1 py-1 backdrop-blur-sm">
+      <div
+        ref={searchStickyBarRef}
+        className={
+          isSearchBarStuck
+            ? "sticky top-0 z-10 -mx-1 bg-white px-2 py-2 rounded-xl backdrop-blur-sm"
+            : "sticky top-0 z-10 -mx-1 bg-white px-2 py-2 rounded-xl border backdrop-blur-sm"
+        }
+      >
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />

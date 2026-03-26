@@ -2,10 +2,24 @@
 
 ## Snapshot Date
 
-- March 23, 2026
+- March 26, 2026
 
 ## Changed (ล่าสุด)
 
+- ปรับ header ของหน้า `/products`, `/settings`, และ `/stock` ให้เหลือแค่ title (ตัด subtitle ออก) เพื่อประหยัดพื้นที่บนจอเล็ก
+- เปลี่ยนพฤติกรรม sheet เปลี่ยนภาษาในหน้า `/settings/language`: บันทึกสำเร็จแล้วปิด sheet อัตโนมัติ (ถ้าไม่มี warning)
+- ปรับ UI sheet เปลี่ยนภาษาในหน้า `/settings/language` จาก dropdown เป็น list option เพื่อเลือกภาษาได้เร็วขึ้นบนมือถือ
+- ปรับ z-index ของ notification dropdown บน desktop เป็น `z-[60]` ให้สอดคล้องกับ mobile
+- ปรับ sticky search bar หน้า `/products` ให้เปลี่ยน style ตามสถานะ: ตอนปกติ `py-4 + border` และตอน stuck ด้านบน `py-2` (ไม่มี border)
+- ปรับ card list item ในแท็บ `ประวัติ` ของหน้า `/stock` ให้ compact มากขึ้นเพื่อ save area บนมือถือ
+- ปรับ layout ช่องวันที่เริ่ม/สิ้นสุด (From/To) ในแท็บ `ประวัติ` ของหน้า `/stock` ให้แสดงบรรทัดเดียวกันบนมือถือ (2 คอลัมน์)
+- ปรับ date picker ของช่องวันที่ในแท็บ `ประวัติ` ของหน้า `/stock` บนมือถือให้ popover กว้างเต็มแถว (ไม่ตามความกว้าง input)
+- แก้แท็บ `บันทึก` (Recording) ของหน้า `/stock`: เลือกสินค้าแล้วไม่ sync ค่าจาก query กลับมาทับ state จนเกิดอาการโหลด current stock วน; ปรับให้ sync จาก URL เฉพาะตอน URL เปลี่ยนจริง และให้ fetch current stock ผูกกับ `productId`
+- แท็บ `บันทึก` (Recording) ของหน้า `/stock` แสดงปุ่ม `ดูสินค้าทั้งหมด` บน desktop ด้วย (เดิมมีเฉพาะ mobile)
+- แท็บ `บันทึก` (Recording) ของหน้า `/stock` ปรับกล่องคำอธิบาย/คำแนะนำให้ประหยัดพื้นที่: แสดงสรุปแบบบรรทัดเดียว + ปุ่มขยายดูรายละเอียดและคำแนะนำไป PO (ข้อความยังอยู่ครบ)
+- ปุ่ม `ໄປແທັບສັ່ງຊື້ (PO)` ในกล่องคำแนะนำของแท็บ `บันทึก` (Recording) ถูกทำให้ตำแหน่งคงที่ (อยู่ที่เดิมทั้งตอนขยาย/ย่อรายละเอียด) เพื่อลด layout shift
+- แท็บ `บันทึก` (Recording) ของหน้า `/stock` กรณี `รับเข้า` เปลี่ยนเป็นปุ่มเล็ก “แก้ต้นทุนในหน้าสินค้า” เพื่อพาไปหน้า `/products` แล้วแก้ต้นทุนใน Product Detail ตาม flow ปกติ (ไม่อัปเดตต้นทุนจากแท็บ Recording โดยตรง)
+- แก้ build ให้ผ่าน (Next.js 15): ถอด legacy `pages/_app.tsx`, `pages/_document.tsx`, `pages/_error.tsx` (ทำให้ `next build` ล้มด้วย `/_document`) และปรับจุดที่ใช้ `usePathname()`/`useSearchParams()` ให้ handle nullable + memoize เพื่อไม่ให้ dependency ของ hooks เปลี่ยนทุก render
 - ปรับสกุลเงินใน PO ให้ตรงกับ `purchaseCurrency` มากขึ้น:
   - [purchase-order-list.tsx](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/components/app/purchase-order-list.tsx) ใช้ `purchaseCurrency` เป็นค่าหลักใน create wizard summary, ราคาต่อหน่วย/ยอดต่อรายการใน detail sheet, และยอดสินค้า (`products subtotal`) ของ PO; ถ้าเป็น PO ต่างสกุลจะแสดง `≈ storeCurrency` เป็นค่ารอง
   - คง `ค่าขนส่ง`, `ค่าอื่น`, `ยอดรวมต้องจ่าย`, `ยอดชำระแล้ว`, และ `ยอดค้าง` เป็น `storeCurrency` ตาม logic เดิม เพราะเป็นยอดฐานร้าน/ยอดปิดบัญชีจริง
@@ -791,7 +805,7 @@
   - อัปเดต `scripts/repair-migrations.mjs` ให้เติม `due_date`, สร้าง `purchase_order_payments`, และ sync `payment_status` จาก payment ledger
 
 - เพิ่ม Phase ถัดไปของ PO ต่างสกุลเงิน (ปิดเรทก่อนชำระ + คิวงาน + รายงาน):
-  - เพิ่ม endpoint `GET /api/stock/purchase-orders/pending-rate` สำหรับคิว `รอปิดเรท` (filter: supplier/receivedFrom/receivedTo)
+- เพิ่ม endpoint `GET /api/stock/purchase-orders/pending-rate` สำหรับคิว `รอปิดเรท` (filter: `q` (supplier/poNumber/note), receivedFrom, receivedTo)
   - เพิ่ม endpoint `POST /api/stock/purchase-orders/[poId]/settle` สำหรับบันทึกชำระ PO
   - เพิ่ม business rule: PO ต่างสกุลเงินที่ยังไม่ล็อกเรท จะบันทึกชำระไม่ได้ (ต้อง `finalize-rate` ก่อน)
   - เพิ่มคอลัมน์ `purchase_orders.exchange_rate_initial` เพื่อเก็บเรทตั้งต้นสำหรับเทียบกับเรทจริง
@@ -1300,12 +1314,17 @@ npm run build
   - แท็บ active ต้องเปลี่ยนทันที
   - ถ้าแท็บนั้นยังไม่เคยโหลด ต้องเห็น skeleton list ระหว่างรอ
   - ถ้าเคยโหลดแล้ว ต้องเห็นข้อมูลขึ้นเร็วจาก cache และมีข้อความ `กำลังอัปเดตรายการ...` ชั่วคราว
+- เปิด `/products` แล้วเลื่อนลงจน search bar ติดบน: ตอนปกติ search bar ต้องเป็น `py-4 + border` และตอน stuck ต้องเปลี่ยนเป็น `py-2` (ไม่มี border); เลื่อนกลับขึ้นบนต้องกลับเป็นแบบเดิม
 - ขณะสลับแท็บ ให้กด `โหลดเพิ่มเติม` ตรวจว่า loading ของปุ่มยังแยกจาก loading ของการเปลี่ยนแท็บ
 - เปิด `/products` > Product Detail > tab `ต้นทุน` > กด `แก้ไขต้นทุน`
 - ไม่กรอกเหตุผลแล้วกดบันทึก: ปุ่มต้อง disabled และ/หรือระบบเตือน
 - กรอกเหตุผล + เปลี่ยนต้นทุนแล้วบันทึก: ต้องสำเร็จ และใน tab ต้นทุนต้องเห็น `ที่มาของต้นทุนล่าสุด` เป็น `แก้ไขมือ` พร้อมเหตุผล/เวลา/ผู้ทำ
 - สร้างหรือรับเข้า PO ให้ต้นทุนสินค้าเปลี่ยน แล้วกลับไปเปิด Product Detail: source ต้องเป็น `รับเข้า PO` และมีเลข PO ในช่องอ้างอิง
-- เปิด `/stock?tab=recording` แล้วตรวจว่าไม่มีช่องกรอกต้นทุนในฟอร์มแล้ว
+- เปิด `/stock?tab=recording` แล้วตรวจว่าโดย default ไม่มีช่องกรอกต้นทุน
+- ใน `/stock?tab=recording` (ประเภท `รับเข้า`) ต้องมีปุ่มเล็ก `แก้ต้นทุนในหน้าสินค้า →` และเมื่อกดแล้วต้องพาไป `/products` พร้อมคำค้นหา SKU/ชื่อของสินค้าที่เลือก
+- เปิด `/stock?tab=history` แล้วตรวจว่ารายการประวัติเป็น card แบบ compact (padding น้อยลง/ไม่มี shadow) และถ้า note ยาวต้องถูกตัดด้วย `…` ในบรรทัดเดียว
+- เปิด `/stock?tab=history` บนมือถือแล้วตรวจว่า date from/to อยู่บรรทัดเดียวกัน (2 คอลัมน์) ใต้ช่องกรองประเภท/ค้นหาสินค้า
+- เปิด `/stock?tab=history` บนมือถือแล้วกดเปิด date picker: popover ปฏิทินต้องกว้างเต็มแถว (ไม่ถูกจำกัดตามความกว้าง input)
 - เปิด `/reports` แล้วตรวจว่าการ์ด `กำไรขั้นต้น` มีทั้ง realized และ current-cost preview พร้อมส่วนต่าง
 - เปิดหน้า `/products` แล้วตรวจว่ามีปุ่ม `รีเฟรช` อยู่ขวาบนบรรทัดเดียวกับ title `สินค้า`
 - กดปุ่ม `รีเฟรช` และตรวจว่าปุ่มแสดง `กำลังรีเฟรช...` ระหว่างโหลด

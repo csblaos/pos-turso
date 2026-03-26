@@ -360,13 +360,12 @@ export default async function SettingsPage() {
         <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
           {t(uiLocale, "settings.page.title")}
         </h1>
-        <p className="text-sm text-slate-500">{t(uiLocale, "settings.page.subtitle")}</p>
       </header>
 
       <div className="space-y-4">
         {adminLinks.some((item) => item.visible) ? (
           <div className="space-y-2">
-            <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">
               {t(uiLocale, "settings.section.adminArea")}
             </p>
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -390,7 +389,7 @@ export default async function SettingsPage() {
         ) : null}
 
         <div className="space-y-2">
-          <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">
             {t(uiLocale, "settings.section.accountAndStore")}
           </p>
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -450,7 +449,7 @@ export default async function SettingsPage() {
         </div>
 
         <div className="space-y-2">
-          <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">
             {t(uiLocale, "settings.section.management")}
           </p>
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -473,7 +472,7 @@ export default async function SettingsPage() {
 
         {productSettingsLinks.some((item) => item.visible) && (
           <div className="space-y-2">
-            <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">
               {t(uiLocale, "settings.section.productSettings")}
             </p>
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -496,7 +495,7 @@ export default async function SettingsPage() {
         )}
 
         <div className="space-y-2">
-          <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">
             {t(uiLocale, "settings.section.myAccount")}
           </p>
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -519,7 +518,7 @@ export default async function SettingsPage() {
         </div>
 
         <div className="space-y-2">
-          <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">
             {t(uiLocale, "settings.section.channelConnections")}
           </p>
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -561,7 +560,7 @@ export default async function SettingsPage() {
         </div>
 
         <div className="space-y-2">
-          <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">
             {t(uiLocale, "settings.section.security")}
           </p>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

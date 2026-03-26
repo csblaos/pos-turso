@@ -26,8 +26,12 @@ export function ReportsFilters({
   initialFilters,
 }: ReportsFiltersProps) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const pathname = usePathname() ?? "/";
+  const rawSearchParams = useSearchParams();
+  const searchParams = useMemo(
+    () => rawSearchParams ?? new URLSearchParams(),
+    [rawSearchParams],
+  );
   const [isPending, startTransition] = useTransition();
   const [preset, setPreset] = useState<ReportDatePreset>(initialFilters.preset);
   const [dateFrom, setDateFrom] = useState(initialFilters.dateFrom);

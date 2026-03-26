@@ -82,8 +82,12 @@ export function StockInventoryView({
   initialHasMore,
 }: StockInventoryViewProps) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const pathname = usePathname() ?? "/";
+  const rawSearchParams = useSearchParams();
+  const searchParams = useMemo(
+    () => rawSearchParams ?? new URLSearchParams(),
+    [rawSearchParams],
+  );
   const uiLocale = useUiLocale();
   const numberLocale = uiLocaleToDateLocale(uiLocale);
   const tabQuery = searchParams.get("tab");

@@ -438,7 +438,7 @@ npm run po:audit:integrity
   - PO detail แสดง block เรทแบบ compact แล้วทุก workspace (`PO Operations` / `Month-End Close` / `AP by Supplier` ใช้ detail modal เดียวกัน): แถวบนเป็น `badge + 1 USD = ... LAK`, แถวล่างเป็น meta `เริ่มต้น / ปิดเมื่อ / Δ`, และ note แสดงเฉพาะเมื่อมี เพื่อประหยัดพื้นที่บนมือถือแต่ยังอ่านเรทได้ทันที
   - modal `ปิดเรท` ใน PO detail มี preview ก่อนยืนยันแล้ว โดยแยก `สินค้า / ค่าขนส่ง / ค่าอื่น / ยอดรวมใหม่ / ส่วนต่าง` ตามสกุลร้าน และใช้สูตรเดียวกับ backend ฝั่ง `finalize-rate` สำหรับการแปลงราคา/ค่าใช้จ่ายก่อนล็อกเรท
   - หลัง `ปิดเรท` สำเร็จใน PO detail ถ้ายังมียอดค้าง ระบบจะเปิดฟอร์ม `บันทึกชำระ` ต่อให้อัตโนมัติ (prefill ยอดค้าง + วันที่วันนี้) เพื่อให้ปิดงานต่อเนื่อง
-  - เพิ่มคิว `PO รอปิดเรท` ผ่าน `GET /api/stock/purchase-orders/pending-rate` (filter ซัพพลายเออร์/ช่วงวันที่รับของ) เพื่อไล่งานค้างปลายงวด
+  - เพิ่มคิว `PO รอปิดเรท` ผ่าน `GET /api/stock/purchase-orders/pending-rate` (filter ค้นหา `supplier/เลข PO/หมายเหตุ` + ช่วงวันที่รับของ) เพื่อไล่งานค้างปลายงวด
   - เพิ่ม action `บันทึกชำระ PO` ผ่าน `POST /api/stock/purchase-orders/[poId]/settle` รองรับยอดชำระบางส่วน (`amountBase`) และบังคับว่าถ้า PO ต่างสกุลเงินต้อง `ปิดเรท` ก่อน
   - เพิ่ม action `อัปเดตค่าขนส่ง/ค่าอื่นหลังรับสินค้า` ผ่าน `POST /api/stock/purchase-orders/[poId]/apply-extra-cost`:
     - ใช้ได้เฉพาะ PO สถานะ `RECEIVED` ที่ยังไม่ `PAID`
@@ -475,7 +475,7 @@ npm run po:audit:integrity
   - นโยบาย scanner กลางของระบบ: หากเพิ่มปุ่ม `สแกนบาร์โค้ด` ใหม่ในหน้าอื่น ให้ reuse `BarcodeScannerPanel` + permission sheet มาตรฐานเดียวกันเสมอ เพื่อคง UX/permission/camera cleanup ให้สอดคล้องทั้งระบบ
   - เพิ่ม state มาตรฐานต่อแท็บ: loading skeleton / empty state / error + ปุ่ม retry
   - `บันทึกสต็อก` เพิ่ม quick preset (`รับเข้า`, `ปรับยอด`, `ของเสีย`) พร้อม note template และส่ง `Idempotency-Key` ตอน `POST /api/stock/movements` จาก client
-  - แท็บ `บันทึกสต็อก` เพิ่ม guardrail ชัดเจนว่า flow นี้ไม่บันทึกต้นทุน/อัตราแลกเปลี่ยน พร้อม CTA ไปแท็บ `สั่งซื้อ (PO)` สำหรับงานซื้อเข้า
+  - แท็บ `บันทึกสต็อก` เพิ่ม guardrail ว่า flow นี้ไม่บันทึกต้นทุน/อัตราแลกเปลี่ยน พร้อม CTA ไปแท็บ `สั่งซื้อ (PO)` สำหรับงานซื้อเข้า
   - กล่องคำแนะนำในแท็บ `บันทึกสต็อก` ปรับเป็นพับ/ขยายได้ (default ปิด) เพื่อลดความยาวบนจอมือถือ โดยยังคงคำเตือนหลักและ CTA ไปแท็บ `สั่งซื้อ (PO)` ให้เห็นตลอด
   - ใน mobile ของแท็บ `บันทึกสต็อก` เพิ่มปุ่ม sticky `บันทึกสต็อก` ที่ก้นจอ และเพิ่มปุ่ม `ดูสินค้าทั้งหมด` เปิด list picker (ค้นหาชื่อ/SKU แล้วแตะเลือกได้)
   - `POST /api/stock/movements` จะ reject field กลุ่มต้นทุน/เรท (`cost/costBase/rate/exchangeRate/...`) ด้วย 400 เพื่อบังคับ separation ระหว่างงาน Recording vs PO/Month-End
@@ -575,6 +575,20 @@ npm run po:audit:integrity
 
 ## Recent Notes
 
+- หน้า `/products`, `/settings`, และ `/stock` ตัด subtitle ใต้หัวข้อออก เพื่อ save area บนจอเล็ก (คงไว้เฉพาะ title)
+- หน้า `/settings/language` (SlideUpSheet เปลี่ยนภาษา) เมื่อบันทึกสำเร็จจะปิด sheet อัตโนมัติถ้าไม่มี warning เพื่อให้ผู้ใช้เห็นภาษาใหม่ทันที
+- UI เปลี่ยนภาษาใน `/settings/language` เปลี่ยนจาก dropdown เป็น list option แบบเลือกทีละภาษา (อ่านง่ายบนมือถือ)
+- Notification dropdown (desktop) ปรับ z-index เป็น `z-[60]` ให้เท่ากับ mobile เพื่อกันโดน element sticky ในหน้าอื่นทับ
+- sticky search bar หน้า `/products` ปรับให้ “ย่อ/บางลง” เฉพาะตอนที่มัน stuck ด้านบน: ตอนปกติใช้ `py-4 + border` และตอน stuck ใช้ `py-2` (ไม่มี border)
+- tab `ประวัติ` ในหน้า `/stock` ปรับ card list item ให้ compact มากขึ้น (ลด padding/ตัด shadow/ย่อ badge+qty/ทำ note เป็นแถวเดียวแบบ truncate) เพื่อ save area บนมือถือ
+- filter วันที่ (เริ่ม/สิ้นสุด) ใน tab `ประวัติ` ของ `/stock` ปรับ layout บนมือถือให้มาอยู่บรรทัดเดียวกัน (2 คอลัมน์) เพื่อลดความสูงของส่วน filter
+- date picker (custom calendar) ของช่องวันที่ใน tab `ประวัติ` ของ `/stock` บนมือถือปรับให้แผงปฏิทินกว้างเต็มแถว (ไม่ถูกจำกัดตามความกว้าง input)
+- tab `บันทึก` (Recording) ในหน้า `/stock` แก้อาการเลือกสินค้าแล้วโหลด current stock วน: ปรับให้ sync state จาก URL เฉพาะตอน URL เปลี่ยนจริง และให้ fetch current stock ผูกกับ `productId` (กันการดึงค่าจาก query มาทับ selection ที่ผู้ใช้เพิ่งเลือก)
+- tab `บันทึก` (Recording) ในหน้า `/stock` แสดงปุ่ม `ดูสินค้าทั้งหมด` บน desktop ด้วย (ช่วยให้เลือกสินค้าจากรายการได้โดยไม่ต้องพิมพ์ค้นหา)
+- tab `บันทึก` (Recording) ในหน้า `/stock` ปรับกล่องคำอธิบายให้ประหยัดพื้นที่: โชว์สรุปแบบบรรทัดเดียวและค่อย “ขยายดูรายละเอียด” (ยังคงข้อความทั้งหมดไว้)
+- ปุ่ม `ໄປແທັບສັ່ງຊື້ (PO)` ในกล่องคำแนะนำของ tab `บันทึก` (Recording) ถูกจัด layout ให้ตำแหน่งคงที่ทั้งตอนขยาย/ย่อ เพื่อไม่ให้ UI ขยับไปมา
+- tab `บันทึก` (Recording) ของ `/stock` (กรณีรับเข้า) มีปุ่มเล็กพาไปหน้า `/products` (พร้อมคำค้นหา SKU/ชื่อ) เพื่อให้ไปแก้ต้นทุนใน Product Detail ตาม flow ปกติ (Recording ไม่อัปเดตต้นทุนโดยตรง)
+- แก้ `next build` ให้ผ่านใน Next.js 15: ถอด legacy `pages/_app.tsx`, `pages/_document.tsx`, `pages/_error.tsx` (ทำให้ build ล้มด้วย `/_document`) และทำ fallback+memoize ให้ `usePathname()`/`useSearchParams()` ในหลายจุดเพื่อกัน type nullable และกัน hooks deps เปลี่ยนทุก render
 - card ใน workspace `Month-End Close` ของแท็บ PO แสดง `ยอดซื้อจริงตาม purchase currency` แล้ว เช่น `สินค้า $120 ≈ ₭...` เพื่อให้เห็นว่ากำลังปิดเรทให้ยอดต้นฉบับเท่าไร; ถ้า `Outstanding = 0` จะซ่อนบรรทัด outstanding และคง focus ที่ `received date + initial rate + original amount`
 - card `Month-End Close` มี fallback กันค่า `$0/฿0` หลอกแล้ว: ถ้า queue item ยังไม่มียอดต้นฉบับ (`totalCostPurchase <= 0`) จะถอยไปแสดงยอดฐานร้านแทนก่อน ไม่ fake original currency
 - queue `Month-End Close` คืน `shippingCostOriginal/shippingCostCurrency/shippingCost` แล้ว และ UI จะ fallback จาก `poList` เมื่อ queue summary ยังไม่มียอดต้นฉบับครบ เพื่อให้ card แสดง `สินค้า ...` และ `ค่าขนส่ง ...` ตาม PO จริงมากขึ้น

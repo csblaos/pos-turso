@@ -29,7 +29,7 @@ export function MenuBackButton({
   keepSpaceWhenHidden = false,
   backHref,
 }: MenuBackButtonProps) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "/";
   const router = useRouter();
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [isClient, setIsClient] = useState(false);

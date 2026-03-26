@@ -374,7 +374,7 @@ export async function getPurchaseOrderListPage(
 export async function getPendingExchangeRateQueue(params: {
   storeId: string;
   storeCurrency: "LAK" | "THB" | "USD";
-  supplierQuery?: string;
+  query?: string;
   receivedFrom?: string;
   receivedTo?: string;
   limit?: number;

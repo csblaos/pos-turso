@@ -25,7 +25,10 @@ export async function GET(request: Request) {
     const { storeId } = await enforcePermission("inventory.view");
     const url = new URL(request.url);
 
-    const supplierQuery = url.searchParams.get("supplier")?.trim() ?? "";
+    const q =
+      url.searchParams.get("q")?.trim() ??
+      url.searchParams.get("supplier")?.trim() ??
+      "";
     const receivedFromRaw = url.searchParams.get("receivedFrom")?.trim() ?? "";
     const receivedToRaw = url.searchParams.get("receivedTo")?.trim() ?? "";
     const limit = Math.min(
@@ -55,7 +58,7 @@ export async function GET(request: Request) {
     const queue = await getPendingExchangeRateQueue({
       storeId,
       storeCurrency: (storeRow?.currency ?? "LAK") as "LAK" | "THB" | "USD",
-      supplierQuery: supplierQuery || undefined,
+      query: q || undefined,
       receivedFrom,
       receivedTo,
       limit,

@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Calendar, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -132,6 +132,7 @@ type HistoryDatePickerFieldProps = {
   weekdayLabels: readonly string[];
   clearLabel: string;
   closeLabel: string;
+  panelAlign?: "left" | "right";
 };
 
 function HistoryDatePickerField({
@@ -143,6 +144,7 @@ function HistoryDatePickerField({
   weekdayLabels,
   clearLabel,
   closeLabel,
+  panelAlign = "left",
 }: HistoryDatePickerFieldProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -221,7 +223,13 @@ function HistoryDatePickerField({
       </button>
 
       {isOpen ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+0.4rem)] z-[130] rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+        <div
+          className={`absolute top-[calc(100%+0.4rem)] z-[130] rounded-xl border border-slate-200 bg-white p-2 shadow-xl ${
+            panelAlign === "right"
+              ? "right-0 w-[calc(200%+0.5rem)] lg:left-0 lg:right-0 lg:w-auto"
+              : "left-0 w-[calc(200%+0.5rem)] lg:left-0 lg:right-0 lg:w-auto"
+          }`}
+        >
           <div className="flex items-center justify-between pb-1">
             <button
               type="button"
@@ -341,8 +349,12 @@ function buildHistoryCacheKey(params: {
 
 export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const pathname = usePathname() ?? "/";
+  const rawSearchParams = useSearchParams();
+  const searchParams = useMemo(
+    () => rawSearchParams ?? new URLSearchParams(),
+    [rawSearchParams],
+  );
   const uiLocale = useUiLocale();
   const numberLocale = uiLocaleToDateLocale(uiLocale);
   const weekdayLabels = [
@@ -746,13 +758,13 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
       />
 
       <article className="space-y-3 rounded-xl border bg-white p-3 shadow-sm">
-        <div className="grid grid-cols-1 gap-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           <select
             value={typeFilterInput}
             onChange={(event) =>
               setTypeFilterInput((event.target.value as MovementTypeFilter) ?? "all")
             }
-            className="h-10 rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
+            className="col-span-2 h-10 rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2 lg:col-span-1"
             aria-label={t(uiLocale, "stock.history.filter.type.ariaLabel")}
           >
             {movementTypeFilterOptions.map((option) => (
@@ -761,13 +773,19 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
               </option>
             ))}
           </select>
-          <input
-            type="text"
-            value={productQueryInput}
-            onChange={(event) => setProductQueryInput(event.target.value)}
-            placeholder={t(uiLocale, "stock.history.filter.product.placeholder")}
-            className="h-10 rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2"
-          />
+          <div className="relative col-span-2 lg:col-span-1">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+              aria-hidden="true"
+            />
+            <input
+              type="text"
+              value={productQueryInput}
+              onChange={(event) => setProductQueryInput(event.target.value)}
+              placeholder={t(uiLocale, "stock.history.filter.product.placeholder")}
+              className="h-10 w-full rounded-md border pl-9 pr-3 text-sm outline-none ring-primary focus:ring-2"
+            />
+          </div>
           <HistoryDatePickerField
             value={dateFromInput}
             onChange={setDateFromInput}
@@ -777,6 +795,7 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
             weekdayLabels={weekdayLabels}
             clearLabel={t(uiLocale, "stock.history.datePicker.clear")}
             closeLabel={t(uiLocale, "stock.history.datePicker.close")}
+            panelAlign="left"
           />
           <HistoryDatePickerField
             value={dateToInput}
@@ -787,6 +806,7 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
             weekdayLabels={weekdayLabels}
             clearLabel={t(uiLocale, "stock.history.datePicker.clear")}
             closeLabel={t(uiLocale, "stock.history.datePicker.close")}
+            panelAlign="right"
           />
         </div>
 
