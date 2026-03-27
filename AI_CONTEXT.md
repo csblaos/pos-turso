@@ -457,8 +457,8 @@ npm run po:audit:integrity
   - mobile selector ของ `AP by Supplier` แสดง badge สรุปข้าง label ก่อนเปิด picker แล้ว: เห็นทั้งจำนวน `supplier` ที่มีหนี้ค้างและจำนวน `PO` รวมจาก summary ปัจจุบัน โดยไม่ต้องเปิด modal ก่อน
   - mobile filter row ของ `AP by Supplier` ปรับใหม่ให้ `ค้นหา PO / หมายเหตุ` เต็มบรรทัด, `payment + due status` อยู่แถวเดียวกัน, และ `sort` ลงบรรทัดเดี่ยว เพื่อประหยัดพื้นที่และยังคงอ่านง่าย
   - stock section tabs หลักของหน้า `/stock` (`ສະຕັອກ / ສັ່ງຊື້ / ບັນທຶກ / ປະຫວັດ`) ใช้ wrapper sticky ใน `components/app/stock-tabs.tsx` แล้ว และตอนสลับแท็บระบบจะ snapshot `window.scrollX/Y` ก่อน `router.replace(..., { scroll: false })` จากนั้น restore ตำแหน่งเดิมอีกครั้งหลังแท็บใหม่ mount เพื่อลดอาการเด้งขึ้นบนเมื่อ content ของแท็บใหม่โหลดเสร็จ
-  - workspace tabs ภายใน `components/app/purchase-order-list.tsx` รองรับ 2 state แล้ว: ตอน `normal` ยังเป็น card `rounded-2xl border p-2` เหมือนเดิม แต่เมื่อ bar ติด `top-[3.8rem]` จริงบน mobile ระบบจะสลับเป็น full-width sticky bar (`-mx-4 border-y px-4 py-2 shadow-sm`) โดยตรวจ stuck state จาก `getBoundingClientRect().top`
-  - เมื่อ workspace tabs ในหน้า purchase เข้าสถานะ sticky จริง ระบบจะซ่อน label `purchase.workspace.title` เพื่อให้ bar compact ขึ้นและเหลือพื้นที่ให้ปุ่ม tab มากขึ้น
+  - workspace tabs ภายใน `components/app/purchase-order-list.tsx` รองรับ 2 state แล้ว: ตอน `normal` ยังเป็น card `rounded-2xl border p-2` เหมือนเดิม แต่เมื่อ bar ติด `top-[3.8rem]` จริง ระบบจะสลับเป็น full-width sticky bar ทุก breakpoint โดยขยายตาม gutter ของ layout (`-mx-4/md:-mx-6/min-[1200px]:-mx-8`) พร้อม `border-y + shadow-sm`; stuck state ตรวจจาก `getBoundingClientRect().top`
+  - เมื่อ workspace tabs ในหน้า purchase เข้าสถานะ sticky จริง ระบบจะซ่อน label `purchase.workspace.title` เพื่อให้ bar compact ขึ้น; ตอน normal label ยังแสดงตามเดิม
   - คิว `PO รอปิดเรท` รองรับ workflow ปลายเดือนแบบกลุ่ม:
     - เลือกหลาย PO แล้ว `ปิดเรท + ชำระปลายเดือน` ได้ในครั้งเดียว
     - บังคับเลือก PO สกุลเดียวกันต่อรอบ และใส่ `paymentReference` รอบบัตรเดียวกัน

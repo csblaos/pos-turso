@@ -2696,15 +2696,15 @@ export function PurchaseOrderList({
 
       <div
         ref={workspaceStickyBarRef}
-        className={`sticky top-[3.8rem] z-10 bg-white/95 backdrop-blur transition-[margin,border-radius,padding,box-shadow] md:static md:z-auto md:rounded-2xl md:border md:border-slate-200 md:bg-white md:p-2 md:shadow-none md:backdrop-blur-0 ${
+        className={`sticky top-[3.8rem] z-10 bg-white/95 backdrop-blur transition-[margin,border-radius,padding,box-shadow] supports-[backdrop-filter]:bg-white/85 ${
           isWorkspaceStickyBarStuck
-            ? "-mx-4 border-y border-slate-200 px-6 py-2 shadow-sm"
+            ? "-mx-4 border-y border-slate-200 px-6 py-2 shadow-sm md:-mx-6 md:px-6 min-[1200px]:-mx-8 min-[1200px]:px-8"
             : "rounded-2xl border border-slate-200 p-2"
         }`}
       >
         <p
           className={`px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 ${
-            isWorkspaceStickyBarStuck ? "hidden" : "hidden"
+            isWorkspaceStickyBarStuck ? "hidden" : ""
           }`}
         >
           {t(uiLocale, "purchase.workspace.title")}
