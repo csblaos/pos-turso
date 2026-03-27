@@ -724,6 +724,7 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
     Boolean(appliedProductQuery) ||
     Boolean(appliedDateFrom) ||
     Boolean(appliedDateTo);
+  const isInitialHistoryLoading = isLoading && movementItems.length === 0;
 
   const shouldVirtualize = movementItems.length > 24;
   const safeViewportHeight = Math.max(1, viewportHeight);
@@ -747,9 +748,18 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
     return t(uiLocale, option?.labelKey ?? "common.filter.all");
   };
 
+  if (isInitialHistoryLoading) {
+    return (
+      <section className="space-y-4">
+        <StockTabLoadingState variant="history" />
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-4">
       <StockTabToolbar
+        title={t(uiLocale, "stock.tabs.history.mobile")}
         isRefreshing={isRefreshing || isLoading}
         lastUpdatedAt={lastUpdatedAt}
         onRefresh={() => {
@@ -848,9 +858,7 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
         ) : null}
       </article>
 
-      {isLoading && movementItems.length === 0 ? (
-        <StockTabLoadingState message={t(uiLocale, "stock.history.loading")} />
-      ) : errorMessage && movementItems.length === 0 ? (
+      {errorMessage && movementItems.length === 0 ? (
         <StockTabErrorState
           message={errorMessage}
           onRetry={() => {

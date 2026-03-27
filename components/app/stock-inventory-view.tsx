@@ -110,6 +110,9 @@ export function StockInventoryView({
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(
     products.length > 0 ? new Date().toISOString() : null,
   );
+  const inventorySearchStickyRef = useRef<HTMLDivElement | null>(null);
+  const inventoryResultsRef = useRef<HTMLDivElement | null>(null);
+  const [isInventorySearchStickyStuck, setIsInventorySearchStickyStuck] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState(searchQueryFromUrl);
   const [searchQueryForUrlSync, setSearchQueryForUrlSync] = useState(searchQueryFromUrl);
@@ -120,6 +123,10 @@ export function StockInventoryView({
   const [showScannerPermission, setShowScannerPermission] = useState(false);
   const [hasSeenScannerPermission, setHasSeenScannerPermission] = useState(false);
   const lastFetchedCategoryIdRef = useRef<string | null>(null);
+  const hasActiveInventorySearchQuery = searchQuery.trim().length > 0;
+  const isInventoryCompactSearchMode =
+    hasActiveInventorySearchQuery && isInventorySearchStickyStuck;
+  const isInitialInventoryLoading = isRefreshingData && productItems.length === 0;
 
   useEffect(() => {
     setProductItems(products);
@@ -406,6 +413,89 @@ export function StockInventoryView({
     void refreshInventoryData();
   }, [isInventoryTabActive, refreshInventoryData, selectedCategoryId]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const updateStuckState = () => {
+      const stickyEl = inventorySearchStickyRef.current;
+      if (!stickyEl) {
+        return;
+      }
+
+      const style = window.getComputedStyle(stickyEl);
+      if (style.position !== "sticky") {
+        setIsInventorySearchStickyStuck(false);
+        return;
+      }
+
+      const topPx = Number.parseFloat(style.top || "0") || 0;
+      const nextStuck = stickyEl.getBoundingClientRect().top <= topPx + 0.5;
+      setIsInventorySearchStickyStuck((prev) => (prev === nextStuck ? prev : nextStuck));
+    };
+
+    updateStuckState();
+
+    let rafId = 0;
+    const scheduleUpdate = () => {
+      if (rafId !== 0) {
+        return;
+      }
+      rafId = window.requestAnimationFrame(() => {
+        rafId = 0;
+        updateStuckState();
+      });
+    };
+
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+
+    return () => {
+      if (rafId !== 0) {
+        window.cancelAnimationFrame(rafId);
+      }
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasActiveInventorySearchQuery || !isInventorySearchStickyStuck) {
+      return;
+    }
+
+    let rafId = 0;
+    rafId = window.requestAnimationFrame(() => {
+      const stickyEl = inventorySearchStickyRef.current;
+      const resultsEl = inventoryResultsRef.current;
+      if (!stickyEl || !resultsEl) {
+        return;
+      }
+
+      const stickyBottom = stickyEl.getBoundingClientRect().bottom;
+      const resultsTop = resultsEl.getBoundingClientRect().top;
+      const desiredTop = stickyBottom + 8;
+      const delta = resultsTop - desiredTop;
+
+      if (delta < -4) {
+        window.scrollBy({
+          top: delta,
+          left: 0,
+          behavior: "auto",
+        });
+      }
+    });
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [
+    filteredAndSortedProducts.length,
+    hasActiveInventorySearchQuery,
+    isInventorySearchStickyStuck,
+  ]);
+
   const loadMoreProducts = useCallback(
     async (options?: { silent?: boolean }) => {
       if (isLoadingMoreProducts || !hasMoreProducts) {
@@ -559,9 +649,18 @@ export function StockInventoryView({
     }
   };
 
+  if (isInitialInventoryLoading) {
+    return (
+      <section className="space-y-4">
+        <StockTabLoadingState variant="inventory" />
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-4">
       <StockTabToolbar
+        title={t(uiLocale, "stock.tabs.inventory.mobile")}
         isRefreshing={isRefreshingData}
         lastUpdatedAt={lastUpdatedAt}
         onRefresh={() => {
@@ -612,70 +711,77 @@ export function StockInventoryView({
         </button>
       </div>
 
-      <article className="rounded-xl border bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-1 gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={t(uiLocale, "stock.inventory.search.placeholder")}
-                className="h-10 w-full rounded-md border pl-9 pr-9 text-sm outline-none ring-primary focus:ring-2"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              className="h-10 w-10 p-0"
-              onClick={openScanner}
-              disabled={isSearchingByBarcode}
-            >
-              <ScanBarcode className="h-4 w-4" />
-            </Button>
+      <div
+        ref={inventorySearchStickyRef}
+        className={`sticky top-[3.8rem] z-10 transition-[margin,padding,background-color,box-shadow,border-color] ${
+          isInventorySearchStickyStuck
+            ? "-mx-4 border-y border-slate-200 bg-white/95 px-4 py-2 shadow-sm supports-[backdrop-filter]:bg-white/85 md:-mx-6 md:px-6 min-[1200px]:-mx-8 min-[1200px]:px-8"
+            : "px-0 py-2"
+        }`}
+      >
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t(uiLocale, "stock.inventory.search.placeholder")}
+              className="h-10 w-full rounded-md border pl-9 pr-9 text-sm outline-none focus:border-blue-300"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
-              <ListFilter className="h-4 w-4 shrink-0 text-slate-500" />
-              <select
-                value={selectedCategoryId}
-                onChange={(e) => setSelectedCategoryId(e.target.value)}
-                className="h-10 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2 sm:w-auto"
-              >
-                <option value="">{t(uiLocale, "stock.inventory.category.all")}</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 w-10 shrink-0 p-0"
+            onClick={openScanner}
+            disabled={isSearchingByBarcode}
+          >
+            <ScanBarcode className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
 
-            <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
-              <ArrowUpDown className="h-4 w-4 shrink-0 text-slate-500" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortOption)}
-                className="h-10 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2 sm:w-auto"
-              >
-                <option value="name">{t(uiLocale, "stock.inventory.sort.name")}</option>
-                <option value="sku">{t(uiLocale, "products.label.sku")}</option>
-                <option value="stock-low">{t(uiLocale, "stock.inventory.sort.stockLow")}</option>
-                <option value="stock-high">{t(uiLocale, "stock.inventory.sort.stockHigh")}</option>
-              </select>
-            </div>
+      <article className="rounded-xl border bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
+            <ListFilter className="h-4 w-4 shrink-0 text-slate-500" />
+            <select
+              value={selectedCategoryId}
+              onChange={(e) => setSelectedCategoryId(e.target.value)}
+              className="h-10 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2 sm:w-auto"
+            >
+              <option value="">{t(uiLocale, "stock.inventory.category.all")}</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
+            <ArrowUpDown className="h-4 w-4 shrink-0 text-slate-500" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortOption)}
+              className="h-10 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2 sm:w-auto"
+            >
+              <option value="name">{t(uiLocale, "stock.inventory.sort.name")}</option>
+              <option value="sku">{t(uiLocale, "products.label.sku")}</option>
+              <option value="stock-low">{t(uiLocale, "stock.inventory.sort.stockLow")}</option>
+              <option value="stock-high">{t(uiLocale, "stock.inventory.sort.stockHigh")}</option>
+            </select>
           </div>
         </div>
 
@@ -688,9 +794,7 @@ export function StockInventoryView({
         </p>
       </article>
 
-      {isRefreshingData && productItems.length === 0 ? (
-        <StockTabLoadingState message={t(uiLocale, "stock.inventory.loading.refreshing")} />
-      ) : dataError && productItems.length === 0 ? (
+      {dataError && productItems.length === 0 ? (
         <StockTabErrorState
           message={dataError}
           onRetry={() => {
@@ -704,7 +808,15 @@ export function StockInventoryView({
         />
       ) : (
         <>
-          <div className="space-y-2">
+          <div
+            ref={inventoryResultsRef}
+            className="space-y-2"
+            style={
+              isInventoryCompactSearchMode
+                ? { minHeight: "calc(100dvh - 11rem)" }
+                : undefined
+            }
+          >
             {filteredAndSortedProducts.length === 0 ? (
               <article className="rounded-xl border bg-white p-8 text-center shadow-sm">
                 <Package className="mx-auto h-12 w-12 text-slate-300" />

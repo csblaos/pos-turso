@@ -7,8 +7,8 @@ export default async function StockLoading() {
   return (
     <section className="space-y-4">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold">{t(uiLocale, "stock.page.title")}</h1>
-        <p className="text-sm text-muted-foreground">{t(uiLocale, "stock.feedback.loading")}</p>
+        {/* <h1 className="text-xl font-semibold">{t(uiLocale, "stock.page.title")}</h1>
+        <p className="text-sm text-muted-foreground">{t(uiLocale, "stock.feedback.loading")}</p> */}
       </header>
       <PageLoadingSkeleton />
     </section>

@@ -67,6 +67,7 @@ type PurchaseApSupplierPanelProps = {
   storeCurrency: StoreCurrency;
   refreshKey?: string | null;
   preset?: PurchaseApPanelPreset | null;
+  onLoadingChange?: (isLoading: boolean) => void;
   onFiltersChange?: (filters: {
     dueFilter: DueFilter;
     paymentFilter: PaymentFilter;
@@ -344,6 +345,7 @@ export function PurchaseApSupplierPanel({
   storeCurrency,
   refreshKey,
   preset,
+  onLoadingChange,
   onFiltersChange,
   onOpenPurchaseOrder,
   onAfterBulkSettle,
@@ -563,6 +565,32 @@ export function PurchaseApSupplierPanel({
   useEffect(() => {
     void loadStatement();
   }, [loadStatement]);
+
+  useEffect(() => {
+    if (!onLoadingChange) {
+      return;
+    }
+
+    const isLoading = isLoadingSuppliers || isLoadingStatement;
+    if (isLoading) {
+      onLoadingChange(true);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      onLoadingChange(false);
+    }, 120);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [isLoadingStatement, isLoadingSuppliers, onLoadingChange]);
+
+  useEffect(() => {
+    return () => {
+      onLoadingChange?.(false);
+    };
+  }, [onLoadingChange]);
 
   useEffect(() => {
     setSelectedPoIds([]);

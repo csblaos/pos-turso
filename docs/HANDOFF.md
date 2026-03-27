@@ -1477,6 +1477,24 @@ npm run build
 - custom date picker ของ `Due ຈາກ / Due ຫາ` ใน `AP by Supplier` จะขยายเต็มความกว้างของแถวบนมือถือแทนการกว้างเท่าช่อง input เดิม และตัด shortcut `+7 ມື້` ออก เหลือ `ມື້ນີ້ / ທ້າຍເດືອນ / ລ້າງ`
 - mobile supplier selector ของ `AP by Supplier` เพิ่ม badge ข้าง label แล้ว เพื่อบอกจำนวน `supplier` และจำนวน `PO` รวมจาก summary ปัจจุบันก่อนผู้ใช้กดเปิด picker
 - mobile filter layout ของ `AP by Supplier` ปรับเป็น `search เต็มบรรทัด`, `payment + due` แถวเดียว, และ `sort` แยกอีกบรรทัด โดยคง layout เดิมบน desktop (`xl`) ไว้
-- stock section tabs หลักของหน้า `/stock` (`inventory / purchase / recording / history`) ใช้ sticky wrapper ใน `components/app/stock-tabs.tsx` แล้ว และเพิ่ม scroll restore ตอนสลับแท็บ: ก่อนเปลี่ยน tab จะ snapshot `window.scrollX/Y`, ใช้ `router.replace(..., { scroll: false })`, แล้ว restore ตำแหน่งเดิมซ้ำหลังแท็บใหม่ mount (`requestAnimationFrame` + timeout) เพื่อลดอาการเด้งขึ้นบนเมื่อแท็บ PO/แท็บอื่นโหลด content
+- stock section tabs หลักของหน้า `/stock` (`inventory / purchase / recording / history`) ใช้ sticky wrapper ใน `components/app/stock-tabs.tsx` แล้ว และเพิ่ม scroll restore ตอนสลับแท็บแบบ 2 โหมด:
+  - ถ้า tab bar ยังไม่ sticky จะ restore `window.scrollX/Y` เดิมหลัง mount
+  - ถ้า tab bar กำลัง sticky อยู่ จะ restore แบบ `keep_sticky` โดยคำนวณ scroll ใหม่จาก `tabBar.getBoundingClientRect().top` เทียบกับ `computed top` ของ sticky bar เพื่อให้หลังเปลี่ยนแท็บ bar ยังคง stuck ต่อ ไม่เด้งกลับไปช่วงที่แท็บยังไม่ sticky
 - workspace tabs ภายในหน้า purchase (`components/app/purchase-order-list.tsx`) เพิ่ม stuck-state UI แล้ว: ตอนยังไม่ติด sticky คง `rounded card` เดิมไว้ แต่เมื่อชน offset `top-[3.8rem]` จะสลับเป็น full-width bar ทุก breakpoint โดยขยายตาม gutter ของหน้า (`-mx-4/md:-mx-6/min-[1200px]:-mx-8`) พร้อม `border-y px-* py-2 shadow-sm`; ใช้ `getBoundingClientRect().top` + `requestAnimationFrame` เพื่อตรวจสถานะ sticky
-- เมื่อ workspace tabs ในหน้า purchase เข้าสถานะ sticky จริง จะซ่อนข้อความ `purchase.workspace.title` อัตโนมัติเพื่อให้ bar แน่นขึ้น; ตอน normal ยังแสดงข้อความนี้ตามเดิม
+- workspace tabs ในหน้า purchase ถอดข้อความ `purchase.workspace.title` ออกจาก bar แล้ว เพื่อลดความสูงทั้งตอนปกติและตอน sticky
+- ตอนสลับ workspace ภายในหน้า purchase เพิ่ม scroll restore 2 โหมดแล้ว:
+  - ถ้า workspace bar ยังไม่ sticky จะ restore `window.scrollX/Y` เดิมหลัง workspace ใหม่พร้อม
+  - ถ้า workspace bar กำลัง sticky อยู่ จะ restore แบบ `keep_sticky` โดยคำนวณ scroll ใหม่จาก `workspaceStickyBarRef.getBoundingClientRect().top` เทียบกับ `computed top` ของ sticky bar เพื่อให้หลังสลับ workspace bar ยังคง stuck ต่อ ไม่เด้งกลับลงไปช่วงที่ bar ยังไม่ sticky
+- กรณี `SUPPLIER_AP` panel จะส่ง loading state (`supplier summary` + `statement`) กลับไปหา parent แล้ว เพื่อให้ `purchase-order-list` ชะลอ workspace scroll restore จนข้อมูลพร้อมจริง; ฝั่ง panel debounce ตอนปล่อย `loading=false` `120ms` เพื่อกัน false gap ระหว่าง fetch รายชื่อ supplier กับ statement
+- แท็บ `สต็อก` ในหน้า `/stock` แยกแถว `search input + scan button` ออกเป็น sticky bar ใต้แถบด้านบน (`top-[7.4rem]`) แล้ว ส่วน `category/sort/summary` ยังอยู่ใน card ปกติด้านล่าง เพื่อลดการบังพื้นที่ list ขณะเลื่อน
+- แถว `search input + scan button` ของแท็บ `สต็อก` มี stuck-state แล้ว: ตอนปกติไม่ใส่ background ซ้ำ และเมื่อ sticky จริงค่อยสลับเป็น `bg-white/95 + border-y + shadow`
+- แท็บ `stock` ของหน้า `/stock` เพิ่ม result alignment ตอน search แล้ว: ถ้า search bar กำลัง sticky และหัวผลลัพธ์ถูกซ่อนเหนือ bar หลังกรองเสร็จ ระบบจะ `scrollBy` ขึ้นเพียงระยะสั้น ๆ ให้เห็นรายการแรก และเพิ่ม `min-height` ให้ result area ระหว่าง search เพื่อคง sticky context
+- หน้า `/stock` ลบ page header title (`stock.page.title`) ออกแล้ว เหลือ tab bar เป็นองค์ประกอบบนสุดของหน้าเพื่อลดพื้นที่แนวตั้ง
+- แท็บ `ສະຕັອກ / ບັນທຶກ / ປະຫວັດ` ในหน้า `/stock` ย้าย `title` เข้าไปอยู่เหนือบรรทัด `อัปเดตล่าสุด` ใน `StockTabToolbar` แล้ว และถอด subtitle ออกเพื่อ save area ให้ header ของแต่ละแท็บเตี้ยลง
+- skeleton loading ของแท็บ `stock / recording / history` ในหน้า `/stock` เปลี่ยนเป็น layout skeleton ตามโครง UI จริงของแต่ละแท็บแล้ว, ตัดข้อความ loading ด้านล่างออก, และในเคส initial loading จะ `early return` เป็น skeleton ทั้งแท็บเลยเพื่อไม่ให้ title/toolbar จริงโผล่ค้างด้านบน
+- dynamic `loadingFallback` ของหน้า `/stock` ใน `app/(app)/stock/page.tsx` ถูกเปลี่ยนจาก text card (`common.loading`) เป็น skeleton block แล้ว เพื่อตัดข้อความ `กำลังโหลดข้อมูล...` ระหว่างรอ dynamic import ของ tab content
+- หน้า `/products` ปรับ redesign เฉพาะหน้าตา `category` และ `sort` แล้ว: คง native select เดิม แต่หุ้มให้เป็น pill-style buttons (icon ซ้าย + chevron ขวา) เพื่อให้อ่านง่ายขึ้นโดยไม่เปลี่ยน interaction เดิม
+- ช่องค้นหาในแท็บ `สต็อก` เอา `focus ring` ออกแล้ว และเหลือแค่ `focus:border-blue-300`
+- ช่องค้นหาในหน้า `/products` เอา `focus ring` ออกแล้ว และเหลือแค่ `focus:border-blue-300` เพื่อให้ลุคเรียบขึ้นโดยยังคงมี focus affordance
+- หน้า `/products` เปลี่ยนเป็น scroll-driven sticky เฉพาะแถว `search + scan (+ create desktop)` แล้ว; `category + sort + result count` ไม่ sticky และเลื่อนตาม content ปกติ
+- flow search/filter ของหน้า `/products` ไม่ scroll กลับ top เองแล้ว; ตอนมี `query` และ search bar กำลัง stuck ระบบจะซ่อน summary strip, เพิ่ม `min-height` ให้ result area และถ้าหัวผลลัพธ์ถูกซ่อนเหนือ sticky bar หลังโหลดเสร็จ จะ `scrollBy` ขึ้นเพียงระยะสั้น ๆ เพื่อให้เห็นรายการแรกพอดี

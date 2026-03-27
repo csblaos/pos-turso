@@ -154,6 +154,7 @@ export function StockRecordingForm({
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const productItemsRef = useRef(productItems);
+  const isInitialRecordingLoading = isRefreshingData && productItems.length === 0;
 
   useEffect(() => {
     productItemsRef.current = productItems;
@@ -682,9 +683,18 @@ export function StockRecordingForm({
     setLoading(false);
   };
 
+  if (isInitialRecordingLoading) {
+    return (
+      <section className="space-y-4">
+        <StockTabLoadingState variant="recording" />
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-4">
       <StockTabToolbar
+        title={t(uiLocale, "stock.tabs.recording.mobile")}
         isRefreshing={isRefreshingData}
         lastUpdatedAt={lastUpdatedAt}
         onRefresh={() => {
@@ -782,9 +792,7 @@ export function StockRecordingForm({
         </article>
       ) : null}
 
-      {isRefreshingData && productItems.length === 0 ? (
-        <StockTabLoadingState message={t(uiLocale, "stock.recording.loading.refreshingTab")} />
-      ) : dataError && productItems.length === 0 ? (
+      {dataError && productItems.length === 0 ? (
         <StockTabErrorState
           message={dataError}
           onRetry={() => {

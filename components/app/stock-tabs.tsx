@@ -16,6 +16,9 @@ type StockTabsProps = {
 };
 
 type TabId = "inventory" | "purchase" | "recording" | "history";
+type PendingStockTabScrollRestore =
+  | { mode: "preserve"; x: number; y: number }
+  | { mode: "keep_sticky"; x: number; y: number; topPx: number };
 
 const tabs: ReadonlyArray<{
   id: TabId;
@@ -77,7 +80,8 @@ export function StockTabs({
     recording: initialActiveTab === "recording",
     history: initialActiveTab === "history",
   }));
-  const pendingScrollRestoreRef = useRef<{ x: number; y: number } | null>(null);
+  const pendingScrollRestoreRef = useRef<PendingStockTabScrollRestore | null>(null);
+  const tabBarRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setMountedTabs((prev) => ({ ...prev, [activeTab]: true }));
@@ -102,25 +106,49 @@ export function StockTabs({
     }
 
     const restore = () => {
+      if (pending.mode === "keep_sticky") {
+        const tabBar = tabBarRef.current;
+        if (!tabBar) {
+          window.scrollTo(pending.x, pending.y);
+          return;
+        }
+
+        const rect = tabBar.getBoundingClientRect();
+        const desiredY = Math.max(
+          0,
+          Math.round(window.scrollY + rect.top - pending.topPx),
+        );
+        window.scrollTo(pending.x, desiredY);
+        return;
+      }
+
       window.scrollTo(pending.x, pending.y);
     };
 
+    let timeoutZeroId: number | null = null;
+    let timeoutLaterId: number | null = null;
     const rafId = window.requestAnimationFrame(() => {
       restore();
-      window.setTimeout(restore, 0);
-      window.setTimeout(restore, 250);
+      timeoutZeroId = window.setTimeout(restore, 0);
+      timeoutLaterId = window.setTimeout(restore, 250);
     });
 
     pendingScrollRestoreRef.current = null;
     return () => {
       window.cancelAnimationFrame(rafId);
+      if (timeoutZeroId !== null) {
+        window.clearTimeout(timeoutZeroId);
+      }
+      if (timeoutLaterId !== null) {
+        window.clearTimeout(timeoutLaterId);
+      }
     };
   }, [activeTab, mountedTabs]);
 
   return (
     <div className="space-y-4">
       {/* Tab bar */}
-      <div className="sticky top-0 z-20 -mx-1 rounded-xl py-2 px-0 shadow-sm">
+      <div ref={tabBarRef} className="sticky top-0 z-20 -mx-1 rounded-xl py-2 px-0 shadow-sm">
         <div className="flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -139,10 +167,26 @@ export function StockTabs({
                     return;
                   }
                   if (typeof window !== "undefined") {
-                    pendingScrollRestoreRef.current = {
-                      x: window.scrollX,
-                      y: window.scrollY,
-                    };
+                    const tabBar = tabBarRef.current;
+                    const style = tabBar ? window.getComputedStyle(tabBar) : null;
+                    const topPx = style ? Number.parseFloat(style.top || "0") || 0 : 0;
+                    const isStickyActive =
+                      style?.position === "sticky" &&
+                      (tabBar?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY) <=
+                        topPx + 0.5;
+
+                    pendingScrollRestoreRef.current = isStickyActive
+                      ? {
+                          mode: "keep_sticky",
+                          x: window.scrollX,
+                          y: window.scrollY,
+                          topPx,
+                        }
+                      : {
+                          mode: "preserve",
+                          x: window.scrollX,
+                          y: window.scrollY,
+                        };
                   }
                   setActiveTab(tab.id);
                   const params = new URLSearchParams(searchParams.toString());

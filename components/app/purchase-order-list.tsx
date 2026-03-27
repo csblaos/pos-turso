@@ -125,6 +125,9 @@ type StatusFilter =
   | PurchaseOrderListItem["status"];
 type PurchaseWorkspace = "OPERATIONS" | "MONTH_END" | "SUPPLIER_AP";
 type KpiShortcut = "OPEN_PO" | "PENDING_RATE" | "OVERDUE_AP" | "OUTSTANDING_AP";
+type PendingPurchaseWorkspaceScrollRestore =
+  | { mode: "preserve"; x: number; y: number }
+  | { mode: "keep_sticky"; x: number; y: number; topPx: number };
 type SavedPurchasePreset = {
   id: string;
   label: string;
@@ -950,6 +953,7 @@ export function PurchaseOrderList({
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isRefreshingList, setIsRefreshingList] = useState(false);
+  const [isSupplierApPanelLoading, setIsSupplierApPanelLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(
     initialList.length > 0 ? new Date().toISOString() : null,
@@ -987,7 +991,8 @@ export function PurchaseOrderList({
   const [bulkProgressText, setBulkProgressText] = useState<string | null>(null);
   const [bulkErrors, setBulkErrors] = useState<string[]>([]);
   const pendingScrollRestoreRef = useRef<{ x: number; y: number } | null>(null);
-  const pendingWorkspacePostLoadScrollYRef = useRef<number | null>(null);
+  const pendingWorkspacePostLoadScrollRef =
+    useRef<PendingPurchaseWorkspaceScrollRestore | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isCreateCloseConfirmOpen, setIsCreateCloseConfirmOpen] = useState(false);
   const [selectedPO, setSelectedPO] = useState<string | null>(null);
@@ -1236,7 +1241,26 @@ export function PurchaseOrderList({
         return;
       }
       if (typeof window !== "undefined") {
-        pendingWorkspacePostLoadScrollYRef.current = window.scrollY;
+        const stickyEl = workspaceStickyBarRef.current;
+        const style = stickyEl ? window.getComputedStyle(stickyEl) : null;
+        const topPx = style ? Number.parseFloat(style.top || "0") || 0 : 0;
+        const isStickyActive =
+          style?.position === "sticky" &&
+          (stickyEl?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY) <=
+            topPx + 0.5;
+
+        pendingWorkspacePostLoadScrollRef.current = isStickyActive
+          ? {
+              mode: "keep_sticky",
+              x: window.scrollX,
+              y: window.scrollY,
+              topPx,
+            }
+          : {
+              mode: "preserve",
+              x: window.scrollX,
+              y: window.scrollY,
+            };
       }
       setWorkspaceTab(nextWorkspace);
       if (!options?.preserveShortcut) {
@@ -1850,12 +1874,12 @@ export function PurchaseOrderList({
 
   useEffect(() => {
     if (typeof window === "undefined") {
-      pendingWorkspacePostLoadScrollYRef.current = null;
+      pendingWorkspacePostLoadScrollRef.current = null;
       return;
     }
 
-    const pendingY = pendingWorkspacePostLoadScrollYRef.current;
-    if (pendingY == null) {
+    const pending = pendingWorkspacePostLoadScrollRef.current;
+    if (!pending) {
       return;
     }
 
@@ -1864,18 +1888,52 @@ export function PurchaseOrderList({
         ? isRefreshingList
         : workspaceTab === "MONTH_END"
           ? isLoadingPendingQueue
-          : false;
+          : workspaceTab === "SUPPLIER_AP"
+            ? isSupplierApPanelLoading
+            : false;
 
     if (isWorkspaceStillLoading) {
       return;
     }
 
+    const restore = () => {
+      if (pending.mode === "keep_sticky") {
+        const stickyEl = workspaceStickyBarRef.current;
+        if (!stickyEl) {
+          window.scrollTo({ left: pending.x, top: pending.y });
+          return;
+        }
+
+        const rect = stickyEl.getBoundingClientRect();
+        const desiredY = Math.max(
+          0,
+          Math.round(window.scrollY + rect.top - pending.topPx),
+        );
+        window.scrollTo({ left: pending.x, top: desiredY });
+        return;
+      }
+
+      window.scrollTo({ left: pending.x, top: pending.y });
+    };
+
+    let timeoutZeroId: number | null = null;
+    let timeoutLaterId: number | null = null;
     const rafId = window.requestAnimationFrame(() => {
-      window.scrollTo({ top: pendingY });
+      restore();
+      timeoutZeroId = window.setTimeout(restore, 0);
+      timeoutLaterId = window.setTimeout(restore, 250);
     });
-    pendingWorkspacePostLoadScrollYRef.current = null;
-    return () => window.cancelAnimationFrame(rafId);
-  }, [isLoadingPendingQueue, isRefreshingList, workspaceTab]);
+    pendingWorkspacePostLoadScrollRef.current = null;
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      if (timeoutZeroId !== null) {
+        window.clearTimeout(timeoutZeroId);
+      }
+      if (timeoutLaterId !== null) {
+        window.clearTimeout(timeoutLaterId);
+      }
+    };
+  }, [isLoadingPendingQueue, isRefreshingList, isSupplierApPanelLoading, workspaceTab]);
 
   useEffect(() => {
     const updateStuckState = () => {
@@ -2702,14 +2760,7 @@ export function PurchaseOrderList({
             : "rounded-2xl border border-slate-200 p-2"
         }`}
       >
-        <p
-          className={`px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 ${
-            isWorkspaceStickyBarStuck ? "hidden" : ""
-          }`}
-        >
-          {t(uiLocale, "purchase.workspace.title")}
-        </p>
-        <div className="mt-1 flex gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {(
             [
               {
@@ -3103,6 +3154,7 @@ export function PurchaseOrderList({
         storeCurrency={storeCurrency}
         refreshKey={lastUpdatedAt}
         preset={apPanelPreset ?? apQueryPreset}
+        onLoadingChange={setIsSupplierApPanelLoading}
         onFiltersChange={handleApFiltersChange}
         onAfterBulkSettle={reloadFirstPage}
         onOpenPurchaseOrder={(poId) => {

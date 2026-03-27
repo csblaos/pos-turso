@@ -23,11 +23,13 @@ function formatLastUpdatedAt(uiLocale: UiLocale, value: string | null) {
 }
 
 export function StockTabToolbar({
+  title,
   isRefreshing,
   lastUpdatedAt,
   onRefresh,
   refreshLabel,
 }: {
+  title?: string;
   isRefreshing: boolean;
   lastUpdatedAt: string | null;
   onRefresh: () => void;
@@ -39,7 +41,10 @@ export function StockTabToolbar({
 
   return (
     <div className="flex items-center justify-between gap-2">
-      <p className="text-[11px] text-slate-500">{formatLastUpdatedAt(uiLocale, lastUpdatedAt)}</p>
+      <div className="min-w-0">
+        {title ? <h2 className="text-sm font-semibold text-slate-900">{title}</h2> : null}
+        <p className="text-[11px] text-slate-500">{formatLastUpdatedAt(uiLocale, lastUpdatedAt)}</p>
+      </div>
       <Button
         type="button"
         variant="outline"
@@ -55,12 +60,155 @@ export function StockTabToolbar({
 }
 
 export function StockTabLoadingState({
+  variant = "generic",
   message,
 }: {
+  variant?: "generic" | "inventory" | "recording" | "history";
   message?: string;
 }) {
   const uiLocale = useUiLocale();
   const fallbackMessage = t(uiLocale, "stock.feedback.loading");
+  const renderInventorySkeleton = () => (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-2">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div
+            key={`inventory-stat-${index}`}
+            className="rounded-lg border bg-white p-3 shadow-sm"
+          >
+            <div className="animate-pulse space-y-2">
+              <div className="h-3 w-16 rounded bg-slate-200" />
+              <div className="h-7 w-12 rounded bg-slate-200" />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-xl border bg-white p-4 shadow-sm">
+        <div className="animate-pulse space-y-3">
+          <div className="flex gap-2">
+            <div className="h-10 flex-1 rounded-md bg-slate-200" />
+            <div className="h-10 w-10 rounded-md bg-slate-200" />
+          </div>
+          <div className="flex gap-2">
+            <div className="h-10 flex-1 rounded-md bg-slate-200" />
+            <div className="h-10 flex-1 rounded-md bg-slate-200" />
+          </div>
+          <div className="h-3 w-32 rounded bg-slate-200" />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div
+            key={`inventory-item-${index}`}
+            className="rounded-xl border bg-white p-4 shadow-sm"
+          >
+            <div className="animate-pulse space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-2">
+                  <div className="h-3 w-20 rounded bg-slate-200" />
+                  <div className="h-4 w-40 rounded bg-slate-200" />
+                </div>
+                <div className="h-6 w-16 rounded-full bg-slate-200" />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="h-12 rounded-lg bg-slate-200" />
+                <div className="h-12 rounded-lg bg-slate-200" />
+                <div className="h-12 rounded-lg bg-slate-200" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+  const renderRecordingSkeleton = () => (
+    <div className="space-y-4">
+      <div className="rounded-xl border bg-white p-3 shadow-sm">
+        <div className="animate-pulse space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-2">
+              <div className="h-4 w-44 rounded bg-slate-200" />
+              <div className="h-3 w-56 rounded bg-slate-200" />
+            </div>
+            <div className="h-7 w-20 rounded-md bg-slate-200" />
+          </div>
+          <div className="h-16 rounded-lg bg-slate-200" />
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-white p-4 shadow-sm">
+        <div className="animate-pulse space-y-3">
+          <div className="h-4 w-36 rounded bg-slate-200" />
+          <div className="h-4 w-full rounded bg-slate-200" />
+          <div className="flex gap-2">
+            <div className="h-10 flex-1 rounded-md bg-slate-200" />
+            <div className="h-10 w-10 rounded-md bg-slate-200" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="h-10 rounded-md bg-slate-200" />
+            <div className="h-10 rounded-md bg-slate-200" />
+          </div>
+          <div className="h-20 rounded-lg bg-slate-200" />
+          <div className="h-10 rounded-md bg-slate-200" />
+        </div>
+      </div>
+    </div>
+  );
+  const renderHistorySkeleton = () => (
+    <div className="space-y-4">
+      <div className="rounded-xl border bg-white p-3 shadow-sm">
+        <div className="animate-pulse space-y-3">
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+            <div className="col-span-2 h-10 rounded-md bg-slate-200 lg:col-span-1" />
+            <div className="col-span-2 h-10 rounded-md bg-slate-200 lg:col-span-1" />
+            <div className="h-10 rounded-md bg-slate-200" />
+            <div className="h-10 rounded-md bg-slate-200" />
+          </div>
+          <div className="flex justify-end gap-2">
+            <div className="h-8 w-20 rounded-md bg-slate-200" />
+            <div className="h-8 w-24 rounded-md bg-slate-200" />
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div
+            key={`history-item-${index}`}
+            className="rounded-xl border bg-white p-4 shadow-sm"
+          >
+            <div className="animate-pulse space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-2">
+                  <div className="h-3 w-20 rounded bg-slate-200" />
+                  <div className="h-4 w-44 rounded bg-slate-200" />
+                </div>
+                <div className="h-6 w-16 rounded-full bg-slate-200" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="h-12 rounded-lg bg-slate-200" />
+                <div className="h-12 rounded-lg bg-slate-200" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  if (variant === "inventory") {
+    return renderInventorySkeleton();
+  }
+
+  if (variant === "recording") {
+    return renderRecordingSkeleton();
+  }
+
+  if (variant === "history") {
+    return renderHistorySkeleton();
+  }
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

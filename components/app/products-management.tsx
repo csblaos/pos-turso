@@ -17,6 +17,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import toast from "react-hot-toast";
 import {
   ArrowUpDown,
+  ChevronDown,
   ChevronRight,
   Copy,
   ListFilter,
@@ -296,11 +297,14 @@ export function ProductsManagement({
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const searchStickyBarRef = useRef<HTMLDivElement | null>(null);
+  const productResultsRef = useRef<HTMLDivElement | null>(null);
   const [isSearchBarStuck, setIsSearchBarStuck] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialStatusFilter);
   const [sortOption, setSortOption] = useState<SortOption>("newest");
   const [productPage, setProductPage] = useState(1);
+  const hasActiveSearchQuery = query.trim().length > 0;
+  const isCompactSearchMode = hasActiveSearchQuery && isSearchBarStuck;
 
   /* ── Sheets ── */
   const [showCreateSheet, setShowCreateSheet] = useState(false);
@@ -540,6 +544,36 @@ export function ProductsManagement({
       document.removeEventListener("scroll", scheduleUpdate, true);
     };
   }, []);
+
+  useEffect(() => {
+    if (isFilterLoading || !hasActiveSearchQuery || !isSearchBarStuck) {
+      return;
+    }
+
+    let rafId = 0;
+    rafId = window.requestAnimationFrame(() => {
+      const stickyEl = searchStickyBarRef.current;
+      const resultsEl = productResultsRef.current;
+      if (!stickyEl || !resultsEl) return;
+
+      const stickyBottom = stickyEl.getBoundingClientRect().bottom;
+      const resultsTop = resultsEl.getBoundingClientRect().top;
+      const desiredTop = stickyBottom + 8;
+      const delta = resultsTop - desiredTop;
+
+      if (delta < -4) {
+        window.scrollBy({
+          top: delta,
+          left: 0,
+          behavior: "auto",
+        });
+      }
+    });
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [hasActiveSearchQuery, isFilterLoading, isSearchBarStuck, productItems.length, totalMatchingCount]);
 
   useEffect(() => {
     if (!showDetailImagePreview) return;
@@ -2795,7 +2829,7 @@ export function ProductsManagement({
   return (
     <section className="space-y-3 pb-24">
       {/* ── Summary strip (clickable status filter) ── */}
-      <div className="grid grid-cols-3 gap-2">
+      {!isCompactSearchMode && <div className="grid grid-cols-3 gap-2">
         {([
           {
             key: "all" as StatusFilter,
@@ -2836,15 +2870,15 @@ export function ProductsManagement({
             <p className="text-[11px] text-muted-foreground">{card.label}</p>
           </button>
         ))}
-      </div>
+      </div>}
 
       {/* ── Sticky search bar ── */}
       <div
         ref={searchStickyBarRef}
         className={
           isSearchBarStuck
-            ? "sticky top-0 z-10 -mx-1 bg-white px-2 py-2 rounded-xl backdrop-blur-sm"
-            : "sticky top-0 z-10 -mx-1 bg-white px-2 py-2 rounded-xl border backdrop-blur-sm"
+            ? "sticky top-0 z-10 -mx-1 rounded-xl bg-white py-2 backdrop-blur-sm"
+            : "sticky top-0 z-10 -mx-1 rounded-xl py-2 backdrop-blur-sm"
         }
       >
         <div className="flex items-center gap-2">
@@ -2856,7 +2890,7 @@ export function ProductsManagement({
                 setQuery(e.target.value);
               }}
               placeholder={t(uiLocale, "products.search.placeholder")}
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none ring-blue-500 focus:ring-2"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-300"
             />
             {query && (
               <button
@@ -2877,7 +2911,6 @@ export function ProductsManagement({
             <ScanBarcode className="h-5 w-5" />
           </button>
 
-          {/* Desktop CTA — inline button */}
           {canCreate && (
             <button
               type="button"
@@ -2894,15 +2927,20 @@ export function ProductsManagement({
 
       {/* ── Filter & sort bar ── */}
       <div className="flex items-center gap-2">
-        {/* Category dropdown */}
-        <div className="relative flex items-center">
-          <ListFilter className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-slate-400" />
+        <div
+          className={`relative flex min-w-0 items-center rounded-xl border transition-colors ${
+            selectedCategoryId
+              ? "border-blue-200 bg-blue-50 text-blue-700"
+              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          <ListFilter className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-current/70" />
           <select
             value={selectedCategoryId ?? ""}
             onChange={(e) => {
               setSelectedCategoryId(e.target.value || null);
             }}
-            className="h-8 appearance-none rounded-lg border border-slate-200 bg-white py-1 pl-7 pr-7 text-xs text-slate-700 outline-none ring-blue-500 focus:ring-1"
+            className="h-9 min-w-[8.5rem] appearance-none rounded-xl bg-transparent py-2 pl-8 pr-8 text-xs font-medium outline-none ring-blue-500 focus:ring-1"
           >
             <option value="">{t(uiLocale, "products.filter.allCategories")}</option>
             {categories.map((cat) => (
@@ -2911,17 +2949,17 @@ export function ProductsManagement({
               </option>
             ))}
           </select>
+          <ChevronDown className="pointer-events-none absolute right-3 h-3.5 w-3.5 text-current/60" />
         </div>
 
-        {/* Sort dropdown */}
-        <div className="relative flex items-center">
-          <ArrowUpDown className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-slate-400" />
+        <div className="relative flex min-w-0 items-center rounded-xl border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50">
+          <ArrowUpDown className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-slate-500" />
           <select
             value={sortOption}
             onChange={(e) => {
               setSortOption(e.target.value as SortOption);
             }}
-            className="h-8 appearance-none rounded-lg border border-slate-200 bg-white py-1 pl-7 pr-7 text-xs text-slate-700 outline-none ring-blue-500 focus:ring-1"
+            className="h-9 min-w-[7.5rem] appearance-none rounded-xl bg-transparent py-2 pl-8 pr-8 text-xs font-medium outline-none ring-blue-500 focus:ring-1"
           >
             <option value="newest">{t(uiLocale, "products.sort.newest")}</option>
             <option value="name-asc">{t(uiLocale, "products.sort.nameAsc")}</option>
@@ -2929,16 +2967,24 @@ export function ProductsManagement({
             <option value="price-asc">{t(uiLocale, "products.sort.priceAsc")}</option>
             <option value="price-desc">{t(uiLocale, "products.sort.priceDesc")}</option>
           </select>
+          <ChevronDown className="pointer-events-none absolute right-3 h-3.5 w-3.5 text-slate-400" />
         </div>
 
-        {/* Result count */}
         <span className="text-[11px] text-muted-foreground">
           {fmtNumber(totalMatchingCount, numberLocale)}
         </span>
       </div>
 
       {/* ── Product list ── */}
-      <div className="space-y-2">
+      <div
+        ref={productResultsRef}
+        className="space-y-2"
+        style={
+          isCompactSearchMode
+            ? { minHeight: "calc(100dvh - 11rem)" }
+            : undefined
+        }
+      >
         {isFilterLoading && productItems.length > 0 && (
           <p className="px-1 text-[11px] text-muted-foreground">
             {t(uiLocale, "products.list.updating")}

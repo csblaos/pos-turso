@@ -48,8 +48,17 @@ export default async function StockPage({
     );
 
     const loadingFallback = () => (
-      <div className="rounded-xl border bg-white p-4 text-sm text-muted-foreground">
-        {t(uiLocale, "common.loading")}
+      <div className="rounded-xl border bg-white p-4 shadow-sm">
+        <div className="animate-pulse space-y-3">
+          <div className="h-10 rounded-md bg-slate-200" />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="h-10 rounded-md bg-slate-200" />
+            <div className="h-10 rounded-md bg-slate-200" />
+            <div className="h-10 rounded-md bg-slate-200" />
+            <div className="h-10 rounded-md bg-slate-200" />
+          </div>
+          <div className="h-28 rounded-xl bg-slate-200" />
+        </div>
       </div>
     );
 
@@ -178,10 +187,6 @@ export default async function StockPage({
 
     return (
       <section className="space-y-4">
-        <header className="space-y-1">
-          <h1 className="text-xl font-semibold">{t(uiLocale, "stock.page.title")}</h1>
-        </header>
-
         <StockTabs
           initialTab={initialTab}
           recordingTab={

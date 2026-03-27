@@ -456,9 +456,15 @@ npm run po:audit:integrity
   - ตัวกรอง `Due range` ใน workspace `AP by Supplier` ปรับให้ `Due ຈາກ / Due ຫາ` อยู่บรรทัดเดียวกันบนมือถือ และเมื่อเปิด custom date picker ตัว calendar จะขยายเต็มความกว้างของแถว 2 คอลัมน์ (ไม่ถูกบีบตามความกว้าง input แต่ละช่อง); shortcut ถูกลดเหลือ `ມື້ນີ້ / ທ້າຍເດືອນ / ລ້າງ`
   - mobile selector ของ `AP by Supplier` แสดง badge สรุปข้าง label ก่อนเปิด picker แล้ว: เห็นทั้งจำนวน `supplier` ที่มีหนี้ค้างและจำนวน `PO` รวมจาก summary ปัจจุบัน โดยไม่ต้องเปิด modal ก่อน
   - mobile filter row ของ `AP by Supplier` ปรับใหม่ให้ `ค้นหา PO / หมายเหตุ` เต็มบรรทัด, `payment + due status` อยู่แถวเดียวกัน, และ `sort` ลงบรรทัดเดี่ยว เพื่อประหยัดพื้นที่และยังคงอ่านง่าย
-  - stock section tabs หลักของหน้า `/stock` (`ສະຕັອກ / ສັ່ງຊື້ / ບັນທຶກ / ປະຫວັດ`) ใช้ wrapper sticky ใน `components/app/stock-tabs.tsx` แล้ว และตอนสลับแท็บระบบจะ snapshot `window.scrollX/Y` ก่อน `router.replace(..., { scroll: false })` จากนั้น restore ตำแหน่งเดิมอีกครั้งหลังแท็บใหม่ mount เพื่อลดอาการเด้งขึ้นบนเมื่อ content ของแท็บใหม่โหลดเสร็จ
+  - stock section tabs หลักของหน้า `/stock` (`ສະຕັອກ / ສັ່ງຊື້ / ບັນທຶກ / ປະຫວັດ`) ใช้ sticky wrapper ใน `components/app/stock-tabs.tsx` แล้ว และตอนสลับแท็บระบบจะแยก scroll restore 2 โหมด:
+    - ถ้าแท็บยังไม่ sticky: snapshot `window.scrollX/Y` แล้ว restore ตำแหน่งเดิมหลัง mount
+    - ถ้าแท็บกำลัง sticky อยู่: snapshot โหมด `keep_sticky` แล้วคำนวณ scroll ใหม่จาก `tabBar.getBoundingClientRect().top - computed top` เพื่อให้แท็บใหม่ยังคง stuck ต่อเนื่องหลัง content โหลด
   - workspace tabs ภายใน `components/app/purchase-order-list.tsx` รองรับ 2 state แล้ว: ตอน `normal` ยังเป็น card `rounded-2xl border p-2` เหมือนเดิม แต่เมื่อ bar ติด `top-[3.8rem]` จริง ระบบจะสลับเป็น full-width sticky bar ทุก breakpoint โดยขยายตาม gutter ของ layout (`-mx-4/md:-mx-6/min-[1200px]:-mx-8`) พร้อม `border-y + shadow-sm`; stuck state ตรวจจาก `getBoundingClientRect().top`
-  - เมื่อ workspace tabs ในหน้า purchase เข้าสถานะ sticky จริง ระบบจะซ่อน label `purchase.workspace.title` เพื่อให้ bar compact ขึ้น; ตอน normal label ยังแสดงตามเดิม
+  - workspace tabs ในหน้า purchase ถอด label `purchase.workspace.title` ออกจาก bar แล้ว เพื่อลดความสูงทั้งตอนปกติและตอน sticky
+  - ตอนสลับ workspace ภายใน purchase (`OPERATIONS / MONTH_END / SUPPLIER_AP`) ระบบใช้ scroll restore 2 โหมดเหมือน stock tabs แล้ว:
+    - ถ้า workspace bar ยังไม่ sticky: restore `window.scrollX/Y` เดิมหลัง workspace ใหม่พร้อม
+    - ถ้า workspace bar กำลัง sticky อยู่: snapshot โหมด `keep_sticky` แล้วคำนวณ scroll ใหม่จาก `workspaceStickyBarRef.getBoundingClientRect().top` เทียบ `computed top` เพื่อให้ bar ใหม่ยัง stuck ต่อหลังโหลด
+    - กรณี `SUPPLIER_AP` parent จะรอ loading state จาก panel (`supplier summary` + `statement`) ก่อนค่อย restore scroll เพื่อกันจังหวะ UI ขยับหลังข้อมูล AP โหลดเสร็จ; ฝั่ง panel debounce ตอนปล่อย `loading=false` สั้น ๆ (`120ms`) เพื่อกันช่องว่างระหว่าง fetch 2 ชุด
   - คิว `PO รอปิดเรท` รองรับ workflow ปลายเดือนแบบกลุ่ม:
     - เลือกหลาย PO แล้ว `ปิดเรท + ชำระปลายเดือน` ได้ในครั้งเดียว
     - บังคับเลือก PO สกุลเดียวกันต่อรอบ และใส่ `paymentReference` รอบบัตรเดียวกัน
@@ -588,6 +594,7 @@ npm run po:audit:integrity
 - workspace `AP by Supplier` ในหน้า `/stock?tab=purchase` ย้าย selection action bar (`เลือกแล้ว / เลือกทั้งหมด / ล้างเลือก / บันทึกชำระแบบกลุ่ม`) ไปไว้ชิด list PO และทำให้ sticky อยู่บนสุดของ list ระหว่างเลื่อน; ปุ่ม action รอง (`ล้างเลือก`/`บันทึกชำระแบบกลุ่ม`) จะแสดงเมื่อมีรายการถูกเลือกแล้วเท่านั้น
 - workspace `AP by Supplier` ปรับช่อง `Due from / Due to` ให้อยู่บรรทัดเดียวกันบนมือถือเพื่อลดความสูงของ filter section
 - sticky search bar หน้า `/products` ปรับให้ “ย่อ/บางลง” เฉพาะตอนที่มัน stuck ด้านบน: ตอนปกติใช้ `py-4 + border` และตอน stuck ใช้ `py-2` (ไม่มี border)
+- แท็บ `สต็อก` ในหน้า `/stock` แยกแถว `search + scan` ออกมาเป็น sticky bar ใต้แถบด้านบนแล้ว (`top-[7.4rem]`) โดยคง `category/sort/summary` ไว้เป็น card ปกติด้านล่าง เพื่อให้ค้นหาและสแกนได้ต่อเนื่องโดยไม่กินพื้นที่มากเกินไป
 - tab `ประวัติ` ในหน้า `/stock` ปรับ card list item ให้ compact มากขึ้น (ลด padding/ตัด shadow/ย่อ badge+qty/ทำ note เป็นแถวเดียวแบบ truncate) เพื่อ save area บนมือถือ
 - filter วันที่ (เริ่ม/สิ้นสุด) ใน tab `ประวัติ` ของ `/stock` ปรับ layout บนมือถือให้มาอยู่บรรทัดเดียวกัน (2 คอลัมน์) เพื่อลดความสูงของส่วน filter
 - date picker (custom calendar) ของช่องวันที่ใน tab `ประวัติ` ของ `/stock` บนมือถือปรับให้แผงปฏิทินกว้างเต็มแถว (ไม่ถูกจำกัดตามความกว้าง input)
@@ -616,3 +623,14 @@ npm run po:audit:integrity
 - `server/services/purchase-ap.service.ts` เปลี่ยนมาสร้าง dataset ของ `AP by Supplier` จาก `listPurchaseOrders()` ใน `server/repositories/purchase.repo.ts` แล้ว เพื่อให้ยอด `grandTotalBase / totalPaidBase / outstandingBase` ใน AP workspace ใช้ source เดียวกับ `PO Operations` และตรงกับ PO detail มากกว่า query aggregate คนละชุดเดิม
 - ฟอร์ม `Bulk settle` ใน workspace `AP by Supplier` ย้ายจาก inline panel ใต้ statement ไปเป็น `SlideUpSheet` แล้ว โดยคง field/preview/error logic เดิมไว้ เพื่อไม่ดันรายการ PO ลงและให้ flow แบบ batch ตรงกับ `Month-End Close`
 - `AP by Supplier` bulk settle sheet ถูกย่อให้ใช้ preview เป็น source-of-truth แล้ว: ถอด field `Amount to settle this run / statement total` ออก และระบบจะ settle เต็ม `outstanding` ของ PO ที่เลือกทุกใบ; preview คงแค่ `ยอดค้างที่เลือก / จะลงชำระ / ค้างหลังรอบนี้`
+- แถว `search + scan` ของแท็บ `สต็อก` มี stuck-state แล้ว: ตอนปกติไม่ใส่ background ซ้ำ (`normal = no bg`) และเมื่อ sticky จริงค่อยสลับเป็น `bg-white/95 + border-y + shadow`
+- แท็บ `stock` ของหน้า `/stock` เพิ่ม result alignment ตอน search แล้ว: เมื่อ search bar กำลัง sticky และหัวผลลัพธ์ถูกซ่อนเหนือ bar หลังกรองเสร็จ ระบบจะ `scrollBy` ขึ้นเพียงระยะสั้น ๆ ให้เห็นผลลัพธ์ชุดแรก และเพิ่ม `min-height` ให้ result area ระหว่าง search เพื่อกันหน้าเตี้ยจนหลุดจาก sticky context
+- หน้า `/stock` ถอด page header title (`stock.page.title`) ออกแล้ว เหลือให้ tab bar เป็นจุดเริ่มของหน้าแทน เพื่อลดความสูงส่วนบน
+- แท็บ `ສະຕັອກ / ບັນທຶກ / ປະຫວັດ` ในหน้า `/stock` ย้าย `title` เข้าไปอยู่เหนือบรรทัด `อัปเดตล่าสุด` ใน `StockTabToolbar` แล้ว และถอด subtitle ออกเพื่อ save area ให้ header ของแต่ละแท็บเตี้ยลง
+- skeleton loading ของแท็บ `stock / recording / history` ในหน้า `/stock` เปลี่ยนเป็น layout skeleton ตามโครง UI จริงของแต่ละแท็บแล้ว, ตัดข้อความ loading ด้านล่างออก, และในเคส initial loading จะ `early return` เป็น skeleton ทั้งแท็บเลยเพื่อไม่ให้ title/toolbar จริงโผล่ค้างด้านบน
+- dynamic `loadingFallback` ของหน้า `/stock` ใน `app/(app)/stock/page.tsx` ถูกเปลี่ยนจาก text card (`common.loading`) เป็น skeleton block แล้ว เพื่อตัดข้อความ `กำลังโหลดข้อมูล...` ระหว่างรอ dynamic import ของ tab content
+- หน้า `/products` ปรับ redesign เฉพาะปุ่ม `category` และ `sort` แล้ว: คง native select/logic เดิม แต่เปลี่ยนหน้าตาเป็น pill-style controls (`rounded-xl`, icon ซ้าย, chevron ขวา, category active = blue tint) โดยไม่เปลี่ยน interaction
+- ช่องค้นหาในแท็บ `สต็อก` เอา `focus ring` ออกแล้ว และใช้ `focus:border-blue-300` แทน เพื่อลด visual noise ตอนโฟกัส
+- ช่องค้นหาในหน้า `/products` เอา `focus ring` ออกแล้ว และใช้การเปลี่ยนสี `border` แบบเบา (`focus:border-blue-300`) แทน เพื่อลด visual noise ตอนโฟกัส
+- หน้า `/products` เปลี่ยนเป็น scroll-driven sticky เฉพาะแถว `search + scan (+ create desktop)` แล้ว; `category + sort + result count` ไม่ sticky และจะเลื่อนตาม content ปกติ
+- flow search/filter ของหน้า `/products` ไม่ scroll กลับ top เองแล้ว; ตอนมี `query` และ search bar กำลัง stuck ระบบจะซ่อน summary strip, เพิ่ม `min-height` ให้ result area และถ้าหัวผลลัพธ์ถูกซ่อนเหนือ sticky bar หลังโหลดเสร็จ จะ `scrollBy` ขึ้นเพียงระยะสั้น ๆ เพื่อให้เห็นรายการแรกพอดี
