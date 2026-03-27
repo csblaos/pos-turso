@@ -51,6 +51,7 @@ export type PurchaseOrderListItem = {
   id: string;
   poNumber: string;
   supplierName: string | null;
+  note: string | null;
   firstItemName: string | null;
   purchaseCurrency: "LAK" | "THB" | "USD";
   exchangeRate: number;
@@ -162,6 +163,7 @@ export async function listPurchaseOrders(
       id: purchaseOrders.id,
       poNumber: purchaseOrders.poNumber,
       supplierName: purchaseOrders.supplierName,
+      note: purchaseOrders.note,
       firstItemName: sql<string | null>`(
         SELECT "products"."name"
         FROM "purchase_order_items"
@@ -235,6 +237,7 @@ export async function listPurchaseOrders(
     id: r.id,
     poNumber: r.poNumber,
     supplierName: r.supplierName,
+    note: r.note,
     firstItemName: r.firstItemName ?? null,
     purchaseCurrency: r.purchaseCurrency as "LAK" | "THB" | "USD",
     exchangeRate: r.exchangeRate,
@@ -270,6 +273,7 @@ export async function listPurchaseOrdersPaged(
       id: purchaseOrders.id,
       poNumber: purchaseOrders.poNumber,
       supplierName: purchaseOrders.supplierName,
+      note: purchaseOrders.note,
       firstItemName: sql<string | null>`(
         SELECT "products"."name"
         FROM "purchase_order_items"
@@ -345,6 +349,7 @@ export async function listPurchaseOrdersPaged(
     id: r.id,
     poNumber: r.poNumber,
     supplierName: r.supplierName,
+    note: r.note,
     firstItemName: r.firstItemName ?? null,
     purchaseCurrency: r.purchaseCurrency as "LAK" | "THB" | "USD",
     exchangeRate: r.exchangeRate,

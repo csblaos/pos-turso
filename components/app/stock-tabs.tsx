@@ -2,7 +2,7 @@
 
 import { Edit, FileText, Package, ShoppingCart, type LucideIcon } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { t, type MessageKey } from "@/lib/i18n/messages";
 import { useUiLocale } from "@/lib/i18n/use-ui-locale";
@@ -77,6 +77,7 @@ export function StockTabs({
     recording: initialActiveTab === "recording",
     history: initialActiveTab === "history",
   }));
+  const pendingScrollRestoreRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     setMountedTabs((prev) => ({ ...prev, [activeTab]: true }));
@@ -89,38 +90,73 @@ export function StockTabs({
     setActiveTab(tabFromQuery);
   }, [tabFromQuery]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      pendingScrollRestoreRef.current = null;
+      return;
+    }
+
+    const pending = pendingScrollRestoreRef.current;
+    if (!pending) {
+      return;
+    }
+
+    const restore = () => {
+      window.scrollTo(pending.x, pending.y);
+    };
+
+    const rafId = window.requestAnimationFrame(() => {
+      restore();
+      window.setTimeout(restore, 0);
+      window.setTimeout(restore, 250);
+    });
+
+    pendingScrollRestoreRef.current = null;
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [activeTab, mountedTabs]);
+
   return (
     <div className="space-y-4">
       {/* Tab bar */}
-      <div className="flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              className={`flex flex-1 flex-shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                isActive
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}
-              onClick={() => {
-                if (isActive) {
-                  return;
-                }
-                setActiveTab(tab.id);
-                const params = new URLSearchParams(searchParams.toString());
-                params.set("tab", tab.id);
-                router.replace(`?${params.toString()}`, { scroll: false });
-              }}
-            >
-              <Icon className="h-4 w-4" />
-              <span className="whitespace-nowrap md:hidden">{t(uiLocale, tab.labelMobileKey)}</span>
-              <span className="hidden whitespace-nowrap md:inline">{t(uiLocale, tab.labelKey)}</span>
-            </button>
-          );
-        })}
+      <div className="sticky top-0 z-20 -mx-1 rounded-xl py-2 px-0 shadow-sm">
+        <div className="flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                className={`flex flex-1 flex-shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  isActive
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+                onClick={() => {
+                  if (isActive) {
+                    return;
+                  }
+                  if (typeof window !== "undefined") {
+                    pendingScrollRestoreRef.current = {
+                      x: window.scrollX,
+                      y: window.scrollY,
+                    };
+                  }
+                  setActiveTab(tab.id);
+                  const params = new URLSearchParams(searchParams.toString());
+                  params.set("tab", tab.id);
+                  router.replace(`?${params.toString()}`, { scroll: false });
+                }}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="whitespace-nowrap md:hidden">{t(uiLocale, tab.labelMobileKey)}</span>
+                <span className="hidden whitespace-nowrap md:inline">{t(uiLocale, tab.labelKey)}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Tab content */}

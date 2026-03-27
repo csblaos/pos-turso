@@ -448,11 +448,17 @@ npm run po:audit:integrity
   - เพิ่ม export `เจ้าหนี้ค้างจ่าย + FX delta` ผ่าน `GET /api/stock/purchase-orders/outstanding/export-csv`
   - เพิ่ม AP ราย supplier แบบ drill-down ในแท็บ PO:
     - summary supplier ผ่าน `GET /api/stock/purchase-orders/ap-by-supplier`
-    - statement ราย supplier ผ่าน `GET /api/stock/purchase-orders/ap-by-supplier/statement` (filter: `paymentStatus/dueFilter/dueFrom/dueTo/q`)
+    - statement ราย supplier ผ่าน `GET /api/stock/purchase-orders/ap-by-supplier/statement` (filter: `paymentStatus/dueFilter/dueFrom/dueTo/q`; `q` ค้นหา `poNumber/note`)
     - export statement ราย supplier ผ่าน `GET /api/stock/purchase-orders/ap-by-supplier/export-csv`
     - ใน panel `AP ราย supplier` รองรับเลือกหลาย PO แล้ว `บันทึกชำระแบบกลุ่ม` ได้แล้ว (reuse `POST /api/stock/purchase-orders/[poId]/settle` รายรายการแบบลำดับ)
     - รองรับกรอก `ยอดชำระรวมตาม statement` (optional) เพื่อ auto-allocate แบบ `oldest due first`; ถ้าไม่กรอกจะชำระเต็มยอดค้างของรายการที่เลือก
   - หน้า `/stock?tab=purchase` เพิ่ม panel `AP ราย supplier` (ค้นหา supplier, เลือก supplier, ดู statement และกดเปิด PO detail ต่อได้ทันที)
+  - ตัวกรอง `Due range` ใน workspace `AP by Supplier` ปรับให้ `Due ຈາກ / Due ຫາ` อยู่บรรทัดเดียวกันบนมือถือ และเมื่อเปิด custom date picker ตัว calendar จะขยายเต็มความกว้างของแถว 2 คอลัมน์ (ไม่ถูกบีบตามความกว้าง input แต่ละช่อง); shortcut ถูกลดเหลือ `ມື້ນີ້ / ທ້າຍເດືອນ / ລ້າງ`
+  - mobile selector ของ `AP by Supplier` แสดง badge สรุปข้าง label ก่อนเปิด picker แล้ว: เห็นทั้งจำนวน `supplier` ที่มีหนี้ค้างและจำนวน `PO` รวมจาก summary ปัจจุบัน โดยไม่ต้องเปิด modal ก่อน
+  - mobile filter row ของ `AP by Supplier` ปรับใหม่ให้ `ค้นหา PO / หมายเหตุ` เต็มบรรทัด, `payment + due status` อยู่แถวเดียวกัน, และ `sort` ลงบรรทัดเดี่ยว เพื่อประหยัดพื้นที่และยังคงอ่านง่าย
+  - stock section tabs หลักของหน้า `/stock` (`ສະຕັອກ / ສັ່ງຊື້ / ບັນທຶກ / ປະຫວັດ`) ใช้ wrapper sticky ใน `components/app/stock-tabs.tsx` แล้ว และตอนสลับแท็บระบบจะ snapshot `window.scrollX/Y` ก่อน `router.replace(..., { scroll: false })` จากนั้น restore ตำแหน่งเดิมอีกครั้งหลังแท็บใหม่ mount เพื่อลดอาการเด้งขึ้นบนเมื่อ content ของแท็บใหม่โหลดเสร็จ
+  - workspace tabs ภายใน `components/app/purchase-order-list.tsx` รองรับ 2 state แล้ว: ตอน `normal` ยังเป็น card `rounded-2xl border p-2` เหมือนเดิม แต่เมื่อ bar ติด `top-[3.8rem]` จริงบน mobile ระบบจะสลับเป็น full-width sticky bar (`-mx-4 border-y px-4 py-2 shadow-sm`) โดยตรวจ stuck state จาก `getBoundingClientRect().top`
+  - เมื่อ workspace tabs ในหน้า purchase เข้าสถานะ sticky จริง ระบบจะซ่อน label `purchase.workspace.title` เพื่อให้ bar compact ขึ้นและเหลือพื้นที่ให้ปุ่ม tab มากขึ้น
   - คิว `PO รอปิดเรท` รองรับ workflow ปลายเดือนแบบกลุ่ม:
     - เลือกหลาย PO แล้ว `ปิดเรท + ชำระปลายเดือน` ได้ในครั้งเดียว
     - บังคับเลือก PO สกุลเดียวกันต่อรอบ และใส่ `paymentReference` รอบบัตรเดียวกัน
@@ -579,6 +585,8 @@ npm run po:audit:integrity
 - หน้า `/settings/language` (SlideUpSheet เปลี่ยนภาษา) เมื่อบันทึกสำเร็จจะปิด sheet อัตโนมัติถ้าไม่มี warning เพื่อให้ผู้ใช้เห็นภาษาใหม่ทันที
 - UI เปลี่ยนภาษาใน `/settings/language` เปลี่ยนจาก dropdown เป็น list option แบบเลือกทีละภาษา (อ่านง่ายบนมือถือ)
 - Notification dropdown (desktop) ปรับ z-index เป็น `z-[60]` ให้เท่ากับ mobile เพื่อกันโดน element sticky ในหน้าอื่นทับ
+- workspace `AP by Supplier` ในหน้า `/stock?tab=purchase` ย้าย selection action bar (`เลือกแล้ว / เลือกทั้งหมด / ล้างเลือก / บันทึกชำระแบบกลุ่ม`) ไปไว้ชิด list PO และทำให้ sticky อยู่บนสุดของ list ระหว่างเลื่อน; ปุ่ม action รอง (`ล้างเลือก`/`บันทึกชำระแบบกลุ่ม`) จะแสดงเมื่อมีรายการถูกเลือกแล้วเท่านั้น
+- workspace `AP by Supplier` ปรับช่อง `Due from / Due to` ให้อยู่บรรทัดเดียวกันบนมือถือเพื่อลดความสูงของ filter section
 - sticky search bar หน้า `/products` ปรับให้ “ย่อ/บางลง” เฉพาะตอนที่มัน stuck ด้านบน: ตอนปกติใช้ `py-4 + border` และตอน stuck ใช้ `py-2` (ไม่มี border)
 - tab `ประวัติ` ในหน้า `/stock` ปรับ card list item ให้ compact มากขึ้น (ลด padding/ตัด shadow/ย่อ badge+qty/ทำ note เป็นแถวเดียวแบบ truncate) เพื่อ save area บนมือถือ
 - filter วันที่ (เริ่ม/สิ้นสุด) ใน tab `ประวัติ` ของ `/stock` ปรับ layout บนมือถือให้มาอยู่บรรทัดเดียวกัน (2 คอลัมน์) เพื่อลดความสูงของส่วน filter

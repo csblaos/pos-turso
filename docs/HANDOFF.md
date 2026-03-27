@@ -10,6 +10,8 @@
 - เปลี่ยนพฤติกรรม sheet เปลี่ยนภาษาในหน้า `/settings/language`: บันทึกสำเร็จแล้วปิด sheet อัตโนมัติ (ถ้าไม่มี warning)
 - ปรับ UI sheet เปลี่ยนภาษาในหน้า `/settings/language` จาก dropdown เป็น list option เพื่อเลือกภาษาได้เร็วขึ้นบนมือถือ
 - ปรับ z-index ของ notification dropdown บน desktop เป็น `z-[60]` ให้สอดคล้องกับ mobile
+- ปรับ workspace `AP by Supplier` ในหน้า `/stock?tab=purchase`: ย้าย selection action bar ไปไว้ติดกับ list PO และทำ sticky ภายในกรอบ list; ปุ่ม `ล้างเลือก`/`บันทึกชำระแบบกลุ่ม` จะแสดงเมื่อมี selection แล้วเท่านั้น
+- ปรับ workspace `AP by Supplier` ในหน้า `/stock?tab=purchase`: ช่อง `Due from / Due to` อยู่บรรทัดเดียวกันบนมือถือเพื่อลดความสูงของโซน filter
 - ปรับ sticky search bar หน้า `/products` ให้เปลี่ยน style ตามสถานะ: ตอนปกติ `py-4 + border` และตอน stuck ด้านบน `py-2` (ไม่มี border)
 - ปรับ card list item ในแท็บ `ประวัติ` ของหน้า `/stock` ให้ compact มากขึ้นเพื่อ save area บนมือถือ
 - ปรับ layout ช่องวันที่เริ่ม/สิ้นสุด (From/To) ในแท็บ `ประวัติ` ของหน้า `/stock` ให้แสดงบรรทัดเดียวกันบนมือถือ (2 คอลัมน์)
@@ -788,7 +790,7 @@
 
 - เพิ่ม AP ราย supplier แบบ drill-down ในหน้า `/stock?tab=purchase`:
   - เพิ่ม API summary supplier `GET /api/stock/purchase-orders/ap-by-supplier`
-  - เพิ่ม API statement ราย supplier `GET /api/stock/purchase-orders/ap-by-supplier/statement` (filter `paymentStatus/dueFilter/dueFrom/dueTo/q`)
+  - เพิ่ม API statement ราย supplier `GET /api/stock/purchase-orders/ap-by-supplier/statement` (filter `paymentStatus/dueFilter/dueFrom/dueTo/q`; `q` ค้นหา `poNumber/note`)
   - เพิ่ม API export CSV ราย supplier `GET /api/stock/purchase-orders/ap-by-supplier/export-csv`
   - เพิ่ม service กลาง `server/services/purchase-ap.service.ts` เพื่อ reuse outstanding dataset เดิมให้ตัวเลข summary/statement/export ตรงกัน
   - เพิ่ม UI panel `AP ราย supplier` (ค้นหา supplier, drill-down statement, filter และกดเปิด PO detail ต่อได้)
@@ -1471,3 +1473,10 @@ npm run build
 - ปรับ `server/services/purchase-ap.service.ts` ให้ workspace/API `AP by Supplier` ใช้ source จาก `listPurchaseOrders()` แทน `getOutstandingPurchaseRows()` แล้ว เพื่อให้ยอดรวม/ยอดค้างตรงกับ `PO Operations` และ PO detail ที่ผู้ใช้เห็นอยู่จริง ลดความเสี่ยงจาก query aggregate คนละเส้นทาง
 - ย้ายฟอร์ม `Bulk settle` ของ `AP by Supplier` จาก inline panel ใต้ statement ไปเป็น `SlideUpSheet` ใน `components/app/purchase-ap-supplier-panel.tsx` แล้ว โดยยัง reuse state/preview/submit logic เดิมทั้งหมด แต่ไม่ดัน list ลงเมื่อเปิดฟอร์ม และคง context ของ statement ไว้เหมือน pattern ใน `Month-End Close`
 - ปรับ `AP by Supplier` bulk settle sheet ให้ตัด field `statement total / Amount to settle this run` ออกแล้ว: ตอนนี้ sheet ใช้ preview summary เป็น source-of-truth และชำระเต็มยอดค้างของ PO ที่เลือกทั้งหมด (`outstandingBase`) โดยไม่รองรับ partial-allocation จากยอด statement ก้อนเดียวใน flow นี้อีก
+- ปรับ date range ของ workspace `AP by Supplier` บนมือถือให้ `Due ຈາກ` และ `Due ຫາ` อยู่บรรทัดเดียวกันแล้ว เพื่อลดความสูงของ filter card
+- custom date picker ของ `Due ຈາກ / Due ຫາ` ใน `AP by Supplier` จะขยายเต็มความกว้างของแถวบนมือถือแทนการกว้างเท่าช่อง input เดิม และตัด shortcut `+7 ມື້` ออก เหลือ `ມື້ນີ້ / ທ້າຍເດືອນ / ລ້າງ`
+- mobile supplier selector ของ `AP by Supplier` เพิ่ม badge ข้าง label แล้ว เพื่อบอกจำนวน `supplier` และจำนวน `PO` รวมจาก summary ปัจจุบันก่อนผู้ใช้กดเปิด picker
+- mobile filter layout ของ `AP by Supplier` ปรับเป็น `search เต็มบรรทัด`, `payment + due` แถวเดียว, และ `sort` แยกอีกบรรทัด โดยคง layout เดิมบน desktop (`xl`) ไว้
+- stock section tabs หลักของหน้า `/stock` (`inventory / purchase / recording / history`) ใช้ sticky wrapper ใน `components/app/stock-tabs.tsx` แล้ว และเพิ่ม scroll restore ตอนสลับแท็บ: ก่อนเปลี่ยน tab จะ snapshot `window.scrollX/Y`, ใช้ `router.replace(..., { scroll: false })`, แล้ว restore ตำแหน่งเดิมซ้ำหลังแท็บใหม่ mount (`requestAnimationFrame` + timeout) เพื่อลดอาการเด้งขึ้นบนเมื่อแท็บ PO/แท็บอื่นโหลด content
+- workspace tabs ภายในหน้า purchase (`components/app/purchase-order-list.tsx`) เพิ่ม stuck-state UI แล้ว: ตอนยังไม่ติด sticky คง `rounded card` เดิมไว้ แต่เมื่อชน offset `top-[3.8rem]` บน mobile จะสลับเป็น full-width bar (`-mx-4 border-y px-4 py-2 shadow-sm`) โดยใช้ `getBoundingClientRect().top` + `requestAnimationFrame` เพื่อตรวจสถานะ sticky
+- เมื่อ workspace tabs ในหน้า purchase เข้าสถานะ sticky จริง จะซ่อนข้อความ `purchase.workspace.title` อัตโนมัติเพื่อให้ bar แน่นขึ้นและไม่เสียพื้นที่แนวตั้ง

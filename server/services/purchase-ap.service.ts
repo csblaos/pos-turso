@@ -36,10 +36,15 @@ export type PurchaseApSupplierSummaryItem = {
 };
 
 export type PurchaseApStatementRow = PurchaseOutstandingRow & {
+  note: string | null;
   supplierKey: string;
   supplierDisplayName: string;
   dueStatus: PurchaseApDueStatus;
   daysUntilDue: number | null;
+};
+
+type PurchaseApBaseRow = PurchaseOutstandingRow & {
+  note: string | null;
 };
 
 export type PurchaseApStatementSummary = {
@@ -165,7 +170,7 @@ function resolveDueMeta(
 }
 
 function mapStatementRow(
-  row: PurchaseOutstandingRow,
+  row: PurchaseApBaseRow,
   todayKey: string,
 ): PurchaseApStatementRow {
   const dueMeta = resolveDueMeta(row.dueDate, todayKey);
@@ -198,8 +203,13 @@ function passStatementFilter(
     return false;
   }
 
-  if (filters.q && !row.poNumber.toLowerCase().includes(filters.q.toLowerCase())) {
-    return false;
+  if (filters.q) {
+    const query = filters.q.toLowerCase();
+    const matchesPoNumber = row.poNumber.toLowerCase().includes(query);
+    const matchesNote = row.note?.toLowerCase().includes(query) ?? false;
+    if (!matchesPoNumber && !matchesNote) {
+      return false;
+    }
   }
 
   if (filters.dueFrom || filters.dueTo) {
@@ -230,7 +240,7 @@ async function getStoreCurrency(storeId: string): Promise<"LAK" | "THB" | "USD">
 async function getPurchaseApBaseRows(
   storeId: string,
   storeCurrency: "LAK" | "THB" | "USD",
-): Promise<PurchaseOutstandingRow[]> {
+): Promise<PurchaseApBaseRow[]> {
   const rows = await listPurchaseOrders(storeId);
   const todayKey = getTodayDateKey();
 
@@ -256,6 +266,7 @@ async function getPurchaseApBaseRows(
         poId: row.id,
         poNumber: row.poNumber,
         supplierName: row.supplierName,
+        note: row.note,
         purchaseCurrency: row.purchaseCurrency,
         dueDate: row.dueDate,
         receivedAt: row.receivedAt,
@@ -268,7 +279,7 @@ async function getPurchaseApBaseRows(
         exchangeRateInitial: row.exchangeRateInitial,
         exchangeRate: row.exchangeRate,
         exchangeRateLockedAt: row.exchangeRateLockedAt,
-      } satisfies PurchaseOutstandingRow;
+      } satisfies PurchaseApBaseRow;
     })
     .filter((row) => row.outstandingBase > 0);
 }

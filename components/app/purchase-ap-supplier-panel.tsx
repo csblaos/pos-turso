@@ -2,10 +2,14 @@
 
 import {
   CalendarDays,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
   Loader2,
+  RefreshCw,
+  Search,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
@@ -161,6 +165,7 @@ type PurchaseDatePickerFieldProps = {
   dateLocale: string;
   weekdayLabels: readonly string[];
   disabled?: boolean;
+  panelAlign?: "left" | "right";
 };
 
 function PurchaseDatePickerField({
@@ -172,6 +177,7 @@ function PurchaseDatePickerField({
   dateLocale,
   weekdayLabels,
   disabled = false,
+  panelAlign = "left",
 }: PurchaseDatePickerFieldProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -253,7 +259,13 @@ function PurchaseDatePickerField({
       </button>
 
       {isOpen ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+0.4rem)] z-[130] rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+        <div
+          className={`absolute top-[calc(100%+0.4rem)] z-[130] rounded-xl border border-slate-200 bg-white p-2 shadow-xl ${
+            panelAlign === "right"
+              ? "right-0 w-[calc(200%+0.5rem)] lg:left-0 lg:right-0 lg:w-auto"
+              : "left-0 w-[calc(200%+0.5rem)] lg:left-0 lg:right-0 lg:w-auto"
+          }`}
+        >
           <div className="flex items-center justify-between pb-1">
             <button
               type="button"
@@ -380,6 +392,7 @@ export function PurchaseApSupplierPanel({
   const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
   const [supplierError, setSupplierError] = useState<string | null>(null);
   const [selectedSupplierKey, setSelectedSupplierKey] = useState<string | null>(null);
+  const [isSupplierPickerOpen, setIsSupplierPickerOpen] = useState(false);
 
   const [poQueryInput, setPoQueryInput] = useState("");
   const [poQuery, setPoQuery] = useState("");
@@ -701,6 +714,11 @@ export function PurchaseApSupplierPanel({
     setDueTo("");
   }, []);
 
+  const clearPoQuery = useCallback(() => {
+    setPoQueryInput("");
+    setPoQuery("");
+  }, []);
+
   const toggleRowSelection = useCallback((poId: string) => {
     setSelectedPoIds((prev) => {
       if (prev.includes(poId)) {
@@ -717,6 +735,12 @@ export function PurchaseApSupplierPanel({
   const clearSelectedRows = useCallback(() => {
     setSelectedPoIds([]);
   }, []);
+
+  const mobileSupplierSummary = useMemo(() => {
+    const supplierCount = suppliers.length;
+    const poCount = suppliers.reduce((sum, supplier) => sum + supplier.poCount, 0);
+    return { supplierCount, poCount };
+  }, [suppliers]);
 
   const openBulkSettleMode = useCallback(() => {
     if (sortedSelectedRows.length === 0) {
@@ -856,19 +880,36 @@ export function PurchaseApSupplierPanel({
           {isLoadingSuppliers ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : (
-            t(uiLocale, "purchase.ap.panel.refresh")
+            <>
+              <RefreshCw className="mr-1 h-3.5 w-3.5" />
+              {t(uiLocale, "purchase.ap.panel.refresh")}
+            </>
           )}
         </Button>
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(220px,300px)_1fr]">
-        <div className="space-y-2">
-          <input
-            className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-slate-300"
-            placeholder={t(uiLocale, "purchase.ap.supplier.search.placeholder")}
-            value={supplierSearchInput}
-            onChange={(event) => setSupplierSearchInput(event.target.value)}
-          />
+        <div className="hidden space-y-2 lg:block">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-9 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-slate-300"
+              placeholder={t(uiLocale, "purchase.ap.supplier.search.placeholder")}
+              value={supplierSearchInput}
+              onChange={(event) => setSupplierSearchInput(event.target.value)}
+            />
+            {supplierSearchInput.trim().length > 0 ? (
+              <button
+                type="button"
+                className="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                onClick={resetSupplierSearch}
+                aria-label={t(uiLocale, "purchase.ap.supplier.search.clear")}
+                title={t(uiLocale, "purchase.ap.supplier.search.clear")}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
           <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
             {isLoadingSuppliers ? (
               <p className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-500">
@@ -932,9 +973,39 @@ export function PurchaseApSupplierPanel({
         </div>
 
         <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">
+          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+            <div className="w-full space-y-1 sm:w-auto sm:min-w-0">
+              <div className="lg:hidden">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-medium text-slate-500">
+                    {t(uiLocale, "purchase.ap.supplier.select.placeholder")}
+                  </p>
+                  {!isLoadingSuppliers && mobileSupplierSummary.supplierCount > 0 ? (
+                    <div className="flex flex-wrap justify-end gap-1">
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                        {mobileSupplierSummary.supplierCount}{" "}
+                        {t(uiLocale, "purchase.ap.supplier.summary.suppliers")}
+                      </span>
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                        {mobileSupplierSummary.poCount}{" "}
+                        {t(uiLocale, "purchase.ap.supplier.summary.purchaseOrders")}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-left"
+                  onClick={() => setIsSupplierPickerOpen(true)}
+                >
+                  <span className="min-w-0 truncate text-sm font-semibold text-slate-900">
+                    {selectedSupplier?.supplierName ??
+                      t(uiLocale, "purchase.ap.supplier.select.placeholder")}
+                  </span>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-slate-500" />
+                </button>
+              </div>
+              <p className="hidden text-sm font-semibold text-slate-900 lg:block">
                 {selectedSupplier?.supplierName ??
                   t(uiLocale, "purchase.ap.supplier.select.placeholder")}
               </p>
@@ -953,7 +1024,7 @@ export function PurchaseApSupplierPanel({
             <Button
               type="button"
               variant="outline"
-              className="h-8 rounded-lg px-2.5 text-xs"
+              className="h-8 w-full rounded-lg px-2.5 text-xs sm:w-auto"
               onClick={exportStatement}
               disabled={!selectedSupplierKey || isLoadingStatement}
             >
@@ -962,46 +1033,27 @@ export function PurchaseApSupplierPanel({
             </Button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
-            <span className="text-[11px] text-slate-600">
-              {t(uiLocale, "purchase.monthEnd.selected")} {selectedPoIds.length}/
-              {selectableStatementRows.length} {t(uiLocale, "purchase.items")}
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-7 rounded-md px-2 text-[11px]"
-              onClick={selectAllRows}
-              disabled={selectableStatementRows.length === 0 || isBulkSettling}
-            >
-              {t(uiLocale, "purchase.monthEnd.selectAll")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-7 rounded-md px-2 text-[11px]"
-              onClick={clearSelectedRows}
-              disabled={selectedPoIds.length === 0 || isBulkSettling}
-            >
-              {t(uiLocale, "purchase.monthEnd.clearSelection")}
-            </Button>
-            <Button
-              type="button"
-              className="h-7 rounded-md px-2 text-[11px]"
-              onClick={openBulkSettleMode}
-              disabled={selectedPoIds.length === 0 || isBulkSettling}
-            >
-              {t(uiLocale, "purchase.ap.bulk.cta.open")}
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
-            <input
-              className="h-8 w-full rounded-md border border-slate-200 px-2 text-xs outline-none focus:ring-2 focus:ring-slate-300 xl:col-span-2"
-              placeholder={t(uiLocale, "purchase.ap.poQuery.placeholder")}
-              value={poQueryInput}
-              onChange={(event) => setPoQueryInput(event.target.value)}
-            />
+          <div className="grid grid-cols-2 gap-2 xl:grid-cols-5">
+            <div className="relative col-span-2 xl:col-span-2">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                className="h-8 w-full rounded-md border border-slate-200 pl-8 pr-9 text-xs outline-none focus:ring-2 focus:ring-slate-300"
+                placeholder={t(uiLocale, "purchase.ap.poQuery.placeholder")}
+                value={poQueryInput}
+                onChange={(event) => setPoQueryInput(event.target.value)}
+              />
+              {poQueryInput.trim().length > 0 ? (
+                <button
+                  type="button"
+                  className="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                  onClick={clearPoQuery}
+                  aria-label={t(uiLocale, "common.action.clear")}
+                  title={t(uiLocale, "common.action.clear")}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
             <select
               className="h-8 w-full rounded-md border border-slate-200 px-2 text-xs outline-none focus:ring-2 focus:ring-slate-300"
               value={paymentFilter}
@@ -1025,7 +1077,7 @@ export function PurchaseApSupplierPanel({
               <option value="NO_DUE_DATE">{dueStatusLabel("NO_DUE_DATE")}</option>
             </select>
             <select
-              className="h-8 w-full rounded-md border border-slate-200 px-2 text-xs outline-none focus:ring-2 focus:ring-slate-300"
+              className="col-span-2 h-8 w-full rounded-md border border-slate-200 px-2 text-xs outline-none focus:ring-2 focus:ring-slate-300 xl:col-span-1"
               value={statementSort}
               onChange={(event) => setStatementSort(event.target.value as StatementSort)}
             >
@@ -1040,7 +1092,7 @@ export function PurchaseApSupplierPanel({
             <p className="text-[11px] text-slate-600">
               {t(uiLocale, "purchase.ap.dueRange.title")}
             </p>
-            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+            <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1 min-w-0">
                 <label className="text-[11px] text-slate-500">
                   {t(uiLocale, "purchase.ap.dueRange.from.label")}
@@ -1052,6 +1104,7 @@ export function PurchaseApSupplierPanel({
                   ariaLabel={t(uiLocale, "purchase.ap.dueRange.from.aria")}
                   dateLocale={dateLocale}
                   weekdayLabels={weekdayLabels}
+                  panelAlign="left"
                 />
                 <div className="flex flex-wrap gap-1">
                   <button
@@ -1060,13 +1113,6 @@ export function PurchaseApSupplierPanel({
                     onClick={() => applyStatementDateShortcut("dueFrom", "TODAY")}
                   >
                     {t(uiLocale, "purchase.dateShortcut.today")}
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:bg-slate-100"
-                    onClick={() => applyStatementDateShortcut("dueFrom", "PLUS_7")}
-                  >
-                    {t(uiLocale, "purchase.dateShortcut.plus7")}
                   </button>
                   <button
                     type="button"
@@ -1095,6 +1141,7 @@ export function PurchaseApSupplierPanel({
                   ariaLabel={t(uiLocale, "purchase.ap.dueRange.to.aria")}
                   dateLocale={dateLocale}
                   weekdayLabels={weekdayLabels}
+                  panelAlign="right"
                 />
                 <div className="flex flex-wrap gap-1">
                   <button
@@ -1103,13 +1150,6 @@ export function PurchaseApSupplierPanel({
                     onClick={() => applyStatementDateShortcut("dueTo", "TODAY")}
                   >
                     {t(uiLocale, "purchase.dateShortcut.today")}
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:bg-slate-100"
-                    onClick={() => applyStatementDateShortcut("dueTo", "PLUS_7")}
-                  >
-                    {t(uiLocale, "purchase.dateShortcut.plus7")}
                   </button>
                   <button
                     type="button"
@@ -1183,7 +1223,47 @@ export function PurchaseApSupplierPanel({
               </button>
             </div>
           ) : (
-            <div className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
+            <div className="max-h-80 overflow-y-auto">
+              <div className="sticky top-0 z-10 mb-2 rounded-md border border-slate-200 bg-white/95 px-2 py-1.5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/85">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] text-slate-600">
+                    {t(uiLocale, "purchase.monthEnd.selected")} {selectedPoIds.length}/
+                    {selectableStatementRows.length} {t(uiLocale, "purchase.items")}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-7 rounded-md px-2 text-[11px]"
+                    onClick={selectAllRows}
+                    disabled={selectableStatementRows.length === 0 || isBulkSettling}
+                  >
+                    {t(uiLocale, "purchase.monthEnd.selectAll")}
+                  </Button>
+                  {selectedPoIds.length > 0 ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-7 rounded-md px-2 text-[11px]"
+                      onClick={clearSelectedRows}
+                      disabled={isBulkSettling}
+                    >
+                      {t(uiLocale, "purchase.monthEnd.clearSelection")}
+                    </Button>
+                  ) : null}
+                  {selectedPoIds.length > 0 ? (
+                    <Button
+                      type="button"
+                      className="h-7 rounded-md px-2 text-[11px]"
+                      onClick={openBulkSettleMode}
+                      disabled={isBulkSettling}
+                    >
+                      {t(uiLocale, "purchase.ap.bulk.cta.open")}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
               {displayStatementRows.map((row) => (
                 <div
                   key={row.poId}
@@ -1237,10 +1317,112 @@ export function PurchaseApSupplierPanel({
                   </button>
                 </div>
               ))}
+              </div>
             </div>
           )}
         </div>
       </div>
+
+      <SlideUpSheet
+        isOpen={isSupplierPickerOpen}
+        onClose={() => setIsSupplierPickerOpen(false)}
+        title={t(uiLocale, "purchase.ap.supplier.select.placeholder")}
+        description={t(uiLocale, "purchase.ap.panel.subtitle")}
+        scrollToTopOnOpen
+      >
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium text-slate-700">
+              {t(uiLocale, "purchase.ap.supplier.search.placeholder")}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 rounded-lg px-2.5 text-xs"
+              onClick={() => {
+                void loadSupplierSummary();
+              }}
+              disabled={isLoadingSuppliers}
+            >
+              {isLoadingSuppliers ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <>
+                  <RefreshCw className="mr-1 h-3.5 w-3.5" />
+                  {t(uiLocale, "purchase.ap.panel.refresh")}
+                </>
+              )}
+            </Button>
+          </div>
+
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-9 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-300"
+              placeholder={t(uiLocale, "purchase.ap.supplier.search.placeholder")}
+              value={supplierSearchInput}
+              onChange={(event) => setSupplierSearchInput(event.target.value)}
+            />
+            {supplierSearchInput.trim().length > 0 ? (
+              <button
+                type="button"
+                className="absolute right-1.5 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                onClick={resetSupplierSearch}
+                aria-label={t(uiLocale, "purchase.ap.supplier.search.clear")}
+                title={t(uiLocale, "purchase.ap.supplier.search.clear")}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
+
+          <div className="max-h-[50vh] space-y-1.5 overflow-y-auto pr-1">
+            {isLoadingSuppliers ? (
+              <p className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-500">
+                {t(uiLocale, "purchase.ap.supplier.list.loading")}
+              </p>
+            ) : supplierError ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 text-sm text-red-700">
+                {supplierError}
+              </div>
+            ) : suppliers.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-300 bg-white px-2.5 py-6 text-center">
+                <p className="text-sm text-slate-500">
+                  {t(uiLocale, "purchase.ap.supplier.list.empty")}
+                </p>
+              </div>
+            ) : (
+              suppliers.map((supplier) => {
+                const isActive = supplier.supplierKey === selectedSupplierKey;
+                return (
+                  <button
+                    key={supplier.supplierKey}
+                    type="button"
+                    className={`w-full rounded-lg border px-3 py-2.5 text-left ${
+                      isActive
+                        ? "border-primary bg-primary/5"
+                        : "border-slate-200 bg-white hover:bg-slate-100"
+                    }`}
+                    onClick={() => {
+                      setSelectedSupplierKey(supplier.supplierKey);
+                      setIsSupplierPickerOpen(false);
+                    }}
+                  >
+                    <p className="truncate text-sm font-medium text-slate-900">
+                      {supplier.supplierName}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {supplier.poCount} PO ·{" "}
+                      {t(uiLocale, "dashboard.purchaseAp.item.outstandingLabel")}{" "}
+                      {formatMoney(supplier.totalOutstandingBase)}
+                    </p>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </SlideUpSheet>
 
       <SlideUpSheet
         isOpen={isBulkSettleMode}

@@ -136,6 +136,7 @@ const PURCHASE_STATUS_QUERY_KEY = "poStatus";
 const PURCHASE_AP_DUE_QUERY_KEY = "due";
 const PURCHASE_AP_PAYMENT_QUERY_KEY = "payment";
 const PURCHASE_AP_SORT_QUERY_KEY = "sort";
+const PURCHASE_WORKSPACE_STICKY_TOP_REM = 3.8;
 
 type PurchaseApDueFilter = "ALL" | "OVERDUE" | "DUE_SOON" | "NOT_DUE" | "NO_DUE_DATE";
 type PurchaseApPaymentFilter = "ALL" | "UNPAID" | "PARTIAL" | "PAID";
@@ -792,6 +793,7 @@ function toPurchaseOrderListItemFromDetail(
     id: po.id,
     poNumber: po.poNumber,
     supplierName: po.supplierName,
+    note: po.note,
     firstItemName: po.items[0]?.productName ?? null,
     purchaseCurrency,
     exchangeRate: po.exchangeRate,
@@ -953,6 +955,8 @@ export function PurchaseOrderList({
     initialList.length > 0 ? new Date().toISOString() : null,
   );
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const workspaceStickyBarRef = useRef<HTMLDivElement | null>(null);
+  const [isWorkspaceStickyBarStuck, setIsWorkspaceStickyBarStuck] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(
     statusFromQuery ?? DEFAULT_PO_STATUS_FILTER,
   );
@@ -1874,6 +1878,49 @@ export function PurchaseOrderList({
   }, [isLoadingPendingQueue, isRefreshingList, workspaceTab]);
 
   useEffect(() => {
+    const updateStuckState = () => {
+      const stickyEl = workspaceStickyBarRef.current;
+      if (!stickyEl) return;
+
+      if (window.getComputedStyle(stickyEl).position !== "sticky") {
+        setIsWorkspaceStickyBarStuck(false);
+        return;
+      }
+
+      const rootFontSize = Number.parseFloat(
+        window.getComputedStyle(document.documentElement).fontSize || "16",
+      );
+      const stickyTopPx = PURCHASE_WORKSPACE_STICKY_TOP_REM * rootFontSize;
+      const nextStuck = stickyEl.getBoundingClientRect().top <= stickyTopPx + 0.5;
+      setIsWorkspaceStickyBarStuck((prev) => (prev === nextStuck ? prev : nextStuck));
+    };
+
+    let rafId: number | null = null;
+    const scheduleUpdate = () => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        updateStuckState();
+      });
+    };
+
+    scheduleUpdate();
+
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate, { passive: true });
+    document.addEventListener("scroll", scheduleUpdate, { passive: true, capture: true });
+
+    return () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+      document.removeEventListener("scroll", scheduleUpdate, true);
+    };
+  }, []);
+
+  useEffect(() => {
     setSelectedPendingQueueIds((prev) =>
       prev.filter((id) => pendingRateQueue.some((item) => item.id === id)),
     );
@@ -2647,8 +2694,19 @@ export function PurchaseOrderList({
         ) : null}
       </div>
 
-      <div className="sticky top-2 z-10 rounded-2xl border border-slate-200 bg-white/95 p-2 backdrop-blur md:static md:z-auto md:bg-white md:p-2 md:backdrop-blur-0">
-        <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+      <div
+        ref={workspaceStickyBarRef}
+        className={`sticky top-[3.8rem] z-10 bg-white/95 backdrop-blur transition-[margin,border-radius,padding,box-shadow] md:static md:z-auto md:rounded-2xl md:border md:border-slate-200 md:bg-white md:p-2 md:shadow-none md:backdrop-blur-0 ${
+          isWorkspaceStickyBarStuck
+            ? "-mx-4 border-y border-slate-200 px-6 py-2 shadow-sm"
+            : "rounded-2xl border border-slate-200 p-2"
+        }`}
+      >
+        <p
+          className={`px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 ${
+            isWorkspaceStickyBarStuck ? "hidden" : "hidden"
+          }`}
+        >
           {t(uiLocale, "purchase.workspace.title")}
         </p>
         <div className="mt-1 flex gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
