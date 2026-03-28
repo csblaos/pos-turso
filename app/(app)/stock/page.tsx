@@ -14,7 +14,7 @@ import { db } from "@/lib/db/client";
 import { stores } from "@/lib/db/schema";
 import { createPerfScope } from "@/server/perf/perf";
 import {
-  getRecentStockMovements,
+  getStockMovementsPage,
   getStockProductsPage,
 } from "@/server/services/stock.service";
 import { getPurchaseOrderListPage } from "@/server/services/purchase.service";
@@ -120,13 +120,15 @@ export default async function StockPage({
 
     const PRODUCT_PAGE_SIZE = 20;
     const PO_PAGE_SIZE = 20;
+    const HISTORY_PAGE_SIZE = 10;
 
-    const [movements, purchaseOrderRows, stockProductRows, storeRow, categories] =
+    const [historyPage, purchaseOrderRows, stockProductRows, storeRow, categories] =
       await perf.step("service.getStockAndPO", async () =>
         Promise.all([
-          getRecentStockMovements({
+          getStockMovementsPage({
             storeId: activeStoreId,
-            limit: 30,
+            page: 1,
+            pageSize: HISTORY_PAGE_SIZE,
           }),
           getPurchaseOrderListPage(activeStoreId, PO_PAGE_SIZE + 1, 0),
           getStockProductsPage({
@@ -208,7 +210,12 @@ export default async function StockPage({
               initialHasMore={initialHasMoreProducts}
             />
           }
-          historyTab={<StockMovementHistory movements={movements} />}
+          historyTab={
+            <StockMovementHistory
+              movements={historyPage.movements}
+              initialTotal={historyPage.total}
+            />
+          }
           purchaseTab={
             <PurchaseOrderList
               purchaseOrders={initialPOs}

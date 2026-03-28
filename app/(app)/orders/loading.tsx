@@ -9,7 +9,7 @@ export default async function OrdersLoading() {
       <header className="space-y-1">
         <h1 className="text-xl font-semibold">{t(uiLocale, "orders.page.title")}</h1>
         <p className="text-sm text-muted-foreground">
-          {t(uiLocale, "orders.loading.subtitle")}
+          {/* {t(uiLocale, "orders.loading.subtitle")} */}
         </p>
       </header>
       <PageLoadingSkeleton />

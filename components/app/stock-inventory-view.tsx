@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, ListFilter, Package, ScanBarcode, Search, X } from "lucide-react";
+import { ArrowUpDown, ChevronDown, ListFilter, Package, ScanBarcode, Search, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -651,14 +651,14 @@ export function StockInventoryView({
 
   if (isInitialInventoryLoading) {
     return (
-      <section className="space-y-4">
+      <section className="space-y-2">
         <StockTabLoadingState variant="inventory" />
       </section>
     );
   }
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-2">
       <StockTabToolbar
         title={t(uiLocale, "stock.tabs.inventory.mobile")}
         isRefreshing={isRefreshingData}
@@ -715,7 +715,7 @@ export function StockInventoryView({
         ref={inventorySearchStickyRef}
         className={`sticky top-[3.8rem] z-10 transition-[margin,padding,background-color,box-shadow,border-color] ${
           isInventorySearchStickyStuck
-            ? "-mx-4 border-y border-slate-200 bg-white/95 px-4 py-2 shadow-sm supports-[backdrop-filter]:bg-white/85 md:-mx-6 md:px-6 min-[1200px]:-mx-8 min-[1200px]:px-8"
+            ? "-mx-4 border-y border-slate-200 bg-white px-4 py-2 shadow-sm supports-[backdrop-filter]:bg-white/85 md:-mx-6 md:px-6 min-[1200px]:-mx-8 min-[1200px]:px-8"
             : "px-0 py-2"
         }`}
       >
@@ -754,12 +754,18 @@ export function StockInventoryView({
 
       <article className="rounded-xl border bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
-            <ListFilter className="h-4 w-4 shrink-0 text-slate-500" />
+          <div
+            className={`relative flex min-w-0 flex-1 items-center rounded-xl border transition-colors sm:flex-none ${
+              selectedCategoryId
+                ? "border-blue-200 bg-blue-50 text-blue-700"
+                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            <ListFilter className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-current/70" />
             <select
               value={selectedCategoryId}
               onChange={(e) => setSelectedCategoryId(e.target.value)}
-              className="h-10 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2 sm:w-auto"
+              className="h-10 w-full appearance-none rounded-xl bg-transparent py-2 pl-8 pr-8 text-sm font-medium outline-none ring-blue-500 focus:ring-1 sm:min-w-[10rem] sm:w-auto"
             >
               <option value="">{t(uiLocale, "stock.inventory.category.all")}</option>
               {categories.map((category) => (
@@ -768,20 +774,22 @@ export function StockInventoryView({
                 </option>
               ))}
             </select>
+            <ChevronDown className="pointer-events-none absolute right-3 h-3.5 w-3.5 text-current/60" />
           </div>
 
-          <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
-            <ArrowUpDown className="h-4 w-4 shrink-0 text-slate-500" />
+          <div className="relative flex min-w-0 flex-1 items-center rounded-xl border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50 sm:flex-none">
+            <ArrowUpDown className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-current/70" />
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortOption)}
-              className="h-10 w-full rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2 sm:w-auto"
+              className="h-10 w-full appearance-none rounded-xl bg-transparent py-2 pl-8 pr-8 text-sm font-medium outline-none ring-blue-500 focus:ring-1 sm:min-w-[9rem] sm:w-auto"
             >
               <option value="name">{t(uiLocale, "stock.inventory.sort.name")}</option>
               <option value="sku">{t(uiLocale, "products.label.sku")}</option>
               <option value="stock-low">{t(uiLocale, "stock.inventory.sort.stockLow")}</option>
               <option value="stock-high">{t(uiLocale, "stock.inventory.sort.stockHigh")}</option>
             </select>
+            <ChevronDown className="pointer-events-none absolute right-3 h-3.5 w-3.5 text-current/60" />
           </div>
         </div>
 

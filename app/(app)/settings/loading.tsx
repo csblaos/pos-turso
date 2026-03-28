@@ -10,7 +10,7 @@ export default async function SettingsLoading() {
     <section className="space-y-4">
       <header className="space-y-1">
         <h1 className="text-xl font-semibold">{t(uiLocale, "settings.page.title")}</h1>
-        <p className="text-sm text-muted-foreground">{t(uiLocale, "settings.page.loading")}</p>
+        {/* <p className="text-sm text-muted-foreground">{t(uiLocale, "settings.page.loading")}</p> */}
       </header>
       <PageLoadingSkeleton />
     </section>

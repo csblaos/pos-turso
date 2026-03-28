@@ -362,7 +362,7 @@ export default async function SettingsPage() {
         </h1>
       </header>
 
-      <div className="space-y-4">
+      <div className="space-y-2">
         {adminLinks.some((item) => item.visible) ? (
           <div className="space-y-2">
             <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">

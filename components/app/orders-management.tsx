@@ -18,6 +18,8 @@ import {
   Expand,
   ExternalLink,
   Loader2,
+  QrCode,
+  Search,
   ScanLine,
   X,
 } from "lucide-react";
@@ -33,7 +35,12 @@ import { OrderPackContent } from "@/components/app/order-pack-content";
 import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch } from "@/lib/auth/client-token";
-import { currencyLabel, parseStoreCurrency, vatModeLabel } from "@/lib/finance/store-financial";
+import {
+  currencyLabel,
+  currencySymbol,
+  parseStoreCurrency,
+  vatModeLabel,
+} from "@/lib/finance/store-financial";
 import { uiLocaleToDateLocale, type UiLocale } from "@/lib/i18n/locales";
 import { t, type MessageKey } from "@/lib/i18n/messages";
 import { useUiLocale } from "@/lib/i18n/use-ui-locale";
@@ -2354,7 +2361,12 @@ export function OrdersManagement(props: OrdersManagementProps) {
       columns.push({
         accessorKey: "total",
         header: t(uiLocale, "orders.table.header.total"),
-        cell: ({ row }) => `${row.original.total.toLocaleString(numberLocale)} ${catalog.storeCurrency}`,
+        cell: ({ row }) => (
+          <span className="whitespace-nowrap font-medium tabular-nums">
+            {row.original.total.toLocaleString(numberLocale)}{" "}
+            {currencySymbol(parseStoreCurrency(catalog.storeCurrency))}
+          </span>
+        ),
       });
       columns.push({
         id: "nextAction",
@@ -2478,8 +2490,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
               ) : null}
               <Button
                 type="button"
-                variant="ghost"
-                className="h-8 px-2 text-xs"
+                variant="outline"
+                className="h-8 rounded-lg border-slate-200 px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
                 disabled={
                   bulkActionLoadingKey !== null ||
                   bulkPrintLoadingKind !== null ||
@@ -2490,6 +2502,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                   router.push(`/orders/${row.original.id}`);
                 }}
               >
+                <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
                 {t(uiLocale, "orders.management.action.open")}
               </Button>
             </div>
@@ -5699,19 +5712,41 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 applyManageSearch(manageSearchInput);
               }}
             >
-              <input
-                type="text"
-                className="h-10 min-w-0 rounded-md border bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
-                placeholder={t(uiLocale, "orders.management.search.placeholder")}
-                value={manageSearchInput}
-                onChange={(event) => setManageSearchInput(event.target.value)}
-                disabled={
-                  quickActionLoadingKey !== null ||
-                  bulkActionLoadingKey !== null ||
-                  bulkPrintLoadingKind !== null
-                }
-                aria-label={t(uiLocale, "orders.management.search.placeholder")}
-              />
+              <div className="relative min-w-0">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  className="h-10 w-full min-w-0 rounded-md border bg-white pl-10 pr-10 text-sm outline-none ring-primary focus:ring-2"
+                  placeholder={t(uiLocale, "orders.management.search.placeholder")}
+                  value={manageSearchInput}
+                  onChange={(event) => setManageSearchInput(event.target.value)}
+                  disabled={
+                    quickActionLoadingKey !== null ||
+                    bulkActionLoadingKey !== null ||
+                    bulkPrintLoadingKind !== null
+                  }
+                  aria-label={t(uiLocale, "orders.management.search.placeholder")}
+                />
+                {manageSearchInput ? (
+                  <button
+                    type="button"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
+                    onClick={() => {
+                      setManageSearchInput("");
+                      applyManageSearch("");
+                    }}
+                    aria-label={t(uiLocale, "common.action.clear")}
+                    title={t(uiLocale, "common.action.clear")}
+                    disabled={
+                      quickActionLoadingKey !== null ||
+                      bulkActionLoadingKey !== null ||
+                      bulkPrintLoadingKind !== null
+                    }
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
               <Button
                 type="button"
                 variant="outline"
@@ -5725,7 +5760,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 aria-label={t(uiLocale, "orders.management.search.scan")}
                 title={t(uiLocale, "orders.management.search.scan")}
               >
-                <ScanLine className="h-4 w-4" />
+                <QrCode className="h-4 w-4" />
               </Button>
               <Button
                 type="submit"
@@ -6020,8 +6055,8 @@ export function OrdersManagement(props: OrdersManagementProps) {
                               ) : null}
                               <Button
                                 type="button"
-                                variant="ghost"
-                                className="h-9 flex-1 text-xs"
+                                variant="outline"
+                                className="h-9 flex-1 rounded-lg border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50"
                                 disabled={
                                   bulkActionLoadingKey !== null ||
                                   bulkPrintLoadingKind !== null ||
@@ -6029,6 +6064,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
                                 }
                                 onClick={() => router.push(`/orders/${order.id}`)}
                               >
+                                <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
                                 {t(uiLocale, "orders.management.action.open")}
                               </Button>
                             </div>
@@ -6216,6 +6252,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
               onResult={onScanBarcodeResult}
               onClose={() => setShowScannerSheet(false)}
               cameraSelectId="orders-barcode-scanner-camera-select"
+              scanMode={isCreateOnlyMode ? "barcode" : "qr"}
             />
           ) : null}
         </div>

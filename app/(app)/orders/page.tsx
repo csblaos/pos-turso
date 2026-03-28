@@ -167,17 +167,14 @@ export default async function OrdersPage({
 
     return (
       <section className="space-y-4">
-        <header className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
-            <h1 className="text-xl font-semibold">{t(uiLocale, "orders.page.title")}</h1>
-            <p className="text-sm text-muted-foreground">
-              {t(uiLocale, "orders.page.subtitle")}
-            </p>
+        <header className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-semibold">{t(uiLocale, "orders.page.title")}</h1>
           </div>
           {canMarkPaid ? (
             <Link
               href="/orders/cod-reconcile"
-              className="inline-flex h-9 items-center rounded-md border border-blue-200 bg-blue-50 px-3 text-xs font-medium text-blue-700"
+              className="inline-flex h-9 shrink-0 items-center rounded-md border border-blue-200 bg-blue-50 px-3 text-xs font-medium text-blue-700"
             >
               {t(uiLocale, "orders.page.codReconcileCta")}
             </Link>

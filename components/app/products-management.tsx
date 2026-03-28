@@ -2827,7 +2827,7 @@ export function ProductsManagement({
    * RENDER
    * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
   return (
-    <section className="space-y-3 pb-24">
+    <section className="space-y-2 pb-24">
       {/* ── Summary strip (clickable status filter) ── */}
       {!isCompactSearchMode && <div className="grid grid-cols-3 gap-2">
         {([
@@ -2940,7 +2940,7 @@ export function ProductsManagement({
             onChange={(e) => {
               setSelectedCategoryId(e.target.value || null);
             }}
-            className="h-9 min-w-[8.5rem] appearance-none rounded-xl bg-transparent py-2 pl-8 pr-8 text-xs font-medium outline-none ring-blue-500 focus:ring-1"
+            className="h-10 min-w-[10rem] appearance-none rounded-xl bg-transparent py-2 pl-8 pr-8 text-sm font-medium outline-none ring-blue-500 focus:ring-1"
           >
             <option value="">{t(uiLocale, "products.filter.allCategories")}</option>
             {categories.map((cat) => (
@@ -2959,7 +2959,7 @@ export function ProductsManagement({
             onChange={(e) => {
               setSortOption(e.target.value as SortOption);
             }}
-            className="h-9 min-w-[7.5rem] appearance-none rounded-xl bg-transparent py-2 pl-8 pr-8 text-xs font-medium outline-none ring-blue-500 focus:ring-1"
+            className="h-10 min-w-[9rem] appearance-none rounded-xl bg-transparent py-2 pl-8 pr-8 text-sm font-medium outline-none ring-blue-500 focus:ring-1"
           >
             <option value="newest">{t(uiLocale, "products.sort.newest")}</option>
             <option value="name-asc">{t(uiLocale, "products.sort.nameAsc")}</option>

@@ -629,8 +629,21 @@ npm run po:audit:integrity
 - แท็บ `ສະຕັອກ / ບັນທຶກ / ປະຫວັດ` ในหน้า `/stock` ย้าย `title` เข้าไปอยู่เหนือบรรทัด `อัปเดตล่าสุด` ใน `StockTabToolbar` แล้ว และถอด subtitle ออกเพื่อ save area ให้ header ของแต่ละแท็บเตี้ยลง
 - skeleton loading ของแท็บ `stock / recording / history` ในหน้า `/stock` เปลี่ยนเป็น layout skeleton ตามโครง UI จริงของแต่ละแท็บแล้ว, ตัดข้อความ loading ด้านล่างออก, และในเคส initial loading จะ `early return` เป็น skeleton ทั้งแท็บเลยเพื่อไม่ให้ title/toolbar จริงโผล่ค้างด้านบน
 - dynamic `loadingFallback` ของหน้า `/stock` ใน `app/(app)/stock/page.tsx` ถูกเปลี่ยนจาก text card (`common.loading`) เป็น skeleton block แล้ว เพื่อตัดข้อความ `กำลังโหลดข้อมูล...` ระหว่างรอ dynamic import ของ tab content
-- หน้า `/products` ปรับ redesign เฉพาะปุ่ม `category` และ `sort` แล้ว: คง native select/logic เดิม แต่เปลี่ยนหน้าตาเป็น pill-style controls (`rounded-xl`, icon ซ้าย, chevron ขวา, category active = blue tint) โดยไม่เปลี่ยน interaction
+- `app/(app)/products/loading.tsx` ถูกทำ i18n แล้ว: ใช้ `getRequestUiLocale()` + `DEFAULT_UI_LOCALE` และ render `tab.products` / `products.page.loadingManagement` แทนข้อความ hardcoded
+- แท็บ `stock` ของหน้า `/stock` ปรับเฉพาะ UI ของ `category + sort` แล้ว: ยังคง native `select`/logic เดิม แต่เปลี่ยนเป็น pill-style controls แบบเดียวกับหน้า `/products` (icon ซ้าย, chevron ขวา, category active = blue tint)
+- แท็บ `stock` ของหน้า `/stock` ใช้ pill-style `category + sort` แบบเดียวกับหน้า `/products` แต่คงขนาดใหญ่กว่าสำหรับงาน operation (`h-10`, `text-sm`, `category min-w-[10rem]`, `sort min-w-[9rem]`) เพื่อให้กดง่ายและอ่านสบายกว่าในหน้า stock
+- หน้า `/products` ปรับ redesign เฉพาะปุ่ม `category` และ `sort` แล้ว: คง native select/logic เดิม แต่เปลี่ยนหน้าตาเป็น pill-style controls (`rounded-xl`, icon ซ้าย, chevron ขวา, category active = blue tint) และใช้ขนาด `h-10 + text-sm` (`category min-w-[10rem]`, `sort min-w-[9rem]`)
 - ช่องค้นหาในแท็บ `สต็อก` เอา `focus ring` ออกแล้ว และใช้ `focus:border-blue-300` แทน เพื่อลด visual noise ตอนโฟกัส
 - ช่องค้นหาในหน้า `/products` เอา `focus ring` ออกแล้ว และใช้การเปลี่ยนสี `border` แบบเบา (`focus:border-blue-300`) แทน เพื่อลด visual noise ตอนโฟกัส
 - หน้า `/products` เปลี่ยนเป็น scroll-driven sticky เฉพาะแถว `search + scan (+ create desktop)` แล้ว; `category + sort + result count` ไม่ sticky และจะเลื่อนตาม content ปกติ
 - flow search/filter ของหน้า `/products` ไม่ scroll กลับ top เองแล้ว; ตอนมี `query` และ search bar กำลัง stuck ระบบจะซ่อน summary strip, เพิ่ม `min-height` ให้ result area และถ้าหัวผลลัพธ์ถูกซ่อนเหนือ sticky bar หลังโหลดเสร็จ จะ `scrollBy` ขึ้นเพียงระยะสั้น ๆ เพื่อให้เห็นรายการแรกพอดี
+- หน้า `/orders` ถอด subtitle ใต้ title ออกแล้ว และจัด header ใหม่ให้ปุ่ม `ปิด COD` อยู่บรรทัดเดียวกับ title บนมือถือด้วย (`justify-between` + title `truncate`) เพื่อ save area ส่วนบนของหน้า
+- label หลักของ flow COD reconcile ถูกย่อให้สั้นและใช้ชื่อเดียวกันแล้ว: ปุ่มหน้า `/orders`, title/pageTitleShort ของ `/orders/cod-reconcile` ใช้ `ปิดยอด COD` / `ປິດຍອດ COD` / `Close COD`
+- ช่องค้นหาในหน้า `/orders` เพิ่มไอคอน `Search` ภายใน input แล้ว โดยคงปุ่มสแกนและ logic ค้นหาเดิมไว้
+- ช่องค้นหาในหน้า `/orders` เพิ่มปุ่ม `X` สำหรับล้างคำค้นแล้ว; กดแล้วจะ clear input และ apply search ว่างทันที โดยไม่แตะ search ของ create order
+- ปุ่ม `ເປີດ` ใน list/order cards ของหน้า `/orders` ถูกปรับเฉพาะ visual แล้ว: ใช้ `outline pill` + ไอคอน `ExternalLink` เพื่อให้ CTA ชัดขึ้น โดยไม่เปลี่ยน logic เดิม
+- คอลัมน์ `ຍອດລວມ` ในตาราง desktop ของหน้า `/orders` ถูกบังคับให้ `amount + currency` อยู่บรรทัดเดียว (`whitespace-nowrap` + `tabular-nums`) และเปลี่ยนจาก code currency เป็น symbol (`₭/฿/$`) โดยใช้ `currencySymbol(...)`
+- ปุ่ม scan ในหน้า `/orders` ฝั่ง manage/search เปลี่ยน icon จาก `ScanLine` เป็น `QrCode` แล้ว เพื่อให้ตรงกับความหมายของ flow ค้นหาออเดอร์ที่รองรับ QR; ปุ่มสแกนสินค้าใน create order ยังใช้ icon เดิม
+- `BarcodeScannerPanel` รองรับ `scanMode` แล้ว: หน้า `/orders` ในโหมด manage/search ส่ง `qr` เพื่อใช้กรอบสแกนแบบสี่เหลี่ยม + hint QR โดยไม่กระทบหน้า `products / stock / recording` และ create order ที่ยังใช้โหมด barcode เดิม
+- แท็บ `history` ของหน้า `/stock` ถอด nested scroll ใน section content แล้ว: เอา `max-h + overflow-y-auto` ออกและถอด virtualization ที่อิง scroll container เดิม เพื่อให้ใช้ page scroll เดียวทั้งหน้าและทำงานกับ sticky/tab header ได้เนียนขึ้น
+- initial render ของแท็บ `history` ในหน้า `/stock` เปลี่ยนมาใช้ dataset เดียวกับ history query จริงแล้ว (`page=1`, `pageSize=10`, พร้อม `total`) แทน `recent 30`; ช่วยกันอาการ summary เด้งจาก `30/30` ไปเป็นค่าจริงหลัง client fetch รอบแรก

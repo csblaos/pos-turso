@@ -19,6 +19,7 @@ import type { InventoryMovementView } from "@/lib/inventory/queries";
 
 type StockMovementHistoryProps = {
   movements: InventoryMovementView[];
+  initialTotal: number;
 };
 
 type MovementTypeFilter =
@@ -48,9 +49,7 @@ const movementTypeLabelKeyMap: Record<InventoryMovementView["type"], MessageKey>
   RETURN: "stock.movementType.RETURN",
 };
 
-const ITEMS_PER_PAGE = 50;
-const VIRTUAL_ROW_ESTIMATE = 164;
-const VIRTUAL_OVERSCAN = 4;
+const ITEMS_PER_PAGE = 10;
 const HISTORY_CACHE_MAX_ENTRIES = 24;
 const HISTORY_TYPE_QUERY_KEY = "historyType";
 const HISTORY_PAGE_QUERY_KEY = "historyPage";
@@ -347,7 +346,7 @@ function buildHistoryCacheKey(params: {
   ].join("|");
 }
 
-export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
+export function StockMovementHistory({ movements, initialTotal }: StockMovementHistoryProps) {
   const router = useRouter();
   const pathname = usePathname() ?? "/";
   const rawSearchParams = useSearchParams();
@@ -379,7 +378,7 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
     : "";
 
   const [movementItems, setMovementItems] = useState(movements);
-  const [totalItems, setTotalItems] = useState(movements.length);
+  const [totalItems, setTotalItems] = useState(initialTotal);
   const [typeFilterInput, setTypeFilterInput] = useState<MovementTypeFilter>(typeFilterFromQuery);
   const [appliedTypeFilter, setAppliedTypeFilter] = useState<MovementTypeFilter>(typeFilterFromQuery);
   const [page, setPage] = useState(pageFromQuery);
@@ -400,9 +399,6 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
     Map<string, { movements: InventoryMovementView[]; total: number; fetchedAt: string }>
   >(new Map());
 
-  const viewportRef = useRef<HTMLDivElement | null>(null);
-  const [scrollTop, setScrollTop] = useState(0);
-  const [viewportHeight, setViewportHeight] = useState(520);
   const currentCacheKey = buildHistoryCacheKey({
     page,
     typeFilter: appliedTypeFilter,
@@ -413,10 +409,10 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
 
   useEffect(() => {
     setMovementItems(movements);
-    setTotalItems(movements.length);
+    setTotalItems(initialTotal);
     setErrorMessage(null);
     setLastUpdatedAt(movements.length > 0 ? new Date().toISOString() : null);
-  }, [movements]);
+  }, [initialTotal, movements]);
 
   useEffect(() => {
     if (!isHistoryTabActive) {
@@ -457,25 +453,6 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
     isHistoryTabActive,
     searchParams,
   ]);
-
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport || typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) {
-        return;
-      }
-      setViewportHeight(entry.contentRect.height);
-    });
-
-    observer.observe(viewport);
-    setViewportHeight(viewport.clientHeight);
-    return () => observer.disconnect();
-  }, []);
 
   const fetchHistory = useCallback(
     async (options?: { manual?: boolean; signal?: AbortSignal; background?: boolean }) => {
@@ -584,8 +561,6 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
     }
 
     const controller = new AbortController();
-    setScrollTop(0);
-    viewportRef.current?.scrollTo({ top: 0 });
     const cached = historyCacheRef.current.get(currentCacheKey);
     if (cached) {
       setMovementItems(cached.movements);
@@ -726,23 +701,6 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
     Boolean(appliedDateTo);
   const isInitialHistoryLoading = isLoading && movementItems.length === 0;
 
-  const shouldVirtualize = movementItems.length > 24;
-  const safeViewportHeight = Math.max(1, viewportHeight);
-  const startIndex = shouldVirtualize
-    ? Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_ESTIMATE) - VIRTUAL_OVERSCAN)
-    : 0;
-  const endIndex = shouldVirtualize
-    ? Math.min(
-        movementItems.length,
-        Math.ceil((scrollTop + safeViewportHeight) / VIRTUAL_ROW_ESTIMATE) + VIRTUAL_OVERSCAN,
-      )
-    : movementItems.length;
-  const visibleMovements = movementItems.slice(startIndex, endIndex);
-  const paddingTop = shouldVirtualize ? startIndex * VIRTUAL_ROW_ESTIMATE : 0;
-  const paddingBottom = shouldVirtualize
-    ? (movementItems.length - endIndex) * VIRTUAL_ROW_ESTIMATE
-    : 0;
-
   const getTypeFilterLabel = (value: MovementTypeFilter) => {
     const option = movementTypeFilterOptions.find((item) => item.value === value);
     return t(uiLocale, option?.labelKey ?? "common.filter.all");
@@ -880,83 +838,69 @@ export function StockMovementHistory({ movements }: StockMovementHistoryProps) {
             {t(uiLocale, "stock.history.summary.showing.suffix")}
           </p>
 
-          <div
-            ref={viewportRef}
-            className="max-h-[66vh] overflow-y-auto pr-1"
-            onScroll={(event) => {
-              setScrollTop(event.currentTarget.scrollTop);
-            }}
-          >
-            <div
-              className="space-y-2"
-              style={{
-                paddingTop,
-                paddingBottom,
-              }}
-            >
-              {visibleMovements.map((movement) => (
-                <article
-                  key={movement.id}
-                  className="rounded-xl border bg-white p-4 shadow-sm"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-xs text-slate-500">{movement.productSku}</p>
-                          <p className="text-sm font-medium">{movement.productName}</p>
-                        </div>
-                        <span
-                          className={`flex-shrink-0 rounded-full px-2 py-1 text-xs ${movementBadgeClass[movement.type]}`}
+          <div className="space-y-2">
+            {movementItems.map((movement) => (
+              <article
+                key={movement.id}
+                className="rounded-xl border bg-white p-4 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-xs text-slate-500">{movement.productSku}</p>
+                        <p className="text-sm font-medium">{movement.productName}</p>
+                      </div>
+                      <span
+                        className={`flex-shrink-0 rounded-full px-2 py-1 text-xs ${movementBadgeClass[movement.type]}`}
+                      >
+                        {t(uiLocale, movementTypeLabelKeyMap[movement.type])}
+                      </span>
+                    </div>
+
+                    <div className="mt-2 flex items-center gap-4">
+                      <div>
+                        <p className="text-xs text-slate-500">{t(uiLocale, "stock.movement.baseQty.label")}</p>
+                        <p
+                          className={`text-lg font-bold ${
+                            movement.qtyBase >= 0 ? "text-emerald-600" : "text-red-600"
+                          }`}
                         >
-                          {t(uiLocale, movementTypeLabelKeyMap[movement.type])}
-                        </span>
-                      </div>
-
-                      <div className="mt-2 flex items-center gap-4">
-                        <div>
-                          <p className="text-xs text-slate-500">{t(uiLocale, "stock.movement.baseQty.label")}</p>
-                          <p
-                            className={`text-lg font-bold ${
-                              movement.qtyBase >= 0 ? "text-emerald-600" : "text-red-600"
-                            }`}
-                          >
-                            {movement.qtyBase >= 0 ? "+" : ""}
-                            {movement.qtyBase.toLocaleString(numberLocale)}
-                          </p>
-                        </div>
-                      </div>
-
-                      {movement.note && (
-                        <div className="mt-2 rounded-lg bg-slate-50 p-2">
-                          <p className="text-xs text-slate-600">
-                            <strong>{t(uiLocale, "stock.movement.note.prefix")}</strong> {movement.note}
-                          </p>
-                        </div>
-                      )}
-
-                      <div className="mt-2 flex items-center gap-1 text-xs text-slate-500">
-                        <Calendar className="h-3 w-3" />
-                        <span>
-                          {new Date(movement.createdAt).toLocaleString(numberLocale, {
-                            year: "numeric",
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                        <span>•</span>
-                        <span>
-                          {t(uiLocale, "stock.movement.by.prefix")}{" "}
-                          {movement.createdByName ?? t(uiLocale, "common.actor.system")}
-                        </span>
+                          {movement.qtyBase >= 0 ? "+" : ""}
+                          {movement.qtyBase.toLocaleString(numberLocale)}
+                        </p>
                       </div>
                     </div>
+
+                    {movement.note && (
+                      <div className="mt-2 rounded-lg bg-slate-50 p-2">
+                        <p className="text-xs text-slate-600">
+                          <strong>{t(uiLocale, "stock.movement.note.prefix")}</strong> {movement.note}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="mt-2 flex items-center gap-1 text-xs text-slate-500">
+                      <Calendar className="h-3 w-3" />
+                      <span>
+                        {new Date(movement.createdAt).toLocaleString(numberLocale, {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                      <span>•</span>
+                      <span>
+                        {t(uiLocale, "stock.movement.by.prefix")}{" "}
+                        {movement.createdByName ?? t(uiLocale, "common.actor.system")}
+                      </span>
+                    </div>
                   </div>
-                </article>
-              ))}
-            </div>
+                </div>
+              </article>
+            ))}
           </div>
         </div>
       )}

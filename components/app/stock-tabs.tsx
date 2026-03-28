@@ -146,9 +146,9 @@ export function StockTabs({
   }, [activeTab, mountedTabs]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       {/* Tab bar */}
-      <div ref={tabBarRef} className="sticky top-0 z-20 -mx-1 rounded-xl py-2 px-0 shadow-sm">
+      <div ref={tabBarRef} className="sticky top-0 z-20 -mx-1 rounded-xl py-2 px-0">
         <div className="flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {tabs.map((tab) => {
             const Icon = tab.icon;

@@ -9,6 +9,7 @@ type BarcodeScannerPanelProps = {
   onResult: (barcode: string) => void;
   onClose: () => void;
   cameraSelectId: string;
+  scanMode?: "barcode" | "qr";
 };
 
 export function BarcodeScannerPanel({
@@ -16,6 +17,7 @@ export function BarcodeScannerPanel({
   onResult,
   onClose,
   cameraSelectId,
+  scanMode = "barcode",
 }: BarcodeScannerPanelProps) {
   const scannerRef = useRef<HTMLVideoElement>(null);
   const codeReaderRef = useRef<import("@zxing/browser").BrowserMultiFormatReader | null>(null);
@@ -37,6 +39,7 @@ export function BarcodeScannerPanel({
   } | null>(null);
   const [zoom, setZoom] = useState(1);
   const [manualBarcode, setManualBarcode] = useState("");
+  const isQrMode = scanMode === "qr";
 
   const stopStream = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -197,12 +200,18 @@ export function BarcodeScannerPanel({
           playsInline
         />
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="h-[46%] w-[80%] rounded-lg border-2 border-blue-400/80" />
+          <div
+            className={`border-2 border-blue-400/80 ${
+              isQrMode ? "h-[58%] w-[58%] rounded-2xl" : "h-[46%] w-[80%] rounded-lg"
+            }`}
+          />
         </div>
       </div>
 
       <p className="text-center text-[11px] text-slate-500">
-        วางบาร์โค้ดให้อยู่กลางกรอบและมีแสงสว่างเพียงพอ
+        {isQrMode
+          ? "วาง QR code ให้อยู่กลางกรอบและมีแสงสว่างเพียงพอ"
+          : "วางบาร์โค้ดให้อยู่กลางกรอบและมีแสงสว่างเพียงพอ"}
       </p>
 
       {status === "opening" && (
