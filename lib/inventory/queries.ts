@@ -46,6 +46,7 @@ export type InventoryMovementView = {
   id: string;
   productId: string;
   productSku: string;
+  productBarcode: string | null;
   productName: string;
   type: "IN" | "OUT" | "RESERVE" | "RELEASE" | "ADJUST" | "RETURN";
   qtyBase: number;
@@ -415,6 +416,7 @@ export async function getRecentInventoryMovements(
       id: inventoryMovements.id,
       productId: products.id,
       productSku: products.sku,
+      productBarcode: products.barcode,
       productName: products.name,
       type: inventoryMovements.type,
       qtyBase: inventoryMovements.qtyBase,
@@ -433,6 +435,7 @@ export async function getRecentInventoryMovements(
     id: row.id,
     productId: row.productId,
     productSku: row.productSku,
+    productBarcode: row.productBarcode ?? null,
     productName: row.productName,
     type: row.type,
     qtyBase: row.qtyBase,
@@ -479,7 +482,7 @@ export async function getInventoryMovementsPage(
 
   const query = filters?.query?.trim();
   const productQueryCondition = query
-    ? sql`(${products.sku} like ${`%${query}%`} or ${products.name} like ${`%${query}%`})`
+    ? sql`(${products.sku} like ${`%${query}%`} or ${products.name} like ${`%${query}%`} or ${products.barcode} like ${`%${query}%`})`
     : undefined;
 
   if (filters?.dateFrom) {
@@ -503,6 +506,7 @@ export async function getInventoryMovementsPage(
         id: inventoryMovements.id,
         productId: products.id,
         productSku: products.sku,
+        productBarcode: products.barcode,
         productName: products.name,
         type: inventoryMovements.type,
         qtyBase: inventoryMovements.qtyBase,
@@ -537,6 +541,7 @@ export async function getInventoryMovementsPage(
     id: row.id,
     productId: row.productId,
     productSku: row.productSku,
+    productBarcode: row.productBarcode ?? null,
     productName: row.productName,
     type: row.type,
     qtyBase: row.qtyBase,

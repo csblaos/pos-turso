@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Calendar, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ListFilter, Search } from "lucide-react";
+import { Calendar, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ListFilter, ScanBarcode, Search } from "lucide-react";
 
+import { BarcodeScannerPanel } from "@/components/app/barcode-scanner-panel";
 import { Button } from "@/components/ui/button";
+import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import {
   StockTabEmptyState,
   StockTabErrorState,
@@ -51,6 +53,7 @@ const movementTypeLabelKeyMap: Record<InventoryMovementView["type"], MessageKey>
 
 const ITEMS_PER_PAGE = 10;
 const HISTORY_CACHE_MAX_ENTRIES = 24;
+const SCANNER_PERMISSION_STORAGE_KEY = "scanner-permission-seen";
 const HISTORY_TYPE_QUERY_KEY = "historyType";
 const HISTORY_PAGE_QUERY_KEY = "historyPage";
 const HISTORY_Q_QUERY_KEY = "historyQ";
@@ -395,9 +398,21 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
   const [appliedProductQuery, setAppliedProductQuery] = useState(queryFromUrl);
   const [appliedDateFrom, setAppliedDateFrom] = useState(dateFromFromUrl);
   const [appliedDateTo, setAppliedDateTo] = useState(dateToFromUrl);
+  const [showScanner, setShowScanner] = useState(false);
+  const [showScannerPermission, setShowScannerPermission] = useState(false);
+  const [hasSeenScannerPermission, setHasSeenScannerPermission] = useState(false);
   const historyCacheRef = useRef<
     Map<string, { movements: InventoryMovementView[]; total: number; fetchedAt: string }>
   >(new Map());
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    setHasSeenScannerPermission(
+      window.localStorage.getItem(SCANNER_PERMISSION_STORAGE_KEY) === "1",
+    );
+  }, []);
 
   const currentCacheKey = buildHistoryCacheKey({
     page,
@@ -694,6 +709,25 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
     setPage(1);
   };
 
+  const openScanner = () => {
+    if (hasSeenScannerPermission) {
+      setShowScanner(true);
+    } else {
+      setShowScannerPermission(true);
+    }
+  };
+
+  const handleBarcodeResult = useCallback((barcode: string) => {
+    const trimmed = barcode.trim();
+    setShowScanner(false);
+    if (!trimmed) {
+      return;
+    }
+    setProductQueryInput(trimmed);
+    setAppliedProductQuery(trimmed);
+    setPage(1);
+  }, []);
+
   const hasActiveFilters =
     appliedTypeFilter !== "all" ||
     Boolean(appliedProductQuery) ||
@@ -726,8 +760,33 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
       />
 
       <article className="space-y-3 rounded-xl border bg-white p-3 shadow-sm">
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          <div className="relative col-span-2 lg:col-span-1">
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+              aria-hidden="true"
+            />
+            <input
+              type="text"
+              value={productQueryInput}
+              onChange={(event) => setProductQueryInput(event.target.value)}
+              placeholder={t(uiLocale, "stock.history.filter.product.placeholder")}
+              className="h-10 w-full rounded-md border pl-9 pr-3 text-sm outline-none focus:border-blue-300"
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 w-10 shrink-0 px-0"
+            onClick={openScanner}
+            aria-label={t(uiLocale, "products.search.scanAria")}
+          >
+            <ScanBarcode className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <div className="relative min-w-0">
             <ListFilter
               className={`pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 ${
                 typeFilterInput === "all" ? "text-slate-400" : "text-blue-600"
@@ -755,19 +814,6 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
             <ChevronDown
               className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
               aria-hidden="true"
-            />
-          </div>
-          <div className="relative col-span-2 lg:col-span-1">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-              aria-hidden="true"
-            />
-            <input
-              type="text"
-              value={productQueryInput}
-              onChange={(event) => setProductQueryInput(event.target.value)}
-              placeholder={t(uiLocale, "stock.history.filter.product.placeholder")}
-              className="h-10 w-full rounded-md border pl-9 pr-3 text-sm outline-none ring-primary focus:ring-2"
             />
           </div>
           <HistoryDatePickerField
@@ -866,6 +912,11 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
                       <div>
                         <p className="text-xs text-slate-500">{movement.productSku}</p>
                         <p className="text-sm font-medium">{movement.productName}</p>
+                        {movement.productBarcode ? (
+                          <p className="text-[11px] text-slate-500">
+                            {t(uiLocale, "products.label.barcode")}: {movement.productBarcode}
+                          </p>
+                        ) : null}
                       </div>
                       <span
                         className={`flex-shrink-0 rounded-full px-2 py-1 text-xs ${movementBadgeClass[movement.type]}`}
@@ -972,6 +1023,63 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
           </div>
         </article>
       )}
+
+      <SlideUpSheet
+        isOpen={showScannerPermission}
+        onClose={() => setShowScannerPermission(false)}
+        title={t(uiLocale, "products.scannerPermission.title")}
+        description={t(uiLocale, "products.scannerPermission.description")}
+      >
+        <div className="space-y-3">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+            <p className="font-medium text-slate-700">
+              {t(uiLocale, "products.scannerPermission.whyTitle")}
+            </p>
+            <ul className="mt-2 list-disc space-y-1 pl-4">
+              <li>{t(uiLocale, "products.scannerPermission.bullet.fast")}</li>
+              <li>{t(uiLocale, "products.scannerPermission.bullet.fewerTypos")}</li>
+              <li>{t(uiLocale, "products.scannerPermission.bullet.ready")}</li>
+            </ul>
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 flex-1"
+              onClick={() => setShowScannerPermission(false)}
+            >
+              {t(uiLocale, "common.action.cancel")}
+            </Button>
+            <Button
+              type="button"
+              className="h-10 flex-1"
+              onClick={() => {
+                window.localStorage.setItem(SCANNER_PERMISSION_STORAGE_KEY, "1");
+                setHasSeenScannerPermission(true);
+                setShowScannerPermission(false);
+                setShowScanner(true);
+              }}
+            >
+              {t(uiLocale, "products.scannerPermission.allowAndScan")}
+            </Button>
+          </div>
+        </div>
+      </SlideUpSheet>
+
+      <SlideUpSheet
+        isOpen={showScanner}
+        onClose={() => setShowScanner(false)}
+        title={t(uiLocale, "products.scanner.title")}
+        description={t(uiLocale, "products.scanner.description")}
+      >
+        <BarcodeScannerPanel
+          isOpen={showScanner}
+          onResult={handleBarcodeResult}
+          onClose={() => setShowScanner(false)}
+          cameraSelectId="stock-history-barcode-scanner-camera-select"
+        />
+      </SlideUpSheet>
     </section>
   );
 }

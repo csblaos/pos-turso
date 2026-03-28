@@ -657,6 +657,7 @@ export function StockRecordingForm({
           id: `local-${Date.now()}`,
           productId: selectedProduct.productId,
           productSku: selectedProduct.sku,
+          productBarcode: selectedProduct.barcode ?? null,
           productName: selectedProduct.name,
           type: movementTypeForView,
           qtyBase: qtyBasePreview,

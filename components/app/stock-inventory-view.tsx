@@ -715,7 +715,7 @@ export function StockInventoryView({
         ref={inventorySearchStickyRef}
         className={`sticky top-[3.8rem] z-10 transition-[margin,padding,background-color,box-shadow,border-color] ${
           isInventorySearchStickyStuck
-            ? "-mx-4 border-y border-slate-200 bg-white px-4 py-2 shadow-sm supports-[backdrop-filter]:bg-white/85 md:-mx-6 md:px-6 min-[1200px]:-mx-8 min-[1200px]:px-8"
+            ? "-mx-4 border-y border-slate-200 bg-white px-4 py-2 shadow-sm supports-[backdrop-filter]:bg-white md:-mx-6 md:px-6 min-[1200px]:-mx-8 min-[1200px]:px-8"
             : "px-0 py-2"
         }`}
       >
