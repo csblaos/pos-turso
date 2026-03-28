@@ -517,6 +517,7 @@ export function StockRecordingForm({
       const nextProduct: StockProductOption = {
         productId: product.id,
         sku: product.sku,
+        barcode: product.barcode ?? null,
         name: product.name,
         baseUnitId: product.baseUnitId,
         baseUnitCode: product.baseUnitCode,

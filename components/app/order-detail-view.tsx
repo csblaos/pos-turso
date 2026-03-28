@@ -118,6 +118,23 @@ export function OrderDetailView({
   const router = useRouter();
   const uiLocale = useUiLocale();
   const numberLocale = uiLocaleToDateLocale(uiLocale);
+  const orderQrAriaLabel = `${t(uiLocale, "orders.print.label.orderQrTitle")} ${order.orderNo}`;
+  const orderQrCardMarkup = useMemo(
+    () =>
+      buildOrderQrSvgMarkup(order.orderNo, {
+        size: 80,
+        ariaLabel: orderQrAriaLabel,
+      }),
+    [order.orderNo, orderQrAriaLabel],
+  );
+  const orderQrViewerMarkup = useMemo(
+    () =>
+      buildOrderQrSvgMarkup(order.orderNo, {
+        size: 320,
+        ariaLabel: orderQrAriaLabel,
+      }),
+    [order.orderNo, orderQrAriaLabel],
+  );
 
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [shippingLabelUrl, setShippingLabelUrl] = useState(order.shippingLabelUrl ?? "");
@@ -136,6 +153,7 @@ export function OrderDetailView({
   const [showPackSheet, setShowPackSheet] = useState(false);
   const [showConfirmPaidQrImageViewer, setShowConfirmPaidQrImageViewer] = useState(false);
   const [showOrderQrImageViewer, setShowOrderQrImageViewer] = useState(false);
+  const [showOrderNoQrViewer, setShowOrderNoQrViewer] = useState(false);
   const [showShippingLabelSourcePicker, setShowShippingLabelSourcePicker] = useState(false);
   const [showDeleteShippingLabelConfirm, setShowDeleteShippingLabelConfirm] = useState(false);
   const [confirmPaidPaymentMethod, setConfirmPaidPaymentMethod] = useState<"CASH" | "LAO_QR">("CASH");
@@ -478,6 +496,27 @@ export function OrderDetailView({
     order.paymentAccountQrImageUrl,
     uiLocale,
   ]);
+  const downloadOrderNoQrImage = useCallback(async () => {
+    const blob = new Blob([orderQrViewerMarkup], { type: "image/svg+xml;charset=utf-8" });
+    const blobUrl = URL.createObjectURL(blob);
+    const safeFileName = order.orderNo
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+    try {
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `${safeFileName || "order"}-qr.svg`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success(t(uiLocale, "orders.toast.qrDownloaded"));
+    } finally {
+      URL.revokeObjectURL(blobUrl);
+    }
+  }, [order.orderNo, orderQrViewerMarkup, uiLocale]);
 
   const copyConfirmPaidQrAccountNumber = useCallback(async () => {
     if (!selectedConfirmPaidQrAccount?.accountNumber) {
@@ -1343,7 +1382,7 @@ export function OrderDetailView({
     <section className="mx-auto max-w-6xl space-y-4 overflow-x-hidden pb-10">
       <header className="space-y-3 border-b border-slate-200 pb-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="text-xs text-muted-foreground">{order.orderNo}</p>
             <h1 className="text-xl font-semibold">{t(uiLocale, "orders.detail.title")}</h1>
             <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
@@ -1360,6 +1399,21 @@ export function OrderDetailView({
               </span>
             </div>
           </div>
+          <button
+            type="button"
+            className="shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-2 text-center transition hover:border-slate-300 hover:bg-slate-100"
+            onClick={() => setShowOrderNoQrViewer(true)}
+            aria-label={t(uiLocale, "orders.qrViewer.openFullAria")}
+            title={t(uiLocale, "orders.qrViewer.openFullAria")}
+          >
+            <div
+              className="flex h-[80px] w-[80px] items-center justify-center text-slate-900"
+              dangerouslySetInnerHTML={{ __html: orderQrCardMarkup }}
+            />
+            <p className="mt-1 max-w-[80px] truncate text-[10px] font-medium text-slate-700">
+              {order.orderNo}
+            </p>
+          </button>
         </div>
       </header>
 
@@ -2516,6 +2570,52 @@ export function OrderDetailView({
                 height={1200}
                 className="h-auto max-h-[calc(100dvh-13rem)] w-auto max-w-full rounded-lg object-contain"
                 unoptimized
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {showOrderNoQrViewer ? (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/85 px-3 py-6 sm:px-6"
+          onClick={() => setShowOrderNoQrViewer(false)}
+        >
+          <div
+            className="relative w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-3 py-2.5 text-slate-100">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{t(uiLocale, "orders.print.label.orderQrTitle")}</p>
+                <p className="truncate text-xs text-slate-400">{order.orderNo}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-100 hover:border-slate-500"
+                  onClick={() => {
+                    void downloadOrderNoQrImage();
+                  }}
+                  aria-label={t(uiLocale, "orders.qrViewer.downloadAria")}
+                  title={t(uiLocale, "orders.qrViewer.downloadAria")}
+                >
+                  <ArrowDownToLine className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-100 hover:border-slate-500"
+                  onClick={() => setShowOrderNoQrViewer(false)}
+                  aria-label={t(uiLocale, "orders.qrViewer.closeAria")}
+                  title={t(uiLocale, "orders.qrViewer.closeAria")}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex max-h-[calc(100dvh-9rem)] flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_center,_rgba(148,163,184,0.14),_transparent_60%)] p-4 sm:p-6">
+              <div
+                className="w-full max-w-[20rem] rounded-2xl bg-white p-5 text-slate-900"
+                dangerouslySetInnerHTML={{ __html: orderQrViewerMarkup }}
               />
             </div>
           </div>

@@ -48,7 +48,7 @@ export function OrderPackContent({
   className,
 }: OrderPackContentProps) {
   const orderQrSvg = buildOrderQrSvgMarkup(order.orderNo, {
-    size: 128,
+    size: 88,
     ariaLabel: `${t(uiLocale, "orders.pack.page.qrTitle")} ${order.orderNo}`,
   });
   const totalQuantity = order.items.reduce((sum, item) => sum + item.qty, 0);
@@ -62,87 +62,86 @@ export function OrderPackContent({
   return (
     <section className={className}>
       <section className="mx-auto max-w-2xl rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <header className="text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-            {t(uiLocale, "orders.pack.page.title")}
-          </p>
-          <h1 className="mt-2 text-xl font-semibold text-slate-900">{order.orderNo}</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            {t(uiLocale, "orders.pack.page.flowLabel")}: {orderFlowLabel}
-          </p>
-          <div className="mt-3 flex flex-wrap justify-center gap-2">
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
-              {t(uiLocale, statusLabelKey[order.status])}
-            </span>
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-              {t(uiLocale, paymentStatusLabelKey[order.paymentStatus])}
-            </span>
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 text-center sm:text-left">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              {t(uiLocale, "orders.pack.page.title")}
+            </p>
+            <h1 className="mt-2 truncate text-xl font-semibold text-slate-900">{order.orderNo}</h1>
+            <p className="mt-1 text-sm text-slate-600">
+              {t(uiLocale, "orders.pack.page.flowLabel")}: {orderFlowLabel}
+            </p>
+            <div className="mt-3 flex flex-wrap justify-center gap-2 sm:justify-start">
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
+                {t(uiLocale, statusLabelKey[order.status])}
+              </span>
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                {t(uiLocale, paymentStatusLabelKey[order.paymentStatus])}
+              </span>
+            </div>
           </div>
+
+          <aside className="mx-auto w-fit overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-center sm:mx-0">
+            <div
+              className="flex h-[88px] w-[88px] items-center justify-center text-slate-900"
+              dangerouslySetInnerHTML={{ __html: orderQrSvg }}
+            />
+            <p className="mt-2 max-w-[88px] truncate text-xs font-medium text-slate-900">
+              {order.orderNo}
+            </p>
+          </aside>
         </header>
 
         <hr className="my-4 border-0 border-t border-dashed border-slate-300" />
 
-        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_168px]">
-          <div className="order-2 lg:order-1">
-            <div className="space-y-1.5 text-sm text-slate-700">
-              <div className="flex items-start justify-between gap-4 border-b border-dashed border-slate-200 pb-1.5">
-                <span>{t(uiLocale, "orders.pack.page.paymentStatusLabel")}</span>
-                <span className="text-right font-medium text-slate-900">
-                  {t(uiLocale, paymentMethodLabelKey[order.paymentMethod])}
-                </span>
-              </div>
-              <div className="flex items-start justify-between gap-4 border-b border-dashed border-slate-200 pb-1.5">
-                <span>{t(uiLocale, "orders.print.label.createdAtPrefix")}</span>
-                <span className="text-right text-slate-900">
-                  {new Date(order.createdAt).toLocaleString(numberLocale)}
-                </span>
-              </div>
-              <div className="flex items-start justify-between gap-4 border-b border-dashed border-slate-200 pb-1.5">
-                <span>{t(uiLocale, "orders.print.label.shippingPrefix")}</span>
-                <span className="text-right font-medium text-slate-900">
-                  {order.shippingProvider || order.shippingCarrier || "-"}
-                </span>
-              </div>
-              <div className="flex items-start justify-between gap-4 border-b border-dashed border-slate-200 pb-1.5">
-                <span>{t(uiLocale, "orders.print.label.trackingPrefix")}</span>
-                <span className="max-w-[62%] break-all text-right text-slate-900">
-                  {order.trackingNo || "-"}
-                </span>
-              </div>
-              <div className="flex items-start justify-between gap-4 border-b border-dashed border-slate-200 pb-1.5">
-                <span>{t(uiLocale, "orders.pack.page.itemsDistinct")}</span>
-                <span className="font-medium text-slate-900">
-                  {order.items.length.toLocaleString(numberLocale)}
-                </span>
-              </div>
-              <div className="flex items-start justify-between gap-4">
-                <span>{t(uiLocale, "orders.pack.page.itemsQtyTotal")}</span>
-                <span className="font-semibold text-slate-900">
-                  {totalQuantity.toLocaleString(numberLocale)}
-                </span>
-              </div>
-              {order.paymentMethod === "COD" ? (
-                <div className="mt-2 flex items-start justify-between gap-4 rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                  <span>{t(uiLocale, "orders.pack.page.codAmountLabel")}</span>
-                  <span className="font-semibold">
-                    {(order.codAmount > 0 ? order.codAmount : order.total).toLocaleString(numberLocale)}{" "}
-                    {storeCurrencyDisplay}
-                  </span>
-                </div>
-              ) : null}
+        <section>
+          <div className="space-y-1.5 text-sm text-slate-700">
+            <div className="flex items-start justify-between gap-4 border-b border-dashed border-slate-200 pb-1.5">
+              <span>{t(uiLocale, "orders.pack.page.paymentStatusLabel")}</span>
+              <span className="text-right font-medium text-slate-900">
+                {t(uiLocale, paymentMethodLabelKey[order.paymentMethod])}
+              </span>
             </div>
+            <div className="flex items-start justify-between gap-4 border-b border-dashed border-slate-200 pb-1.5">
+              <span>{t(uiLocale, "orders.print.label.createdAtPrefix")}</span>
+              <span className="text-right text-slate-900">
+                {new Date(order.createdAt).toLocaleString(numberLocale)}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4 border-b border-dashed border-slate-200 pb-1.5">
+              <span>{t(uiLocale, "orders.print.label.shippingPrefix")}</span>
+              <span className="text-right font-medium text-slate-900">
+                {order.shippingProvider || order.shippingCarrier || "-"}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4 border-b border-dashed border-slate-200 pb-1.5">
+              <span>{t(uiLocale, "orders.print.label.trackingPrefix")}</span>
+              <span className="max-w-[62%] break-all text-right text-slate-900">
+                {order.trackingNo || "-"}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4 border-b border-dashed border-slate-200 pb-1.5">
+              <span>{t(uiLocale, "orders.pack.page.itemsDistinct")}</span>
+              <span className="font-medium text-slate-900">
+                {order.items.length.toLocaleString(numberLocale)}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <span>{t(uiLocale, "orders.pack.page.itemsQtyTotal")}</span>
+              <span className="font-semibold text-slate-900">
+                {totalQuantity.toLocaleString(numberLocale)}
+              </span>
+            </div>
+            {order.paymentMethod === "COD" ? (
+              <div className="mt-2 flex items-start justify-between gap-4 rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <span>{t(uiLocale, "orders.pack.page.codAmountLabel")}</span>
+                <span className="font-semibold">
+                  {(order.codAmount > 0 ? order.codAmount : order.total).toLocaleString(numberLocale)}{" "}
+                  {storeCurrencyDisplay}
+                </span>
+              </div>
+            ) : null}
           </div>
-
-          <aside className="order-1 flex flex-col items-center text-center lg:order-2">
-            <div
-              className="h-[128px] w-[128px]"
-              dangerouslySetInnerHTML={{ __html: orderQrSvg }}
-            />
-            <p className="mt-2 text-sm font-medium text-slate-900">{order.orderNo}</p>
-            <p className="mt-1 text-xs text-slate-500">
-              {t(uiLocale, "orders.print.label.orderQrHint")}
-            </p>
-          </aside>
         </section>
 
         <hr className="my-4 border-0 border-t border-dashed border-slate-300" />

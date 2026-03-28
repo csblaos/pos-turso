@@ -519,6 +519,8 @@ const canOpenOrderPackView = (
 ) =>
   order.status !== "DRAFT" &&
   order.status !== "CANCELLED" &&
+  order.status !== "SHIPPED" &&
+  order.status !== "COD_RETURNED" &&
   (order.channel !== "WALK_IN" ||
     order.status === "READY_FOR_PICKUP" ||
     order.status === "PICKED_UP_PENDING_PAYMENT");

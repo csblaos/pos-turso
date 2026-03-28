@@ -24,6 +24,7 @@ export function BarcodeScannerPanel({
   const controlsRef = useRef<import("@zxing/browser").IScannerControls | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const trackRef = useRef<MediaStreamTrack | null>(null);
+  const resultHandledRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<
     "opening" | "scanning" | "paused" | "no-permission" | "no-camera" | "error"
@@ -59,6 +60,19 @@ export function BarcodeScannerPanel({
     }
     stopStream();
   }, []);
+
+  const emitResultOnce = useCallback(
+    (value: string) => {
+      const trimmed = value.trim();
+      if (!trimmed || resultHandledRef.current) {
+        return;
+      }
+      resultHandledRef.current = true;
+      safeStop();
+      onResult(trimmed);
+    },
+    [onResult, safeStop],
+  );
 
   const refreshDevices = useCallback(async () => {
     const list = await navigator.mediaDevices.enumerateDevices();
@@ -96,6 +110,7 @@ export function BarcodeScannerPanel({
     async (deviceId?: string) => {
       setError(null);
       setStatus("opening");
+      resultHandledRef.current = false;
 
       try {
         const { BrowserMultiFormatReader } = await import("@zxing/browser");
@@ -149,8 +164,7 @@ export function BarcodeScannerPanel({
           scannerRef.current,
           (result) => {
             if (!result) return;
-            safeStop();
-            onResult(result.getText());
+            emitResultOnce(result.getText());
           },
         );
         controlsRef.current = controls;
@@ -167,12 +181,13 @@ export function BarcodeScannerPanel({
         safeStop();
       }
     },
-    [onResult, refreshDevices, safeStop, syncCapabilities],
+    [emitResultOnce, refreshDevices, safeStop, syncCapabilities],
   );
 
   useEffect(() => {
     if (!isOpen) {
       safeStop();
+      resultHandledRef.current = false;
       setStatus("paused");
       return;
     }
@@ -186,6 +201,7 @@ export function BarcodeScannerPanel({
     return () => {
       mounted = false;
       safeStop();
+      resultHandledRef.current = false;
       codeReaderRef.current = null;
     };
   }, [isOpen, safeStop, startScanner]);
@@ -337,8 +353,7 @@ export function BarcodeScannerPanel({
             className="h-10 flex-1 rounded-lg border px-3 text-sm outline-none ring-blue-500 focus:ring-2"
             onKeyDown={(e) => {
               if (e.key === "Enter" && manualBarcode.trim()) {
-                safeStop();
-                onResult(manualBarcode.trim());
+                emitResultOnce(manualBarcode);
               }
             }}
           />
@@ -347,8 +362,7 @@ export function BarcodeScannerPanel({
             className="h-10"
             disabled={!manualBarcode.trim()}
             onClick={() => {
-              safeStop();
-              onResult(manualBarcode.trim());
+              emitResultOnce(manualBarcode);
             }}
           >
             ค้นหา

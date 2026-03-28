@@ -282,7 +282,7 @@ export function StockInventoryView({
     const keyword = searchQuery.trim().toLowerCase();
     if (keyword) {
       items = items.filter((p) =>
-        [p.sku, p.name].join(" ").toLowerCase().includes(keyword),
+        [p.sku, p.name, p.barcode ?? ""].join(" ").toLowerCase().includes(keyword),
       );
     }
 
@@ -565,7 +565,7 @@ export function StockInventoryView({
         }
 
         setFilter("all");
-        setSearchQuery(matchedProduct.sku);
+        setSearchQuery(trimmed);
 
         if (
           selectedCategoryId &&
@@ -750,6 +750,9 @@ export function StockInventoryView({
             <ScanBarcode className="h-4 w-4" />
           </Button>
         </div>
+        <p className="mt-1 text-[11px] text-slate-500">
+          {t(uiLocale, "stock.inventory.search.helper")}
+        </p>
       </div>
 
       <article className="rounded-xl border bg-white p-4 shadow-sm">
@@ -857,6 +860,11 @@ export function StockInventoryView({
                             <p className="text-xs text-slate-500">
                               {t(uiLocale, "products.form.baseUnit.label")}: {product.baseUnitCode}
                             </p>
+                            {product.barcode ? (
+                              <p className="text-[11px] text-slate-500">
+                                {t(uiLocale, "products.label.barcode")}: {product.barcode}
+                              </p>
+                            ) : null}
                           </div>
                           <span
                             className={`rounded-full px-2 py-1 text-xs ${

@@ -280,6 +280,7 @@ export function StockLedger({
       const newProduct: StockProductOption = {
         productId: product.id,
         sku: product.sku,
+        barcode: product.barcode ?? null,
         name: product.name,
         baseUnitId: product.baseUnitId,
         baseUnitCode: product.baseUnitCode,

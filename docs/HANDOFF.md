@@ -1496,6 +1496,7 @@ npm run build
 - `app/(app)/products/loading.tsx` ถูกทำ i18n แล้ว: ใช้ `getRequestUiLocale()` + `DEFAULT_UI_LOCALE` และ render `tab.products` / `products.page.loadingManagement` แทนข้อความ hardcoded
 - แท็บ `stock` ของหน้า `/stock` ปรับเฉพาะ UI ของ `category + sort` แล้ว: ยังคง native `select`/logic เดิม แต่เปลี่ยนเป็น pill-style controls แบบเดียวกับหน้า `/products` (icon ซ้าย, chevron ขวา, category active = blue tint)
 - แท็บ `stock` ของหน้า `/stock` ใช้ pill-style `category + sort` แบบเดียวกับหน้า `/products` แต่คงขนาดใหญ่กว่าสำหรับงาน operation (`h-10`, `text-sm`, `category min-w-[10rem]`, `sort min-w-[9rem]`) เพื่อให้กดง่ายและอ่านสบายกว่าในหน้า stock
+- แท็บ `stock` ของหน้า `/stock` ขยาย search ให้รองรับ `barcode` จริงแล้ว: placeholder/helper ระบุว่า search/scan ได้ด้วย barcode no., filter ฝั่ง client match `sku + name + barcode`, และเมื่อสแกน barcode ระบบจะใส่เลข barcode ลง search input โดยตรงแทน SKU; list cards ของสินค้าแสดง barcode แบบ mini text เมื่อมีค่า
 - หน้า `/products` ปรับ redesign เฉพาะหน้าตา `category` และ `sort` แล้ว: คง native select เดิม แต่หุ้มให้เป็น pill-style buttons (icon ซ้าย + chevron ขวา) และใช้ขนาด `h-10 + text-sm` (`category min-w-[10rem]`, `sort min-w-[9rem]`)
 - ช่องค้นหาในแท็บ `สต็อก` เอา `focus ring` ออกแล้ว และเหลือแค่ `focus:border-blue-300`
 - ช่องค้นหาในหน้า `/products` เอา `focus ring` ออกแล้ว และเหลือแค่ `focus:border-blue-300` เพื่อให้ลุคเรียบขึ้นโดยยังคงมี focus affordance
@@ -1509,5 +1510,11 @@ npm run build
 - คอลัมน์ `ยอดรวม/ຍອດລວມ/Total` ในตาราง desktop ของ `/orders` ใช้ `whitespace-nowrap` แล้ว และเปลี่ยนการแสดง currency จาก code เป็น symbol (`₭/฿/$`) ผ่าน `currencySymbol(...)`
 - ปุ่ม scan ของหน้า `/orders` ในโหมด manage/search เปลี่ยน icon เป็น `QrCode` แล้ว เพื่อสื่อว่า flow นี้รองรับการสแกน QR order; ปุ่ม scan ของ create order ยังใช้ `ScanLine` ตาม semantic การสแกนสินค้า
 - `BarcodeScannerPanel` เพิ่ม prop `scanMode` แล้ว โดยหน้า `/orders` โหมด manage/search ส่ง `qr` เพื่อเปลี่ยน overlay เป็นกรอบสี่เหลี่ยมและ hint แบบ QR เท่านั้น; หน้าอื่นยังใช้โหมด barcode เดิมทั้งหมด
+- หน้า order detail (`/orders/[orderId]`) เพิ่ม mini `QR ออเดอร์` กลับมาใน header แล้ว: วางด้านขวาใน header row เดียวกับ title/chips ทั้ง mobile และ desktop, ใช้ขนาด compact `80px`, กดเปิด viewer เต็มและดาวน์โหลด SVG ได้
+- หน้า `/orders` list ซ่อนปุ่ม `หน้าแพ็ก` สำหรับออเดอร์ที่จบงานแล้ว (`SHIPPED`, `COD_RETURNED`, รวมทั้ง walk-in ที่ไม่ใช่ pickup states ตามเดิม) เพื่อให้ action ใน list เหลือเฉพาะงานถัดไปจริง
+- คอลัมน์ `งานถัดไป/ວຽກຕໍ່ໄປ` ในหน้า `/orders` เปลี่ยนข้อความ fallback ของออเดอร์ที่ไม่มี quick action แล้วจากโทน `ไม่มีงานด่วน` เป็นข้อความจบงานตรง ๆ (`เสร็จแล้ว` / `ສຳເລັດແລ້ວ` / `Done`)
+- modal `หน้าแพ็กออเดอร์` (`OrderPackContent`) ย้าย QR จาก body ด้านขวาไปเป็น mini card ที่มุม header แล้ว และปรับให้ขนาด SVG ตรงกับ container (`88px`) พร้อม `overflow-hidden`; container QR ใช้ `flex items-center justify-center` เพื่อให้ตัว QR อยู่กึ่งกลาง card จริง
+- แท็บ `history` บนหน้า `/stock` ปรับเฉพาะ UI ของ dropdown `ประเภทการเคลื่อนไหว` แล้ว: คง native `select`/logic เดิม แต่เปลี่ยนเป็น pill-style trigger (`ListFilter` ซ้าย, `ChevronDown` ขวา, active = blue tint) ให้ visual scale ตรงกับปุ่ม filter หน้า stock/products
+- `BarcodeScannerPanel` เพิ่ม one-shot guard แล้ว: ทุกทางเข้า result (`decodeFromStream()` และ manual submit/search) วิ่งผ่าน `emitResultOnce()` ที่ใช้ `resultHandledRef` กัน callback ซ้ำในรอบสแกนเดียว เพื่อลดเคสสแกน barcode/QR ครั้งเดียวแต่ handler ถูกยิงซ้ำจนเพิ่มสินค้า/ค้นหาซ้ำหลายครั้ง
 - แท็บ `history` ของ `/stock` ถอด inner scroll ของรายการออกแล้ว: ไม่ใช้ `max-h/overflow-y-auto` และไม่ใช้ virtualization ที่ผูกกับ scroll container เดิมอีกต่อไป เพื่อให้หน้าใช้ page scroll เดียวและลด nested scroll UX
 - initial data ของแท็บ `history` ใน `/stock` เปลี่ยนเป็น query หน้าแรกจริงของ history (`page=1`, `pageSize=10`, มี `total`) แทน recent 30 แล้ว เพื่อลดอาการ summary ตัวแรกแสดง `30/30` ก่อนค่อยเด้งเป็นค่าจริงหลัง fetch

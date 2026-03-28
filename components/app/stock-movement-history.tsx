@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { Calendar, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ListFilter, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -727,20 +727,36 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
 
       <article className="space-y-3 rounded-xl border bg-white p-3 shadow-sm">
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          <select
-            value={typeFilterInput}
-            onChange={(event) =>
-              setTypeFilterInput((event.target.value as MovementTypeFilter) ?? "all")
-            }
-            className="col-span-2 h-10 rounded-md border px-3 text-sm outline-none ring-primary focus:ring-2 lg:col-span-1"
-            aria-label={t(uiLocale, "stock.history.filter.type.ariaLabel")}
-          >
-            {movementTypeFilterOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {t(uiLocale, "stock.history.filter.type.optionPrefix")} {t(uiLocale, option.labelKey)}
-              </option>
-            ))}
-          </select>
+          <div className="relative col-span-2 lg:col-span-1">
+            <ListFilter
+              className={`pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 ${
+                typeFilterInput === "all" ? "text-slate-400" : "text-blue-600"
+              }`}
+              aria-hidden="true"
+            />
+            <select
+              value={typeFilterInput}
+              onChange={(event) =>
+                setTypeFilterInput((event.target.value as MovementTypeFilter) ?? "all")
+              }
+              className={`h-10 w-full appearance-none rounded-xl border bg-white pl-9 pr-9 text-sm outline-none focus:border-blue-300 ${
+                typeFilterInput === "all"
+                  ? "border-slate-200 text-slate-700"
+                  : "border-blue-200 bg-blue-50 text-blue-700"
+              }`}
+              aria-label={t(uiLocale, "stock.history.filter.type.ariaLabel")}
+            >
+              {movementTypeFilterOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {t(uiLocale, "stock.history.filter.type.optionPrefix")} {t(uiLocale, option.labelKey)}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+              aria-hidden="true"
+            />
+          </div>
           <div className="relative col-span-2 lg:col-span-1">
             <Search
               className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"

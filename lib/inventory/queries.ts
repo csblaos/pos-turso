@@ -28,6 +28,7 @@ export type StockUnitOption = {
 export type StockProductOption = {
   productId: string;
   sku: string;
+  barcode: string | null;
   name: string;
   active: boolean;
   baseUnitId: string;
@@ -217,6 +218,7 @@ export async function getStockProductsForStore(
       .select({
         productId: products.id,
         sku: products.sku,
+        barcode: products.barcode,
         name: products.name,
         active: products.active,
         baseUnitId: products.baseUnitId,
@@ -283,6 +285,7 @@ export async function getStockProductsForStore(
     return {
       productId: product.productId,
       sku: product.sku,
+      barcode: product.barcode ?? null,
       name: product.name,
       active: Boolean(product.active),
       baseUnitId: product.baseUnitId,
@@ -313,6 +316,7 @@ export async function getStockProductsForStorePage(
     .select({
       productId: products.id,
       sku: products.sku,
+      barcode: products.barcode,
       name: products.name,
       active: products.active,
       baseUnitId: products.baseUnitId,
@@ -386,6 +390,7 @@ export async function getStockProductsForStorePage(
     return {
       productId: product.productId,
       sku: product.sku,
+      barcode: product.barcode ?? null,
       name: product.name,
       active: Boolean(product.active),
       baseUnitId: product.baseUnitId,
