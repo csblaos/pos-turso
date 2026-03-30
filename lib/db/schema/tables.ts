@@ -287,6 +287,7 @@ export const storePaymentAccounts = sqliteTable(
     accountName: text("account_name").notNull(),
     accountNumber: text("account_number"),
     qrImageUrl: text("qr_image_url"),
+    currency: text("currency", { enum: storeCurrencyEnum }).notNull().default("LAK"),
     promptpayId: text("promptpay_id"),
     isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
     isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),

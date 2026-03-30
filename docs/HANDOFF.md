@@ -6,10 +6,95 @@
 
 ## Changed (ล่าสุด)
 
-- เพิ่ม flow ถ่าย/เลือกรูปสินค้าแบบมี crop ในหน้า `/products`:
-  - ปุ่มรูปสินค้าในฟอร์ม create/edit เปิด source picker ก่อนแล้ว ให้เลือก `เลือกรูปจากเครื่อง` หรือ `ถ่ายรูปด้วยกล้อง`
-  - หลังได้ไฟล์ จะเปิด custom crop sheet ของแอปก่อนเสมอ (square crop + drag + zoom) แล้วค่อยแปลงเป็น `640px WebP` ไปเก็บใน `imageFile`
-  - ตั้งใจไม่พึ่ง native crop ของอุปกรณ์เป็น flow หลัก เพื่อให้ behavior คงที่กว่าใน mobile browser และ desktop
+- ปรับ model `บัญชีรับเงิน` ของร้านให้ตรง usage ลาวมากขึ้น:
+  - หน้า `/settings/store/payments` ไม่ให้เลือก type `BANK / LAO_QR` ตรง ๆ แล้ว แต่ใช้บัญชีเดียวที่มีข้อมูลธนาคารเสมอ + toggle `มี QR`
+  - `store_payment_accounts` เพิ่ม `currency` ต่อบัญชี พร้อม migration [0043_payment_account_currency.sql](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/drizzle/0043_payment_account_currency.sql) และ backfill ค่าเริ่มต้นตาม `stores.currency`
+  - หน้า settings เปลี่ยนจาก multi-select เป็น single select `สกุลเงินของบัญชีนี้` (`LAK / THB / USD` เฉพาะที่ร้านเปิดไว้) และยึดกติกา `1 account = 1 currency`
+  - state ปกติของ `/settings/store/payments` ถอด page title ออกให้ card header เป็นหัวหลักของหน้า, ย้าย helper text เรื่อง `1 บัญชี = 1 สกุลเงิน` / `บัญชีเดียวมีทั้งเลขบัญชีและ QR ได้` ไปไว้ในปุ่ม `i` ที่เปิด help sheet แทน, และเอาข้อความนโยบาย `บังคับแนบสลิปเมื่อจ่ายแบบ QR` ออกจากหน้าหลัก เพื่อประหยัดพื้นที่แนวตั้งและคงโฟกัสที่การตั้งค่าบัญชี
+  - order flow จะกรองบัญชี QR ตาม `paymentCurrency` ของออเดอร์แล้ว ทั้งใน checkout ของ `/orders/new` และ review sheet ใน `/orders`
+  - server ฝั่ง `POST /api/orders` และ `PATCH /api/orders/[orderId]` action `confirm_paid` validate เพิ่มว่าบัญชีที่เลือกต้องมี `account.currency === paymentCurrency` ของออเดอร์ ไม่ใช่เช็กแค่ active/QR อย่างเดียว
+
+- ปรับหน้า `/settings/store/shipping-providers` ให้ใช้ pattern เดียวกับ `/settings/store/payments`:
+  - state ปกติของหน้าถอด page title ออกและเอา subtitle ยาวออก
+  - หัวข้อ `navigate` ถอด `tracking-[0.14em]` ออก
+  - card header เพิ่มปุ่ม `i` เปิด help sheet และย้ายคำอธิบายเรื่องการใช้งานใน POS, alias, และลำดับแสดง ไปไว้ใน sheet แทนข้อความค้างบนหน้า
+
+- ปรับหน้า `/settings/pdf` ให้ใช้แนวเดียวกัน:
+  - state ปกติของหน้าถอด page title ออก
+  - ใช้ card header `เมนูตั้งค่าเอกสาร PDF` เป็นหัวหลักของหน้าแทน เพื่อลดพื้นที่แนวตั้งส่วนบน
+  - card header เพิ่มปุ่ม `i` เปิด help sheet อธิบาย flow การตั้งค่าเอกสาร, การใช้ข้อมูลบริษัทซ้ำ, และบอกชัดว่า preview ตอนนี้มีเฉพาะ PO
+
+- ปรับหน้า `/settings/profile` ให้ใช้แนวเดียวกับหน้า settings อื่น:
+  - state ปกติของหน้าถอด page title ออก
+  - ถอด section label `โปรไฟล์` และ `ความปลอดภัย` ที่ซ้ำกับตัวการ์ดออก
+  - รวม `แก้ไขโปรไฟล์บัญชี` และ `เปลี่ยนรหัสผ่าน` เป็น 2 action rows ภายใน parent card เดียว
+  - card header ใช้ `title + subtitle + ปุ่ม i` และเพิ่ม help sheet อธิบาย `ชื่อที่แสดง`, `อีเมลล็อกอิน`, และ `เปลี่ยนรหัสผ่านแล้วต้องล็อกอินใหม่`
+  - หัวข้อ `navigate` ถอด `tracking-[0.14em]` ออก
+
+- ปรับหน้า `/settings/language` ให้ใช้แนวเดียวกับหน้า settings อื่น:
+  - state ปกติของหน้าถอด page title ออก
+  - ถอด section label `display` ที่ซ้ำกับ card ตั้งค่าภาษาออก
+  - เปลี่ยนเป็น parent card ที่มี header `title + subtitle + ปุ่ม i` และวาง CTA row `ตั้งค่าภาษา` ไว้ด้านใน
+  - เพิ่ม help sheet อธิบายการ sync ภาษาตามบัญชี, native labels ของตัวเลือกภาษา, และการ refresh UI หลังบันทึก
+  - หัวข้อ `navigate` ถอด `tracking-[0.14em]` ออก
+
+- ปรับหน้า `/settings/permissions` ให้ใช้แนวเดียวกับหน้า settings อื่น:
+  - state ปกติของหน้าถอด page title ออก
+  - รวม summary กับรายการสิทธิ์ที่ใช้งานได้ไว้ใน parent card เดียว
+  - card header ใช้ `title + subtitle + ปุ่ม i` และเพิ่ม help sheet อธิบาย scope ตามร้านที่กำลังใช้งาน, ความสัมพันธ์ระหว่างบทบาทกับสิทธิ์, และ technical keys
+  - หัวข้อ `navigate` ถอด `tracking-[0.14em]` ออก
+
+- ปรับหน้า `/settings/security` ให้ใช้แนวเดียวกับหน้า settings อื่น:
+  - state ปกติของหน้าถอด page title ออก
+  - รวมข้อมูลบัญชี, CTA `เปลี่ยนรหัสผ่าน`, CTA `โปรไฟล์บัญชี`, และคำแนะนำความปลอดภัยไว้ใน parent card เดียว
+  - card header ใช้ `title + subtitle + ปุ่ม i` และเพิ่ม help sheet อธิบายการเปลี่ยนรหัสผ่านเมื่อพบความเสี่ยง, ขีดจำกัดอุปกรณ์ตาม session policy, และความสัมพันธ์ระหว่างโปรไฟล์กับ security
+  - หัวข้อ `navigate` ถอด `tracking-[0.14em]` ออก
+
+- ปรับหน้า `/settings/notifications` ให้ใช้แนวเดียวกับหน้า settings อื่น:
+  - state ปกติของหน้าถอด page title ออก
+  - ย้าย cron hint และ inbox panel เข้า parent card เดียว
+  - card header ใช้ `title + subtitle + ปุ่ม i` และเพิ่ม help sheet อธิบายบทบาทของ inbox, กฎ mute/snooze, และการ sync จาก AP due rules
+  - หัวข้อ `navigate` ถอด `tracking-[0.14em]` ออก
+
+- ปรับหน้า `/settings/roles` ให้ใช้แนวเดียวกับหน้า settings อื่น:
+  - state ปกติของหน้าถอด page title ออก
+  - ย้าย `title + subtitle` เดิมลงมาเป็น card header ของรายการบทบาท
+  - ถอด section label `รายการบทบาท` ออกเพื่อลดความซ้ำของ header
+  - หัวข้อ `navigate` ถอด `tracking-[0.14em]` ออก
+  - card header เพิ่มปุ่ม `i` เปิด help sheet อธิบายหลักการจัดการสิทธิ์, บทบาทระบบที่ล็อกไว้, และวิธีใช้จำนวนสมาชิกช่วยประเมินผลกระทบก่อนแก้บทบาท
+
+- ปรับหน้า `/settings/categories` ให้ใช้แนวเดียวกับหน้า settings อื่น:
+  - state ปกติของหน้าถอด page title ออก
+  - card รายการหมวดหมู่ใช้ header `title + subtitle` จากข้อมูลเดิมของหน้าแทน
+  - ถอด section label `เพิ่มหมวดหมู่ใหม่` และ `รายการหมวดหมู่` ออกเพื่อลดความซ้ำ
+  - หัวข้อ `navigate` ถอด `tracking-[0.14em]` ออก
+  - card header เพิ่มปุ่ม `i` เปิด help sheet และปุ่ม `เพิ่มหมวดหมู่` แบบ action bar เดียวกับหน้า settings อื่น
+
+- ปรับหน้า `/settings/stock` ให้ใช้แนวเดียวกับหน้า settings อื่น:
+  - state ปกติของหน้าถอด page title ออก
+  - card ตั้งค่า stock alerts ใช้ header `title + subtitle` จากข้อมูลเดิมของหน้าแทน
+  - card header เพิ่ม badge สถานะ `บันทึกแล้ว/ยังไม่บันทึก` และปุ่ม `i` เปิด help sheet อธิบายเกณฑ์ `สต็อกหมด/สต็อกต่ำ` กับการใช้เป็นค่าเริ่มต้นระดับร้าน
+  - badge สถานะใน card header ถูกบังคับเป็น single-line แล้ว เพื่อกันข้อความลาวอย่าง `ບັນທຶກແລ້ວ` ตกบรรทัดบนมือถือ
+  - ฟอร์มตั้งค่า `สต็อกหมด/สต็อกต่ำ`, validation, success/error, และปุ่มบันทึก ถูกย้ายไปใช้ i18n key กลุ่ม `settings.stock.*` แทนข้อความ hardcode
+  - เพิ่ม section `navigate` กลับหน้า settings และหัวข้อ `navigate` ถอด `tracking-[0.14em]` ออก
+
+- ปรับหน้า `/settings/units` ให้ใช้แนวเดียวกับหน้า settings อื่น:
+  - state ปกติของหน้าถอด page title ออก
+  - card รายการหน่วยใช้ header `title + subtitle` จากข้อมูลเดิมของหน้าแทน
+  - action `เพิ่มหน่วยสินค้า` กับปุ่ม `i` ถูกย้ายไปรวมใน card header เดียวแบบหน้า settings อื่น
+  - helper เรื่อง `หน่วยค่าเริ่มต้นระบบแก้ไข/ลบไม่ได้` ถูกย้ายไปอยู่ใน help sheet แทนข้อความค้างบนหน้า
+  - เพิ่ม i18n key กลุ่ม `settings.units.help.*` สำหรับ help sheet ครบ 3 ภาษา
+  - label ฟอร์มของ `nameTh` ถูกเปลี่ยนจาก `ชื่อหน่วยภาษาไทย` เป็น `ชื่อที่แสดง` และ validation message เปลี่ยนตาม เพื่อไม่ให้สื่อผิดว่าฟิลด์นี้ใช้เฉพาะภาษาไทย
+  - หัวข้อ `navigate` ถอด `tracking-[0.14em]` ออก
+
+- ปรับหน้า `/settings/users` ให้ใช้แนวเดียวกับหน้า settings อื่น:
+  - state ปกติของหน้าถอด page title ออก
+  - หัวข้อ section `navigate` ถอด `tracking-[0.14em]` ออก และ section label `จัดการสมาชิก` ด้านบนถูกถอดออกแล้ว เพื่อให้ layout หน้า users เบาขึ้น
+  - summary card ถอด helper text ใต้จำนวนสมาชิกออก และเพิ่มปุ่ม `i` เปิด help sheet แทน เพื่อประหยัดพื้นที่แนวตั้งบนมือถือ
+  - ปุ่ม `i` และปุ่ม `เพิ่มสมาชิก` ใน summary card ปรับเป็น pattern เดียวกับหน้า `/settings/store/payments` แล้ว (`rounded-full`, ขนาด action bar เดียวกัน)
+  - รวม summary กับ list เป็น card เดียว และให้ card header ใช้โครง `title + subtitle count` แบบเดียวกับหน้า settings card อื่น
+  - shortcut ของ `SUPERADMIN` ไปหน้า `/settings/superadmin/users` เปลี่ยนจาก blue callout แบบ 3 บรรทัด เป็น compact shortcut card ที่กดได้ทั้งแถว พร้อม copy แบบสั้น `title + subtitle + CTA`
+  - modal `ผู้ใช้เก่า` ปรับ copy ให้สื่อว่า query มีหน้าที่ `กรองรายชื่อ` ไม่ใช่เริ่มค้นหา: เปิดโหมดมาแล้วจะแสดง candidate ทั้งหมดทันที, มี hint แยก `กำลังแสดงทั้งหมด`/`ผลลัพธ์ที่กรองแล้ว`, และ empty state แยกระหว่าง `ไม่มีผู้ใช้ให้เพิ่ม` กับ `ค้นหาแล้วไม่เจอ`
 
 - ปรับตำแหน่งไอคอนด้านขวาใน search input ของหน้า `/stock`:
   - ทั้งแท็บ `inventory` และ `history` ใช้ right-slot container เดียวกันสำหรับ `spinner` และปุ่ม `X`

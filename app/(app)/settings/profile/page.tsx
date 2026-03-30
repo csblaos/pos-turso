@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { ChevronRight, Lock, UserRound } from "lucide-react";
 import { redirect } from "next/navigation";
 
+import { AccountSettingsHelpButton } from "@/components/app/account-settings-help-button";
 import { AccountPasswordSettings } from "@/components/app/account-password-settings";
 import { AccountProfileSettings } from "@/components/app/account-profile-settings";
 import { getSession } from "@/lib/auth/session";
@@ -60,30 +61,23 @@ export default async function SettingsProfilePage() {
   }
 
   return (
-    <section className="space-y-5">
-      <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
-          {t(uiLocale, "settings.profile.title")}
-        </h1>
-        <p className="text-sm text-slate-500">{t(uiLocale, "settings.profile.subtitle")}</p>
-      </header>
+    <section className="space-y-2">
+      <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">{t(uiLocale, "settings.profile.title")}</p>
+            <p className="mt-0.5 text-xs text-slate-500">{t(uiLocale, "settings.profile.subtitle")}</p>
+          </div>
+          <AccountSettingsHelpButton uiLocale={uiLocale} />
+        </div>
+        <div className="divide-y divide-slate-100">
+          <AccountProfileSettings initialName={account.name} email={account.email} embedded />
+          <AccountPasswordSettings mustChangePassword={account.mustChangePassword} embedded />
+        </div>
+      </article>
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {t(uiLocale, "settings.profile.section.profile")}
-        </p>
-        <AccountProfileSettings initialName={account.name} email={account.email} />
-      </div>
-
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {t(uiLocale, "settings.profile.section.security")}
-        </p>
-        <AccountPasswordSettings mustChangePassword={account.mustChangePassword} />
-      </div>
-
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">
           {t(uiLocale, "settings.section.navigate")}
         </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

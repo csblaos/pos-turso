@@ -528,6 +528,24 @@
   - ต้องคง continuity ของ role เดิม จึงเลือก backfill ผ่าน migration แทน fallback ใน runtime
 - Consequence:
   - policy สิทธิ์ชัดเจนขึ้น (ship ไม่เท่ากับ return)
+
+## ADR-026: ใช้บัญชีรับเงินเดียว + QR Capability + 1 Account = 1 Currency
+
+- Date: March 30, 2026
+- Status: Accepted
+- Decision:
+  - หน้า `/settings/store/payments` จะไม่ให้ผู้ใช้คิดเป็น type `BANK` กับ `LAO_QR` แยกกันอีก แต่ใช้บัญชีรับเงินเดียวที่มีข้อมูลธนาคารเสมอ แล้วเปิด/ปิด capability `มี QR`
+  - schema `store_payment_accounts` เพิ่ม `currency` ต่อบัญชี เพื่อบอกว่ายอดเงินจริงของบัญชีนี้อยู่ในสกุลใด (`LAK/THB/USD`) และยึดกติกา `1 account = 1 currency`
+  - ฝั่ง runtime ยังเก็บ `account_type = BANK | LAO_QR` ไว้ชั่วคราวเพื่อ backward compatibility กับ flow cash-flow / order เดิม โดยตีความว่า `LAO_QR` = บัญชีนั้นมี QR
+  - order flow จะกรองและ validate บัญชีจากทั้ง `มี QR ไหม` และ `account.currency === paymentCurrency` ไม่ใช่เช็กแค่ type อย่างเดียว
+- Reason:
+  - usage จริงในลาวมักเป็นบัญชีเดียวที่มีทั้งเลขบัญชีและ QR; การแยกเป็นคนละ type บังคับให้ user คิดเป็น technical model มากกว่า business model
+  - แม้ร้านจะรองรับหลายสกุลเงินที่ระดับ store แต่บัญชีธนาคารจริงในลาวมักผูกกับสกุลเดียว การใช้ array ของ currencies ต่อบัญชีเสี่ยงทำให้ operator เลือกบัญชีผิด
+  - การยุบเป็นบัญชีเดียวแต่บังคับ `1 account = 1 currency` ช่วยให้ UX ตรงโลกจริงและ reconcile ง่ายกว่า
+- Consequence:
+  - UX settings ตรง mental model ฝั่งร้านมากขึ้น
+  - API/order validation ซับซ้อนขึ้นเล็กน้อยเพราะต้องเช็ก capability และ exact currency พร้อมกัน
+  - cash-flow และ integration เก่ายังไม่ต้อง rewrite ทันที เพราะใช้ `account_type` เดิมเป็น compatibility layer ไปก่อนได้
   - store เดิมใช้งานต่อได้จาก backfill ในชั้นข้อมูล โดยไม่เพิ่มเงื่อนไขพิเศษในโค้ด API
 
 ## ADR-026: COD Returned Timestamp เป็นแหล่งจริงของรายงานตีกลับรายวัน

@@ -2,7 +2,11 @@ import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 
 import { db } from "@/lib/db/client";
-import { defaultStoreVatMode, parseStoreCurrency } from "@/lib/finance/store-financial";
+import {
+  defaultStoreVatMode,
+  parseStoreCurrency,
+  type StoreCurrency,
+} from "@/lib/finance/store-financial";
 import {
   auditEvents,
   contacts,
@@ -213,6 +217,7 @@ export type OrderCatalogPaymentAccount = {
   accountName: string;
   accountNumber: string | null;
   qrImageUrl: string | null;
+  currency: StoreCurrency;
   isDefault: boolean;
   isActive: boolean;
 };
@@ -246,6 +251,7 @@ const mapOrderCatalogPaymentAccount = (row: {
   accountName: string;
   accountNumber: string | null;
   qrImageUrl: string | null;
+  currency: string | null;
   isDefault: boolean;
   isActive: boolean;
 }): OrderCatalogPaymentAccount => ({
@@ -256,6 +262,7 @@ const mapOrderCatalogPaymentAccount = (row: {
   accountName: row.accountName,
   accountNumber: row.accountNumber,
   qrImageUrl: resolvePaymentQrImageUrl(row.qrImageUrl),
+  currency: parseStoreCurrency(row.currency, "LAK"),
   isDefault: row.isDefault,
   isActive: row.isActive,
 });
@@ -987,6 +994,7 @@ export async function getOrderCatalogForStore(storeId: string): Promise<OrderCat
                 accountName: storePaymentAccounts.accountName,
                 accountNumber: storePaymentAccounts.accountNumber,
                 qrImageUrl: storePaymentAccounts.qrImageUrl,
+                currency: storePaymentAccounts.currency,
                 isDefault: storePaymentAccounts.isDefault,
                 isActive: storePaymentAccounts.isActive,
               })
@@ -1151,6 +1159,7 @@ export async function getOrderManageCatalogForStore(storeId: string): Promise<Or
     accountName: string;
     accountNumber: string | null;
     qrImageUrl: string | null;
+    currency: string | null;
     isDefault: boolean;
     isActive: boolean;
   }> = [];
@@ -1166,6 +1175,7 @@ export async function getOrderManageCatalogForStore(storeId: string): Promise<Or
           accountName: storePaymentAccounts.accountName,
           accountNumber: storePaymentAccounts.accountNumber,
           qrImageUrl: storePaymentAccounts.qrImageUrl,
+          currency: storePaymentAccounts.currency,
           isDefault: storePaymentAccounts.isDefault,
           isActive: storePaymentAccounts.isActive,
         })
@@ -1210,6 +1220,7 @@ export async function getActiveQrPaymentAccountsForStore(
           accountName: storePaymentAccounts.accountName,
           accountNumber: storePaymentAccounts.accountNumber,
           qrImageUrl: storePaymentAccounts.qrImageUrl,
+          currency: storePaymentAccounts.currency,
           isDefault: storePaymentAccounts.isDefault,
           isActive: storePaymentAccounts.isActive,
         })

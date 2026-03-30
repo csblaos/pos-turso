@@ -5,8 +5,9 @@
 ## Migration Status
 
 - journal entries: `43`
-- latest migration tag: `0042_purchase_extra_cost_currency`
+- latest migration tag: `0043_payment_account_currency`
 - latest focus:
+  - เพิ่ม `store_payment_accounts.currency` สำหรับระบุว่าสกุลเงินจริงของบัญชีรับเงินนั้นคืออะไร
   - เพิ่ม operational cash flow foundation:
     - ตาราง `financial_accounts`
     - ตาราง `cash_flow_entries`
@@ -145,6 +146,8 @@
 - `orders.store_id -> stores.id`
 - `orders.contact_id -> contacts.id`
 - `orders.payment_account_id -> store_payment_accounts.id`
+- `store_payment_accounts.currency` = สกุลเงินจริงของบัญชีรับเงินนั้น (`LAK | THB | USD`) และ 1 บัญชีใช้ได้กับ 1 สกุลเท่านั้น
+- `store_payment_accounts.account_type` ยังเก็บ `BANK | LAO_QR` เพื่อบอก capability `มี QR หรือไม่`; UX ฝั่ง settings ใช้บัญชีเดียว + toggle `มี QR` แทนการแยกประเภทในฟอร์ม
 - `orders.created_by -> users.id`
 - `order_items.order_id -> orders.id`
 - `order_items.product_id -> products.id`

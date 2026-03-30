@@ -869,12 +869,22 @@ export function OrdersManagement(props: OrdersManagementProps) {
     supportedPaymentCurrencies[0] ?? parseStoreCurrency(catalog.storeCurrency),
   );
   const qrPaymentAccounts = useMemo(
-    () => catalog.paymentAccounts.filter((account) => account.accountType === "LAO_QR"),
-    [catalog.paymentAccounts],
+    () =>
+      catalog.paymentAccounts.filter(
+        (account) =>
+          account.accountType === "LAO_QR" &&
+          account.currency === selectedPaymentCurrency,
+      ),
+    [catalog.paymentAccounts, selectedPaymentCurrency],
   );
   const activeQrPaymentAccounts = useMemo(
     () => qrPaymentAccounts.filter((account) => account.isActive),
     [qrPaymentAccounts],
+  );
+  const getActiveQrPaymentAccountsForCurrency = useCallback(
+    (currency: OrderListItem["paymentCurrency"]) =>
+      activeQrPaymentAccounts.filter((account) => account.currency === currency),
+    [activeQrPaymentAccounts],
   );
   const selectedQrPaymentAccount = useMemo(
     () => qrPaymentAccounts.find((account) => account.id === watchedPaymentAccountId) ?? null,
@@ -1203,10 +1213,11 @@ export function OrdersManagement(props: OrdersManagementProps) {
       return null;
     }
     return (
-      activeQrPaymentAccounts.find((account) => account.id === orderReviewSheet.paymentAccountId) ??
-      null
+      getActiveQrPaymentAccountsForCurrency(orderReviewSheet.paymentCurrency).find(
+        (account) => account.id === orderReviewSheet.paymentAccountId,
+      ) ?? null
     );
-  }, [activeQrPaymentAccounts, orderReviewSheet]);
+  }, [getActiveQrPaymentAccountsForCurrency, orderReviewSheet]);
   const buildOrderQuickActionLoadingKey = useCallback(
     (orderId: string, actionKey: string) => `${orderId}:${actionKey}`,
     [],
@@ -1329,10 +1340,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
         paymentCurrency: order.paymentCurrency,
         actionLabelKey: quickAction.labelKey,
         paymentMethod: "CASH",
-        paymentAccountId: activeQrPaymentAccounts[0]?.id ?? "",
+        paymentAccountId: getActiveQrPaymentAccountsForCurrency(order.paymentCurrency)[0]?.id ?? "",
       });
     },
-    [activeQrPaymentAccounts, uiLocale],
+    [getActiveQrPaymentAccountsForCurrency, uiLocale],
   );
   const runOrderReviewAction = useCallback(async () => {
     if (!orderReviewSheet) {
@@ -3721,10 +3732,12 @@ export function OrdersManagement(props: OrdersManagementProps) {
       return;
     }
 
-    if (nextMethod === "LAO_QR" && !watchedPaymentAccountId) {
-      const defaultQrAccount = qrPaymentAccounts[0]?.id ?? "";
-      if (defaultQrAccount) {
-        form.setValue("paymentAccountId", defaultQrAccount, {
+    if (nextMethod === "LAO_QR") {
+      const currentAccountStillValid = qrPaymentAccounts.some(
+        (account) => account.id === watchedPaymentAccountId,
+      );
+      if (!currentAccountStillValid) {
+        form.setValue("paymentAccountId", qrPaymentAccounts[0]?.id ?? "", {
           shouldDirty: true,
           shouldValidate: true,
         });
@@ -3732,7 +3745,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
       return;
     }
 
-    if (nextMethod !== "LAO_QR" && watchedPaymentAccountId) {
+    if (watchedPaymentAccountId) {
       form.setValue("paymentAccountId", "", { shouldDirty: true, shouldValidate: true });
     }
   }, [
@@ -4971,11 +4984,17 @@ export function OrdersManagement(props: OrdersManagementProps) {
                   <option value="">{t(uiLocale, "orders.create.paymentAccount.placeholder")}</option>
                   {qrPaymentAccounts.map((account) => (
                     <option key={account.id} value={account.id}>
-                      {account.displayName} ({resolveLaosBankDisplayName(account.bankName)})
+                      {account.displayName} ({resolveLaosBankDisplayName(account.bankName)} •{" "}
+                      {currencyLabel(account.currency)})
                     </option>
                   ))}
                 </select>
                 <p className="text-xs text-red-600">{form.formState.errors.paymentAccountId?.message}</p>
+                {qrPaymentAccounts.length <= 0 ? (
+                  <p className="text-[11px] text-slate-500">
+                    ยังไม่มีบัญชี QR ที่รองรับ {currencyLabel(selectedPaymentCurrency)} สำหรับร้านนี้
+                  </p>
+                ) : null}
                 {selectedQrPaymentAccount ? (
                   <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
                     <div className="flex items-start justify-between gap-3">
@@ -7221,7 +7240,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
                                   paymentMethod: method,
                                   paymentAccountId:
                                     method === "LAO_QR"
-                                      ? current.paymentAccountId || activeQrPaymentAccounts[0]?.id || ""
+                                      ? current.paymentAccountId ||
+                                        getActiveQrPaymentAccountsForCurrency(current.paymentCurrency)[0]?.id ||
+                                        ""
                                       : "",
                                 }
                               : current,
@@ -7243,7 +7264,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       id="order-review-qr-account"
                       className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
                       value={orderReviewSheet.paymentAccountId}
-                      disabled={quickActionLoadingKey !== null || activeQrPaymentAccounts.length <= 0}
+                      disabled={
+                        quickActionLoadingKey !== null ||
+                        getActiveQrPaymentAccountsForCurrency(orderReviewSheet.paymentCurrency).length <= 0
+                      }
                       onChange={(event) =>
                         setOrderReviewSheet((current) =>
                           current && current.kind === "confirm-paid"
@@ -7256,9 +7280,9 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       }
                     >
                       <option value="">{t(uiLocale, "orders.management.review.confirmPaid.paymentAccountPlaceholder")}</option>
-                      {activeQrPaymentAccounts.map((account) => (
+                      {getActiveQrPaymentAccountsForCurrency(orderReviewSheet.paymentCurrency).map((account) => (
                         <option key={account.id} value={account.id}>
-                          {account.displayName}
+                          {account.displayName} ({currencyLabel(account.currency)})
                         </option>
                       ))}
                     </select>
@@ -7267,9 +7291,10 @@ export function OrdersManagement(props: OrdersManagementProps) {
                         {selectedReviewQrAccount.bankName?.trim() || selectedReviewQrAccount.accountName}
                       </p>
                     ) : null}
-                    {activeQrPaymentAccounts.length <= 0 ? (
+                    {getActiveQrPaymentAccountsForCurrency(orderReviewSheet.paymentCurrency).length <= 0 ? (
                       <p className="text-xs text-amber-700">
-                        {t(uiLocale, "orders.management.review.confirmPaid.error.noQrAccounts")}
+                        {t(uiLocale, "orders.management.review.confirmPaid.error.noQrAccounts")} (
+                        {currencyLabel(orderReviewSheet.paymentCurrency)})
                       </p>
                     ) : null}
                   </div>

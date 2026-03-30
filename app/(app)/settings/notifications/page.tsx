@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Bell, ChevronRight, Shield } from "lucide-react";
 import { redirect } from "next/navigation";
 
+import { AccountNotificationsHelpButton } from "@/components/app/account-notifications-help-button";
 import { NotificationsInboxPanel } from "@/components/app/notifications-inbox-panel";
 import {
   getUserPermissionsForCurrentSession,
@@ -41,24 +42,33 @@ export default async function SettingsNotificationsPage() {
   }
 
   return (
-    <section className="space-y-5">
-      <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
-          {t(uiLocale, "settings.link.accountNotifications.title")}
-        </h1>
-        <p className="text-sm text-slate-500">{t(uiLocale, "settings.link.accountNotifications.description")}</p>
-      </header>
+    <section className="space-y-2">
+      <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">
+              {t(uiLocale, "settings.link.accountNotifications.title")}
+            </p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {t(uiLocale, "settings.link.accountNotifications.description")}
+            </p>
+          </div>
+          <AccountNotificationsHelpButton uiLocale={uiLocale} />
+        </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-        <p className="text-xs text-slate-600">
-          {t(uiLocale, "settings.notifications.cronHint")}
-        </p>
-      </div>
+        <div className="space-y-4 px-4 py-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs text-slate-600">
+              {t(uiLocale, "settings.notifications.cronHint")}
+            </p>
+          </div>
 
-      <NotificationsInboxPanel canManageRules={canManageRules} />
+          <NotificationsInboxPanel canManageRules={canManageRules} />
+        </div>
+      </article>
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">
           {t(uiLocale, "settings.section.navigate")}
         </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

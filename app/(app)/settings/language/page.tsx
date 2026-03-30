@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronRight, Globe } from "lucide-react";
 import { redirect } from "next/navigation";
 
+import { AccountLanguageHelpButton } from "@/components/app/account-language-help-button";
 import { AccountLanguageSettings } from "@/components/app/account-language-settings";
 import { getSession } from "@/lib/auth/session";
 import { t } from "@/lib/i18n/messages";
@@ -35,23 +36,20 @@ export default async function SettingsLanguagePage() {
   const uiLocale = session.uiLocale;
 
   return (
-    <section className="space-y-5">
-      <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
-          {t(uiLocale, "settings.language.title")}
-        </h1>
-        <p className="text-sm text-slate-500">{t(uiLocale, "settings.language.description")}</p>
-      </header>
+    <section className="space-y-2">
+      <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">{t(uiLocale, "settings.language.title")}</p>
+            <p className="mt-0.5 text-xs text-slate-500">{t(uiLocale, "settings.language.description")}</p>
+          </div>
+          <AccountLanguageHelpButton uiLocale={uiLocale} />
+        </div>
+        <AccountLanguageSettings locale={uiLocale} initialUiLocale={uiLocale} embedded />
+      </article>
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {t(uiLocale, "settings.section.display")}
-        </p>
-        <AccountLanguageSettings locale={uiLocale} initialUiLocale={uiLocale} />
-      </div>
-
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">
           {t(uiLocale, "settings.section.navigate")}
         </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

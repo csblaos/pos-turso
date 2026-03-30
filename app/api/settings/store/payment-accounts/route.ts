@@ -3,9 +3,19 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { db } from "@/lib/db/client";
-import { storePaymentAccounts } from "@/lib/db/schema";
+import { storePaymentAccounts, stores } from "@/lib/db/schema";
+import {
+  parseStoreCurrency,
+  parseSupportedCurrencies,
+  storeCurrencyValues,
+  type StoreCurrency,
+} from "@/lib/finance/store-financial";
 import { normalizeLaosBankStorageValue } from "@/lib/payments/laos-banks";
-import { paymentAccountTypeValues, type PaymentAccountType } from "@/lib/payments/store-payment";
+import {
+  paymentAccountSupportsQr,
+  paymentAccountTypeValues,
+  type PaymentAccountType,
+} from "@/lib/payments/store-payment";
 import { enforcePermission, toRBACErrorResponse } from "@/lib/rbac/access";
 import {
   deletePaymentQrImageFromR2,
@@ -36,6 +46,7 @@ const createPaymentAccountSchema = z.object({
   accountName: z.string().trim().min(1).max(120),
   accountNumber: z.union([z.string(), z.null()]).optional(),
   qrImageUrl: z.union([z.string().url(), z.string().trim().max(500), z.null()]).optional(),
+  currency: z.enum(storeCurrencyValues).optional(),
   isDefault: z.boolean().optional(),
   isActive: z.boolean().optional(),
   hasQrImageFile: z.boolean().optional(),
@@ -50,6 +61,7 @@ const updatePaymentAccountSchema = z
     accountName: z.string().trim().min(1).max(120).optional(),
     accountNumber: z.union([z.string(), z.null()]).optional(),
     qrImageUrl: z.union([z.string().url(), z.string().trim().max(500), z.null()]).optional(),
+    currency: z.enum(storeCurrencyValues).optional(),
     isDefault: z.boolean().optional(),
     isActive: z.boolean().optional(),
     removeQrImage: z.boolean().optional(),
@@ -63,6 +75,7 @@ const updatePaymentAccountSchema = z
       payload.accountName !== undefined ||
       payload.accountNumber !== undefined ||
       payload.qrImageUrl !== undefined ||
+      payload.currency !== undefined ||
       payload.isDefault !== undefined ||
       payload.isActive !== undefined ||
       payload.removeQrImage !== undefined ||
@@ -80,6 +93,7 @@ type ParsedCreatePaymentPayload = {
   accountName: string;
   accountNumber?: string | null;
   qrImageUrl?: string | null;
+  currency?: StoreCurrency;
   isDefault?: boolean;
   isActive?: boolean;
   hasQrImageFile?: boolean;
@@ -94,6 +108,7 @@ type ParsedUpdatePaymentPayload = {
   accountName?: string;
   accountNumber?: string | null;
   qrImageUrl?: string | null;
+  currency?: StoreCurrency;
   isDefault?: boolean;
   isActive?: boolean;
   removeQrImage?: boolean;
@@ -146,11 +161,11 @@ const validateByType = (params: {
   if (!params.accountNumber) {
     return "กรุณาระบุเลขบัญชี";
   }
-  if (params.accountType === "LAO_QR" && !params.qrImageUrl && !params.hasQrImageFile) {
+  if (paymentAccountSupportsQr(params.accountType) && !params.qrImageUrl && !params.hasQrImageFile) {
     return "กรุณาอัปโหลดรูป QR";
   }
   if (
-    params.accountType === "LAO_QR" &&
+    paymentAccountSupportsQr(params.accountType) &&
     params.qrImageUrl &&
     !normalizePaymentQrImageStorageValue(params.qrImageUrl)
   ) {
@@ -279,6 +294,7 @@ async function parseCreatePayload(request: Request) {
       accountName: getFormString(formData, "accountName"),
       accountNumber: getFormString(formData, "accountNumber"),
       qrImageUrl: getFormString(formData, "qrImageUrl"),
+      currency: getFormString(formData, "currency"),
       isDefault: parsedIsDefault.value,
       isActive: parsedIsActive.value,
       hasQrImageFile: Boolean(qrImageFile),
@@ -349,6 +365,7 @@ async function parseUpdatePayload(request: Request) {
       accountName: getFormString(formData, "accountName"),
       accountNumber: getFormString(formData, "accountNumber"),
       qrImageUrl: getFormString(formData, "qrImageUrl"),
+      currency: getFormString(formData, "currency"),
       isDefault: parsedIsDefault.value,
       isActive: parsedIsActive.value,
       removeQrImage: parsedRemoveQrImage.value,
@@ -394,6 +411,15 @@ async function parseUpdatePayload(request: Request) {
 }
 
 async function listPaymentAccounts(storeId: string) {
+  const [storeRow] = await db
+    .select({
+      currency: stores.currency,
+      supportedCurrencies: stores.supportedCurrencies,
+    })
+    .from(stores)
+    .where(eq(stores.id, storeId))
+    .limit(1);
+  const storeBaseCurrency = parseStoreCurrency(storeRow?.currency);
   const rows = await db
     .select({
       id: storePaymentAccounts.id,
@@ -403,6 +429,7 @@ async function listPaymentAccounts(storeId: string) {
       accountName: storePaymentAccounts.accountName,
       accountNumber: storePaymentAccounts.accountNumber,
       qrImageUrl: storePaymentAccounts.qrImageUrl,
+      currency: storePaymentAccounts.currency,
       promptpayId: storePaymentAccounts.promptpayId,
       isDefault: storePaymentAccounts.isDefault,
       isActive: storePaymentAccounts.isActive,
@@ -425,11 +452,46 @@ async function listPaymentAccounts(storeId: string) {
     accountName: row.accountName,
     accountNumber: row.accountNumber,
     qrImageUrl: resolvePaymentQrImageUrl(row.qrImageUrl ?? row.promptpayId ?? null),
+    currency: parseStoreCurrency(row.currency, storeBaseCurrency),
     isDefault: row.isDefault,
     isActive: row.isActive,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }));
+}
+
+async function getStorePaymentCurrencyPolicy(storeId: string) {
+  const [storeRow] = await db
+    .select({
+      currency: stores.currency,
+      supportedCurrencies: stores.supportedCurrencies,
+    })
+    .from(stores)
+    .where(eq(stores.id, storeId))
+    .limit(1);
+
+  const baseCurrency = parseStoreCurrency(storeRow?.currency);
+  const storeSupportedCurrencies = parseSupportedCurrencies(storeRow?.supportedCurrencies, baseCurrency);
+
+  return { baseCurrency, storeSupportedCurrencies };
+}
+
+function normalizeAccountCurrency(
+  rawValue: StoreCurrency | undefined,
+  storeSupportedCurrencies: StoreCurrency[],
+  baseCurrency: StoreCurrency,
+) {
+  const nextCurrency = rawValue ?? baseCurrency;
+  if (!storeSupportedCurrencies.includes(nextCurrency)) {
+    return {
+      value: null,
+      error: "กรุณาเลือกสกุลเงินของบัญชีให้ตรงกับสกุลที่ร้านรองรับ",
+    };
+  }
+  return {
+    value: nextCurrency,
+    error: null as string | null,
+  };
 }
 
 async function ensureDefaultAccount(storeId: string) {
@@ -523,6 +585,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: bankNameNormalizedResult.error }, { status: 400 });
     }
     const bankName = bankNameNormalizedResult.value;
+    const { baseCurrency, storeSupportedCurrencies } = await getStorePaymentCurrencyPolicy(storeId);
+    const normalizedCurrencyResult = normalizeAccountCurrency(
+      payload.currency,
+      storeSupportedCurrencies,
+      baseCurrency,
+    );
+    if (normalizedCurrencyResult.error) {
+      return NextResponse.json({ message: normalizedCurrencyResult.error }, { status: 400 });
+    }
+    const currency = normalizedCurrencyResult.value ?? baseCurrency;
     const accountNumber = normalizeOptionalText(payload.accountNumber ?? null);
     const qrImageUrl = normalizePaymentQrImageStorageValue(payload.qrImageUrl ?? null);
     const validationError = validateByType({
@@ -537,7 +609,7 @@ export async function POST(request: Request) {
     }
 
     let uploadedQrImageRef: string | null = null;
-    if (payload.accountType === "LAO_QR" && payload.qrImageFile) {
+    if (paymentAccountSupportsQr(payload.accountType) && payload.qrImageFile) {
       if (!isPaymentQrR2Configured()) {
         return NextResponse.json(
           { message: "ยังไม่ได้ตั้งค่า Cloudflare R2 สำหรับรูป QR" },
@@ -557,7 +629,9 @@ export async function POST(request: Request) {
       }
     }
 
-    const nextQrImageUrl = payload.accountType === "LAO_QR" ? uploadedQrImageRef ?? qrImageUrl : null;
+    const nextQrImageUrl = paymentAccountSupportsQr(payload.accountType)
+      ? uploadedQrImageRef ?? qrImageUrl
+      : null;
 
     try {
       const [policy, countRows] = await Promise.all([
@@ -620,6 +694,7 @@ export async function POST(request: Request) {
         accountName: payload.accountName.trim(),
         accountNumber,
         qrImageUrl: nextQrImageUrl,
+        currency,
         promptpayId: null,
         isDefault: nextIsDefault,
         isActive: nextIsActive,
@@ -642,6 +717,7 @@ export async function POST(request: Request) {
           bankName,
           accountName: payload.accountName.trim(),
           accountNumberMasked: maskAccountNumber(accountNumber),
+          currency,
           isDefault: nextIsDefault,
           isActive: nextIsActive,
           hasQrImage: Boolean(nextQrImageUrl),
@@ -652,6 +728,7 @@ export async function POST(request: Request) {
           bankName,
           accountName: payload.accountName.trim(),
           accountNumberMasked: maskAccountNumber(accountNumber),
+          currency,
           isDefault: nextIsDefault,
           isActive: nextIsActive,
           hasQrImage: Boolean(nextQrImageUrl),
@@ -745,6 +822,7 @@ export async function PATCH(request: Request) {
     const payload = parsedPayload.value;
     let uploadedQrImageRef: string | null = null;
     let didPersistUpdate = false;
+    const { baseCurrency, storeSupportedCurrencies } = await getStorePaymentCurrencyPolicy(storeId);
 
     try {
       const [target] = await db
@@ -756,6 +834,7 @@ export async function PATCH(request: Request) {
           accountName: storePaymentAccounts.accountName,
           accountNumber: storePaymentAccounts.accountNumber,
           qrImageUrl: storePaymentAccounts.qrImageUrl,
+          currency: storePaymentAccounts.currency,
           promptpayId: storePaymentAccounts.promptpayId,
           isDefault: storePaymentAccounts.isDefault,
           isActive: storePaymentAccounts.isActive,
@@ -801,6 +880,20 @@ export async function PATCH(request: Request) {
         payload.accountNumber !== undefined
           ? normalizeOptionalText(payload.accountNumber)
           : target.accountNumber;
+      const normalizedCurrencyResult = normalizeAccountCurrency(
+        payload.currency !== undefined
+          ? payload.currency
+          : parseStoreCurrency(target.currency, baseCurrency),
+        storeSupportedCurrencies,
+        baseCurrency,
+      );
+      if (normalizedCurrencyResult.error) {
+        return NextResponse.json(
+          { message: normalizedCurrencyResult.error },
+          { status: 400 },
+        );
+      }
+      const nextCurrency = normalizedCurrencyResult.value ?? baseCurrency;
 
       let nextQrImageUrl =
         payload.qrImageUrl !== undefined
@@ -811,7 +904,7 @@ export async function PATCH(request: Request) {
         nextQrImageUrl = null;
       }
 
-      if (nextAccountType === "LAO_QR" && payload.qrImageFile) {
+      if (paymentAccountSupportsQr(nextAccountType) && payload.qrImageFile) {
         if (!isPaymentQrR2Configured()) {
           return NextResponse.json(
             { message: "ยังไม่ได้ตั้งค่า Cloudflare R2 สำหรับรูป QR" },
@@ -832,7 +925,7 @@ export async function PATCH(request: Request) {
         }
       }
 
-      if (nextAccountType !== "LAO_QR") {
+      if (!paymentAccountSupportsQr(nextAccountType)) {
         nextQrImageUrl = null;
       }
 
@@ -889,6 +982,7 @@ export async function PATCH(request: Request) {
           accountName: nextAccountName,
           accountNumber: nextAccountNumber,
           qrImageUrl: nextQrImageUrl,
+          currency: nextCurrency,
           promptpayId: null,
           isDefault: nextIsDefault,
           isActive: nextIsActive,
@@ -928,6 +1022,7 @@ export async function PATCH(request: Request) {
           accountName: target.accountName,
           accountNumberMasked: maskAccountNumber(target.accountNumber),
           qrImageUrl: target.qrImageUrl ?? target.promptpayId ?? null,
+          currency: parseStoreCurrency(target.currency, baseCurrency),
           isDefault: target.isDefault,
           isActive: target.isActive,
         },
@@ -939,6 +1034,7 @@ export async function PATCH(request: Request) {
           accountName: nextAccountName,
           accountNumberMasked: maskAccountNumber(nextAccountNumber),
           qrImageUrl: nextQrImageUrl,
+          currency: nextCurrency,
           isDefault: nextIsDefault,
           isActive: nextIsActive,
         },

@@ -12,6 +12,7 @@ import {
   storeMembers,
   users,
 } from "@/lib/db/schema";
+import { parseStoreCurrency } from "@/lib/finance/store-financial";
 import {
   RBACError,
   enforcePermission,
@@ -747,6 +748,7 @@ export async function PATCH(
           const [paymentAccount] = await db
             .select({
               id: storePaymentAccounts.id,
+              currency: storePaymentAccounts.currency,
             })
             .from(storePaymentAccounts)
             .where(
@@ -767,6 +769,19 @@ export async function PATCH(
               {
                 orderNo: order.orderNo,
                 paymentMethod: effectivePaymentMethod,
+              },
+            );
+          }
+
+          if (parseStoreCurrency(paymentAccount.currency, order.paymentCurrency) !== order.paymentCurrency) {
+            return failAction(
+              "PAYMENT_ACCOUNT_CURRENCY_MISMATCH",
+              "บัญชี QR ที่เลือกยังไม่รองรับสกุลเงินของออเดอร์นี้",
+              400,
+              {
+                orderNo: order.orderNo,
+                paymentMethod: effectivePaymentMethod,
+                paymentCurrency: order.paymentCurrency,
               },
             );
           }

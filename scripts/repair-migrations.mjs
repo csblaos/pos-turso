@@ -835,6 +835,7 @@ async function ensureSchemaCompatForLatestAuthChanges() {
       \`account_name\` text not null,
       \`account_number\` text,
       \`qr_image_url\` text,
+      \`currency\` text not null default 'LAK',
       \`promptpay_id\` text,
       \`is_default\` integer not null default 0,
       \`is_active\` integer not null default 1,
@@ -854,6 +855,12 @@ async function ensureSchemaCompatForLatestAuthChanges() {
   if (!(await columnExists("store_payment_accounts", "qr_image_url"))) {
     await client.execute("alter table `store_payment_accounts` add `qr_image_url` text");
     console.info("[db:repair] added column store_payment_accounts.qr_image_url");
+  }
+  if (!(await columnExists("store_payment_accounts", "currency"))) {
+    await client.execute(
+      "alter table `store_payment_accounts` add `currency` text not null default 'LAK'",
+    );
+    console.info("[db:repair] added column store_payment_accounts.currency");
   }
   await client.execute(`
     update \`store_payment_accounts\`
@@ -875,7 +882,26 @@ async function ensureSchemaCompatForLatestAuthChanges() {
       and \`promptpay_id\` is not null
       and trim(\`promptpay_id\`) <> ''
   `);
-  console.info("[db:repair] ensured store_payment_accounts table and indexes");
+  await client.execute(`
+    update \`store_payment_accounts\`
+    set \`currency\` = coalesce(
+      (
+        select
+          case
+            when \`stores\`.\`currency\` in ('LAK', 'THB', 'USD') then \`stores\`.\`currency\`
+            else 'LAK'
+          end
+        from \`stores\`
+        where \`stores\`.\`id\` = \`store_payment_accounts\`.\`store_id\`
+        limit 1
+      ),
+      'LAK'
+    )
+    where \`currency\` is null
+       or trim(\`currency\`) = ''
+       or \`currency\` not in ('LAK', 'THB', 'USD')
+  `);
+  console.info("[db:repair] ensured store_payment_accounts table, indexes, and currency");
 
   // ── product_categories + products.image_url/category_id (migration 0022) ──
 

@@ -1,15 +1,19 @@
 "use client";
 
-import { CheckCircle2, CircleAlert, Loader2 } from "lucide-react";
+import { CheckCircle2, CircleAlert, Info, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch } from "@/lib/auth/client-token";
+import type { UiLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
 
 type StoreInventorySettingsProps = {
   initialOutStockThreshold: number;
   initialLowStockThreshold: number;
   canUpdate: boolean;
+  uiLocale: UiLocale;
 };
 
 type UpdateStoreResponse = {
@@ -36,6 +40,7 @@ export function StoreInventorySettings({
   initialOutStockThreshold,
   initialLowStockThreshold,
   canUpdate,
+  uiLocale,
 }: StoreInventorySettingsProps) {
   const [outStockText, setOutStockText] = useState(`${initialOutStockThreshold}`);
   const [lowStockText, setLowStockText] = useState(`${initialLowStockThreshold}`);
@@ -46,22 +51,23 @@ export function StoreInventorySettings({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   const parsedOut = useMemo(() => toInt(outStockText), [outStockText]);
   const parsedLow = useMemo(() => toInt(lowStockText), [lowStockText]);
 
   const validationError = useMemo(() => {
     if (parsedOut === null) {
-      return "กรุณากรอกค่าสต็อกหมดเป็นจำนวนเต็มที่ไม่ติดลบ";
+      return t(uiLocale, "settings.stock.validation.outStockInvalid");
     }
     if (parsedLow === null) {
-      return "กรุณากรอกค่าสต็อกต่ำเป็นจำนวนเต็มที่ไม่ติดลบ";
+      return t(uiLocale, "settings.stock.validation.lowStockInvalid");
     }
     if (parsedLow < parsedOut) {
-      return "ค่าสต็อกต่ำต้องมากกว่าหรือเท่ากับค่าสต็อกหมด";
+      return t(uiLocale, "settings.stock.validation.lowLessThanOut");
     }
     return null;
-  }, [parsedLow, parsedOut]);
+  }, [parsedLow, parsedOut, uiLocale]);
 
   const isDirty =
     parsedOut !== null &&
@@ -73,12 +79,12 @@ export function StoreInventorySettings({
     setSuccessMessage(null);
 
     if (!canUpdate) {
-      setErrorMessage("บัญชีนี้ไม่มีสิทธิ์อัปเดตค่าคลังสินค้า");
+      setErrorMessage(t(uiLocale, "settings.stock.error.permissionDenied"));
       return;
     }
 
     if (validationError || parsedOut === null || parsedLow === null) {
-      setErrorMessage(validationError ?? "ข้อมูลไม่ถูกต้อง");
+      setErrorMessage(validationError ?? t(uiLocale, "settings.stock.error.invalidData"));
       return;
     }
 
@@ -98,7 +104,7 @@ export function StoreInventorySettings({
 
       const data = (await response.json().catch(() => null)) as UpdateStoreResponse | null;
       if (!response.ok) {
-        setErrorMessage(data?.message ?? "บันทึกค่าคลังสินค้าไม่สำเร็จ");
+        setErrorMessage(data?.message ?? t(uiLocale, "settings.stock.error.saveFailed"));
         return;
       }
 
@@ -110,9 +116,9 @@ export function StoreInventorySettings({
       setSavedOutStock(nextOut);
       setSavedLowStock(nextLow);
 
-      setSuccessMessage("บันทึกค่าคลังสินค้าเรียบร้อยแล้ว");
+      setSuccessMessage(t(uiLocale, "settings.stock.success.saved"));
     } catch {
-      setErrorMessage("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาลองใหม่อีกครั้ง");
+      setErrorMessage(t(uiLocale, "settings.stock.error.network"));
     } finally {
       setIsSaving(false);
     }
@@ -125,24 +131,46 @@ export function StoreInventorySettings({
     <section className="space-y-4">
       <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-          <p className="text-sm font-semibold text-slate-900">ตั้งค่าแจ้งเตือนสต็อก</p>
-          <span
-            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-              isDirty
-                ? "border-amber-200 bg-amber-50 text-amber-700"
-                : "border-emerald-200 bg-emerald-50 text-emerald-700"
-            }`}
-          >
-            {isDirty ? <CircleAlert className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-            {isDirty ? "ยังไม่บันทึก" : "บันทึกแล้ว"}
-          </span>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">
+              {t(uiLocale, "settings.link.stockThresholds.title")}
+            </p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {t(uiLocale, "settings.link.stockThresholds.description")}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                isDirty
+                  ? "border-amber-200 bg-amber-50 text-amber-700"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
+              }`}
+            >
+              {isDirty ? (
+                <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+              )}
+              {isDirty ? t(uiLocale, "settings.stock.badge.unsaved") : t(uiLocale, "settings.stock.badge.saved")}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 w-9 rounded-full px-0"
+              onClick={() => setIsHelpOpen(true)}
+              aria-label={t(uiLocale, "settings.stock.help.ariaLabel")}
+            >
+              <Info className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-4 px-4 py-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-700" htmlFor="store-out-threshold">
-                สต็อกหมด (≤)
+                {t(uiLocale, "settings.stock.field.outStock")}
               </label>
               <input
                 id="store-out-threshold"
@@ -157,7 +185,7 @@ export function StoreInventorySettings({
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-700" htmlFor="store-low-threshold">
-                สต็อกต่ำ (≤)
+                {t(uiLocale, "settings.stock.field.lowStock")}
               </label>
               <input
                 id="store-low-threshold"
@@ -173,7 +201,7 @@ export function StoreInventorySettings({
           </div>
 
           <p className="text-xs text-slate-500">
-            สต็อกต่ำต้องมากกว่าหรือเท่ากับสต็อกหมด ตัวอย่าง: หมด ≤ 0, ต่ำ ≤ 10
+            {t(uiLocale, "settings.stock.field.helper")}
           </p>
 
           {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
@@ -189,15 +217,38 @@ export function StoreInventorySettings({
               {isSaving ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  กำลังบันทึก...
+                  {t(uiLocale, "settings.stock.action.saving")}
                 </span>
               ) : (
-                "บันทึกการตั้งค่า"
+                t(uiLocale, "settings.stock.action.save")
               )}
             </Button>
           </div>
         </div>
       </article>
+
+      <SlideUpSheet
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+        title={t(uiLocale, "settings.stock.help.sheet.title")}
+        description={t(uiLocale, "settings.stock.help.sheet.description")}
+        panelMaxWidthClass="min-[1200px]:max-w-md"
+      >
+        <div className="space-y-3 text-sm text-slate-700">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">{t(uiLocale, "settings.stock.help.outStock.title")}</p>
+            <p className="mt-1 text-xs text-slate-500">{t(uiLocale, "settings.stock.help.outStock.description")}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">{t(uiLocale, "settings.stock.help.lowStock.title")}</p>
+            <p className="mt-1 text-xs text-slate-500">{t(uiLocale, "settings.stock.help.lowStock.description")}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">{t(uiLocale, "settings.stock.help.scope.title")}</p>
+            <p className="mt-1 text-xs text-slate-500">{t(uiLocale, "settings.stock.help.scope.description")}</p>
+          </div>
+        </div>
+      </SlideUpSheet>
     </section>
   );
 }

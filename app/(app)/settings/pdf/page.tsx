@@ -63,11 +63,6 @@ export default async function SettingsPdfPage() {
 
   return (
     <section className="space-y-4">
-      <header className="space-y-1">
-        <h1 className="text-xl font-semibold">{t(uiLocale, "settings.link.pdfSettings.title")}</h1>
-        <p className="text-sm text-muted-foreground">{t(uiLocale, "settings.link.pdfSettings.description")}</p>
-      </header>
-
       <StorePdfSettings
         initialConfig={initialConfig}
         storeLogoUrl={store?.logoUrl ?? null}

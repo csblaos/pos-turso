@@ -9,15 +9,6 @@ type CompressImageOptions = {
   fileNameBase?: string;
 };
 
-type CropImageOptions = {
-  x: number;
-  y: number;
-  size: number;
-  outputSize: number;
-  quality: number;
-  fileNameBase?: string;
-};
-
 function sanitizeFileNameBase(value: string) {
   return value
     .trim()
@@ -128,64 +119,4 @@ export async function compressRasterImageFile(file: File, options: CompressImage
   } finally {
     source.cleanup();
   }
-}
-
-export async function cropRasterImageFile(file: File, options: CropImageOptions) {
-  const validation = validateRasterImageFile(file);
-  if (!validation.ok) {
-    throw new Error(validation.message);
-  }
-
-  const image = await blobToImageElement(file);
-  const sourceWidth = image.naturalWidth || image.width;
-  const sourceHeight = image.naturalHeight || image.height;
-  const cropSize = Math.max(
-    1,
-    Math.min(
-      options.size,
-      sourceWidth,
-      sourceHeight,
-      sourceWidth - Math.max(0, options.x),
-      sourceHeight - Math.max(0, options.y),
-    ),
-  );
-  const cropX = Math.min(Math.max(0, options.x), Math.max(0, sourceWidth - cropSize));
-  const cropY = Math.min(Math.max(0, options.y), Math.max(0, sourceHeight - cropSize));
-
-  const canvas = document.createElement("canvas");
-  canvas.width = options.outputSize;
-  canvas.height = options.outputSize;
-
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("CANVAS_CONTEXT_UNAVAILABLE");
-  }
-
-  context.drawImage(
-    image,
-    cropX,
-    cropY,
-    cropSize,
-    cropSize,
-    0,
-    0,
-    options.outputSize,
-    options.outputSize,
-  );
-
-  const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, "image/webp", options.quality);
-  });
-
-  if (!blob) {
-    throw new Error("IMAGE_CROP_FAILED");
-  }
-
-  const fileNameBase =
-    sanitizeFileNameBase(options.fileNameBase ?? file.name.replace(/\.[^.]+$/, "")) || "image";
-
-  return new File([blob], `${fileNameBase}.webp`, {
-    type: "image/webp",
-    lastModified: Date.now(),
-  });
 }

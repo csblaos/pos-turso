@@ -9,6 +9,8 @@ export const paymentAccountTypeLabel = (value: PaymentAccountType) => {
   return "QR โอนเงิน (ลาว)";
 };
 
+export const paymentAccountSupportsQr = (value: PaymentAccountType) => value === "LAO_QR";
+
 export const maskAccountValue = (value: string | null | undefined) => {
   const normalized = value?.trim() ?? "";
   if (!normalized) {

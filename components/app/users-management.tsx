@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronRight, Copy, KeyRound, Loader2, Mail, Plus, Search, Smartphone, UserRound } from "lucide-react";
+import { Check, ChevronRight, Copy, Info, KeyRound, Loader2, Mail, Plus, Search, Smartphone, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
@@ -142,6 +142,7 @@ export function UsersManagement({
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [createErrorMessage, setCreateErrorMessage] = useState<string | null>(null);
   const [editErrorMessage, setEditErrorMessage] = useState<string | null>(null);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createMode, setCreateMode] = useState<"new" | "existing">("new");
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
@@ -630,30 +631,41 @@ export function UsersManagement({
     (createMode === "new"
       ? !canSubmitNewUser || Boolean(createdTemporaryPassword)
       : !existingRoleId || !selectedExistingUserId);
+  const hasExistingQuery = existingQuery.trim().length > 0;
 
   return (
     <section className="space-y-4">
-      <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
           <div>
-            <p className="text-sm font-semibold text-slate-900">
+            <p className="text-sm font-semibold text-slate-900">{t(uiLocale, "users.list.title")}</p>
+            <p className="mt-0.5 text-xs text-slate-500">
               {t(uiLocale, "users.summary.totalMembers.prefix")} {fmtNumber(members.length)}{" "}
               {t(uiLocale, "users.summary.totalMembers.suffix")}
             </p>
-            <p className="text-xs text-slate-500">{t(uiLocale, "users.summary.subtitle")}</p>
           </div>
-          {canCreate ? (
-            <Button className="h-10 w-full rounded-xl sm:w-auto" onClick={openCreateModal}>
-              <Plus className="h-4 w-4" />
-              {t(uiLocale, "users.action.addMember")}
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 w-9 rounded-full px-0"
+              onClick={() => setIsHelpOpen(true)}
+              aria-label={t(uiLocale, "users.help.ariaLabel")}
+            >
+              <Info className="h-4 w-4" />
             </Button>
-          ) : null}
-        </div>
-      </article>
-
-      <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-900">{t(uiLocale, "users.list.title")}</h2>
+            {canCreate ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-full px-3"
+                onClick={openCreateModal}
+              >
+                <Plus className="h-4 w-4" />
+                {t(uiLocale, "users.action.addMember")}
+              </Button>
+            ) : null}
+          </div>
         </div>
         {members.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-slate-500">
@@ -713,6 +725,29 @@ export function UsersManagement({
           </ul>
         )}
       </article>
+
+      <SlideUpSheet
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+        title={t(uiLocale, "users.help.sheet.title")}
+        description={t(uiLocale, "users.help.sheet.description")}
+        panelMaxWidthClass="min-[1200px]:max-w-md"
+      >
+        <div className="space-y-3 text-sm text-slate-700">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">{t(uiLocale, "users.help.roles.title")}</p>
+            <p className="mt-1 text-xs text-slate-500">{t(uiLocale, "users.help.roles.description")}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">{t(uiLocale, "users.help.status.title")}</p>
+            <p className="mt-1 text-xs text-slate-500">{t(uiLocale, "users.help.status.description")}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">{t(uiLocale, "users.help.access.title")}</p>
+            <p className="mt-1 text-xs text-slate-500">{t(uiLocale, "users.help.access.description")}</p>
+          </div>
+        </div>
+      </SlideUpSheet>
 
       <SlideUpSheet
         isOpen={isCreateModalOpen}
@@ -951,9 +986,16 @@ export function UsersManagement({
               ) : null}
 
               <div className="space-y-2">
-                <p className="text-xs text-slate-500">
-                  {t(uiLocale, "users.create.existingUser.candidatesTitle")}
-                </p>
+                <div className="space-y-1">
+                  <p className="text-xs text-slate-500">
+                    {t(uiLocale, "users.create.existingUser.candidatesTitle")}
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    {hasExistingQuery
+                      ? t(uiLocale, "users.create.existingUser.candidatesFilteredHint")
+                      : t(uiLocale, "users.create.existingUser.candidatesAllHint")}
+                  </p>
+                </div>
                 <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white">
                   {isLoadingExistingCandidates ? (
                     <div className="px-3 py-3 text-sm text-slate-500">
@@ -961,7 +1003,9 @@ export function UsersManagement({
                     </div>
                   ) : existingCandidates.length === 0 ? (
                     <div className="px-3 py-3 text-sm text-slate-500">
-                      {t(uiLocale, "users.create.existingUser.candidatesEmpty")}
+                      {hasExistingQuery
+                        ? t(uiLocale, "users.create.existingUser.candidatesEmptyFiltered")
+                        : t(uiLocale, "users.create.existingUser.candidatesEmpty")}
                     </div>
                   ) : (
                     <ul className="divide-y divide-slate-100">

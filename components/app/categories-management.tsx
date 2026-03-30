@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Info, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import toast from "react-hot-toast";
@@ -8,6 +8,8 @@ import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch } from "@/lib/auth/client-token";
+import type { UiLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
 import type { CategoryItem } from "@/lib/products/service";
 
 type CategoriesManagementProps = {
@@ -15,6 +17,7 @@ type CategoriesManagementProps = {
   canCreate: boolean;
   canUpdate: boolean;
   canDelete: boolean;
+  uiLocale: UiLocale;
 };
 
 export function CategoriesManagement({
@@ -22,10 +25,12 @@ export function CategoriesManagement({
   canCreate,
   canUpdate,
   canDelete,
+  uiLocale,
 }: CategoriesManagementProps) {
   const router = useRouter();
   const [categories, setCategories] = useState(initialCategories);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   /* ── Sheet state ── */
   const [isCreateSheetOpen, setIsCreateSheetOpen] = useState(false);
@@ -173,25 +178,6 @@ export function CategoriesManagement({
 
   return (
     <section className="space-y-5">
-      {/* ── Add button ── */}
-      {canCreate && (
-        <div className="space-y-2">
-          <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            เพิ่มหมวดหมู่ใหม่
-          </p>
-          <div className="sm:flex sm:justify-end">
-            <Button
-              type="button"
-              className="h-11 w-full rounded-xl sm:w-auto sm:px-5"
-              onClick={openCreateSheet}
-            >
-              <Plus className="h-4 w-4" />
-              เพิ่มหมวดหมู่
-            </Button>
-          </div>
-        </div>
-      )}
-
       {/* ── Error banner ── */}
       {errorMessage && !isEditSheetOpen && !deleteDialogCategory ? (
         <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
@@ -200,75 +186,122 @@ export function CategoriesManagement({
       ) : null}
 
       {/* ── Category list ── */}
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          รายการหมวดหมู่
-        </p>
-        <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 px-4 py-3">
-            <h2 className="text-sm font-semibold text-slate-900">
-              หมวดหมู่สินค้า ({categories.length})
-            </h2>
+      <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">{t(uiLocale, "settings.link.categories.title")}</p>
+            <p className="mt-0.5 text-xs text-slate-500">{t(uiLocale, "settings.link.categories.description")}</p>
           </div>
-          {categories.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-slate-400">
-              ยังไม่มีหมวดหมู่สินค้า
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 w-9 rounded-full px-0"
+              onClick={() => setIsHelpOpen(true)}
+              aria-label={t(uiLocale, "settings.categories.help.ariaLabel")}
+            >
+              <Info className="h-4 w-4" />
+            </Button>
+            {canCreate ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-full px-3"
+                onClick={openCreateSheet}
+              >
+                <Plus className="h-4 w-4" />
+                เพิ่มหมวดหมู่
+              </Button>
+            ) : null}
+          </div>
+        </div>
+        {categories.length === 0 ? (
+          <p className="px-4 py-8 text-center text-sm text-slate-400">
+            ยังไม่มีหมวดหมู่สินค้า
+          </p>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {categories.map((cat) => (
+              <li
+                key={cat.id}
+                className="flex min-h-12 items-center justify-between gap-3 px-4 py-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-900">
+                    {cat.name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {cat.productCount} สินค้า
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {canUpdate && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9 rounded-xl px-3 text-xs"
+                      onClick={() => openEditSheet(cat)}
+                    >
+                      <Pencil className="mr-1 h-3 w-3" />
+                      แก้ไข
+                    </Button>
+                  )}
+                  {canDelete && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9 rounded-xl border-red-200 px-3 text-xs text-red-600 hover:bg-red-50"
+                      onClick={() => openDeleteDialog(cat)}
+                      disabled={Boolean(deletingId)}
+                    >
+                      {deletingId === cat.id ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          กำลังลบ...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="mr-1 h-3 w-3" />
+                          ลบ
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </article>
+
+      <SlideUpSheet
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+        title={t(uiLocale, "settings.categories.help.sheet.title")}
+        description={t(uiLocale, "settings.categories.help.sheet.description")}
+        panelMaxWidthClass="min-[1200px]:max-w-md"
+      >
+        <div className="space-y-3 text-sm text-slate-700">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">{t(uiLocale, "settings.categories.help.grouping.title")}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {t(uiLocale, "settings.categories.help.grouping.description")}
             </p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {categories.map((cat) => (
-                <li
-                  key={cat.id}
-                  className="flex min-h-12 items-center justify-between gap-3 px-4 py-2.5"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-900">
-                      {cat.name}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {cat.productCount} สินค้า
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {canUpdate && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-9 rounded-xl px-3 text-xs"
-                        onClick={() => openEditSheet(cat)}
-                      >
-                        <Pencil className="mr-1 h-3 w-3" />
-                        แก้ไข
-                      </Button>
-                    )}
-                    {canDelete && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-9 rounded-xl border-red-200 px-3 text-xs text-red-600 hover:bg-red-50"
-                        onClick={() => openDeleteDialog(cat)}
-                        disabled={Boolean(deletingId)}
-                      >
-                        {deletingId === cat.id ? (
-                          <>
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            กำลังลบ...
-                          </>
-                        ) : (
-                          <>
-                            <Trash2 className="mr-1 h-3 w-3" />
-                            ลบ
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </article>
-      </div>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">{t(uiLocale, "settings.categories.help.renaming.title")}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {t(uiLocale, "settings.categories.help.renaming.description")}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">{t(uiLocale, "settings.categories.help.deletion.title")}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {t(uiLocale, "settings.categories.help.deletion.description")}
+            </p>
+          </div>
+        </div>
+      </SlideUpSheet>
 
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
        * SlideUpSheet — Create Category

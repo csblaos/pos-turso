@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, ChevronRight, CircleAlert, Eye, Loader2 } from "lucide-react";
+import { CheckCircle2, ChevronRight, CircleAlert, Eye, Info, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -94,6 +94,7 @@ export function StorePdfSettings({
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isSectionSheetOpen, setIsSectionSheetOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<PdfSection>("po");
   const [sectionEnabled, setSectionEnabled] = useState<Record<PdfSection, boolean>>({
     po: true,
@@ -390,9 +391,17 @@ export function StorePdfSettings({
   return (
     <section className="space-y-4">
       <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="space-y-1 border-b border-slate-100 px-4 py-3">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
           <p className="text-sm font-semibold text-slate-900">เมนูตั้งค่าเอกสาร PDF</p>
-          <p className="text-xs text-slate-500">เลือกรายการ แล้วระบบจะเปิดฟอร์มในหน้าต่าง Slide-up</p>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 w-9 rounded-full px-0"
+            onClick={() => setIsHelpOpen(true)}
+            aria-label="วิธีตั้งค่าเอกสาร PDF"
+          >
+            <Info className="h-4 w-4" />
+          </Button>
         </div>
         <ul className="divide-y divide-slate-100">
           {SECTION_ITEMS.map((section, index) => (
@@ -424,6 +433,35 @@ export function StorePdfSettings({
           ))}
         </ul>
       </article>
+
+      <SlideUpSheet
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+        title="วิธีตั้งค่าเอกสาร PDF"
+        description="สรุปกติกาและจุดสำคัญก่อนเข้าไปตั้งค่าแต่ละเอกสาร"
+        panelMaxWidthClass="min-[1200px]:max-w-md"
+      >
+        <div className="space-y-3 text-sm text-slate-700">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">เลือกรายการก่อน แล้วระบบจะเปิดฟอร์มแยกให้</p>
+            <p className="mt-1 text-xs text-slate-500">
+              แต่ละเอกสารมีหน้าตั้งค่าใน Slide-up ของตัวเอง ช่วยให้แก้ทีละประเภทได้ชัดกว่าใส่ทุกอย่างไว้หน้าเดียว
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">ข้อมูลบริษัทใช้ซ้ำในหลายเอกสาร</p>
+            <p className="mt-1 text-xs text-slate-500">
+              ชื่อบริษัท ที่อยู่ และเบอร์โทร จะถูกใช้เป็นข้อมูลหัวเอกสารตามประเภทที่เปิดใช้งานไว้
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">Preview ตอนนี้มีเฉพาะ PO</p>
+            <p className="mt-1 text-xs text-slate-500">
+              ถ้าต้องการเช็กหน้าตาเอกสารก่อนบันทึก ให้ใช้ปุ่ม Preview PDF ในเมนูใบสั่งซื้อ (PO)
+            </p>
+          </div>
+        </div>
+      </SlideUpSheet>
 
       <SlideUpSheet
         isOpen={isSectionSheetOpen}

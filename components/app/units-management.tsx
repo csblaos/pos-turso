@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Plus } from "lucide-react";
+import { Info, Loader2, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import toast from "react-hot-toast";
@@ -10,6 +10,8 @@ import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch } from "@/lib/auth/client-token";
+import type { UiLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
 import type { UnitOption } from "@/lib/products/service";
 import {
   createUnitSchema,
@@ -22,13 +24,15 @@ type UnitsManagementProps = {
   canCreate: boolean;
   canUpdate: boolean;
   canDelete: boolean;
+  uiLocale: UiLocale;
 };
 
-export function UnitsManagement({ units, canCreate, canUpdate, canDelete }: UnitsManagementProps) {
+export function UnitsManagement({ units, canCreate, canUpdate, canDelete, uiLocale }: UnitsManagementProps) {
   const router = useRouter();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [deletingUnitId, setDeletingUnitId] = useState<string | null>(null);
   const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   const [isCreateSheetOpen, setIsCreateSheetOpen] = useState(false);
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
@@ -240,7 +244,7 @@ export function UnitsManagement({ units, canCreate, canUpdate, canDelete }: Unit
 
       <div className="space-y-2">
         <label className="text-xs text-muted-foreground" htmlFor={`${idPrefix}-unit-name`}>
-          ชื่อหน่วยภาษาไทย
+          ชื่อที่แสดง
         </label>
         <input
           id={`${idPrefix}-unit-name`}
@@ -295,7 +299,7 @@ export function UnitsManagement({ units, canCreate, canUpdate, canDelete }: Unit
 
       <div className="space-y-2">
         <label className="text-xs text-muted-foreground" htmlFor={`${idPrefix}-edit-unit-name`}>
-          ชื่อหน่วยภาษาไทย
+          ชื่อที่แสดง
         </label>
         <input
           id={`${idPrefix}-edit-unit-name`}
@@ -350,46 +354,44 @@ export function UnitsManagement({ units, canCreate, canUpdate, canDelete }: Unit
 
   return (
     <section className="space-y-5">
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          เพิ่มหน่วยใหม่
-        </p>
-
-        <div className="sm:flex sm:justify-end">
-          <Button
-            type="button"
-            className="h-11 w-full rounded-xl sm:w-auto sm:px-5"
-            onClick={() => {
-              resetFeedback();
-              setIsCreateSheetOpen(true);
-            }}
-            disabled={!canCreate}
-          >
-            <Plus className="h-4 w-4" />
-            เพิ่มหน่วยสินค้า
-          </Button>
-        </div>
-      </div>
-
       {errorMessage && !isEditSheetOpen && !deleteDialogUnit ? (
         <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
           {errorMessage}
         </p>
       ) : null}
 
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          รายการหน่วย
-        </p>
-        <div className="px-1">
-          <p className="text-xs text-slate-500">
-            <span className="font-medium text-slate-700">ค่าเริ่มต้นระบบ</span> จะไม่สามารถแก้ไขหรือลบได้
-          </p>
-        </div>
-        <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 px-4 py-3">
-            <h2 className="text-sm font-semibold text-slate-900">รายการหน่วยสินค้า</h2>
+      <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">{t(uiLocale, "settings.link.units.title")}</p>
+            <p className="mt-0.5 text-xs text-slate-500">{t(uiLocale, "settings.link.units.description")}</p>
           </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 w-9 rounded-full px-0"
+              onClick={() => setIsHelpOpen(true)}
+              aria-label={t(uiLocale, "settings.units.help.ariaLabel")}
+            >
+              <Info className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 rounded-full px-4"
+              onClick={() => {
+                resetFeedback();
+                setIsCreateSheetOpen(true);
+              }}
+              disabled={!canCreate}
+            >
+              <Plus className="h-4 w-4" />
+              เพิ่มหน่วยสินค้า
+            </Button>
+          </div>
+        </div>
+        <div className="px-4 py-4">
           {units.length === 0 ? (
             <p className="px-4 py-4 text-sm text-slate-500">ยังไม่มีหน่วยสินค้าในร้านนี้</p>
           ) : (
@@ -445,8 +447,8 @@ export function UnitsManagement({ units, canCreate, canUpdate, canDelete }: Unit
               ))}
             </ul>
           )}
-        </article>
-      </div>
+        </div>
+      </article>
 
       <SlideUpSheet
         isOpen={isCreateSheetOpen}
@@ -514,6 +516,29 @@ export function UnitsManagement({ units, canCreate, canUpdate, canDelete }: Unit
                 "ลบหน่วย"
               )}
             </Button>
+          </div>
+        </div>
+      </SlideUpSheet>
+
+      <SlideUpSheet
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+        title={t(uiLocale, "settings.units.help.sheet.title")}
+        description={t(uiLocale, "settings.units.help.sheet.description")}
+        panelMaxWidthClass="min-[1200px]:max-w-md"
+      >
+        <div className="space-y-3 text-sm text-slate-700">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">{t(uiLocale, "settings.units.help.system.title")}</p>
+            <p className="mt-1 text-xs text-slate-500">{t(uiLocale, "settings.units.help.system.description")}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">{t(uiLocale, "settings.units.help.store.title")}</p>
+            <p className="mt-1 text-xs text-slate-500">{t(uiLocale, "settings.units.help.store.description")}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">{t(uiLocale, "settings.units.help.code.title")}</p>
+            <p className="mt-1 text-xs text-slate-500">{t(uiLocale, "settings.units.help.code.description")}</p>
           </div>
         </div>
       </SlideUpSheet>

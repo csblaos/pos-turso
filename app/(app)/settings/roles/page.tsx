@@ -4,6 +4,7 @@ import { ChevronRight, Shield } from "lucide-react";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
+import { RolesListHelpButton } from "@/components/app/roles-list-help-button";
 import { db } from "@/lib/db/client";
 import { roles, storeMembers } from "@/lib/db/schema";
 import { getSession } from "@/lib/auth/session";
@@ -64,6 +65,13 @@ async function RolesList({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">{t(uiLocale, "settings.link.roles.title")}</p>
+          <p className="mt-0.5 text-xs text-slate-500">{t(uiLocale, "settings.link.roles.description")}</p>
+        </div>
+        <RolesListHelpButton uiLocale={uiLocale} />
+      </div>
       <ul className="divide-y divide-slate-100">
         {roleRows.map((role) => {
           const locked = Boolean(role.isSystem) && role.name === "Owner";
@@ -138,25 +146,13 @@ export default async function SettingsRolesPage() {
   }
 
   return (
-    <section className="space-y-5">
-      <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
-          {t(uiLocale, "settings.link.roles.title")}
-        </h1>
-        <p className="text-sm text-slate-500">{t(uiLocale, "settings.link.roles.description")}</p>
-      </header>
-
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {t(uiLocale, "settings.roles.section.list")}
-        </p>
-      </div>
+    <section className="space-y-2">
       <Suspense fallback={<RolesListFallback />}>
         <RolesList storeId={session.activeStoreId} canManage={canManage} uiLocale={uiLocale} />
       </Suspense>
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">
           {t(uiLocale, "settings.section.navigate")}
         </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

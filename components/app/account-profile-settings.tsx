@@ -11,6 +11,7 @@ import { authFetch, setClientAuthToken } from "@/lib/auth/client-token";
 type AccountProfileSettingsProps = {
   initialName: string;
   email: string;
+  embedded?: boolean;
 };
 
 type UpdateProfileResponse = {
@@ -24,7 +25,7 @@ type UpdateProfileResponse = {
   };
 };
 
-export function AccountProfileSettings({ initialName, email }: AccountProfileSettingsProps) {
+export function AccountProfileSettings({ initialName, email, embedded = false }: AccountProfileSettingsProps) {
   const router = useRouter();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [name, setName] = useState(initialName);
@@ -130,7 +131,11 @@ export function AccountProfileSettings({ initialName, email }: AccountProfileSet
       {/* CTA Card */}
       <button
         type="button"
-        className="group w-full overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition-colors hover:bg-slate-50"
+        className={
+          embedded
+            ? "group w-full text-left transition-colors hover:bg-slate-50"
+            : "group w-full overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition-colors hover:bg-slate-50"
+        }
         onClick={() => setIsSheetOpen(true)}
       >
         <div className="flex min-h-14 items-center gap-3 px-4 py-3">

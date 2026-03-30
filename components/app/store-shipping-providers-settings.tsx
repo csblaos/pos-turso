@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, PencilLine, Plus, Trash2, Truck } from "lucide-react";
+import { Info, Loader2, PencilLine, Plus, Trash2, Truck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -72,6 +72,7 @@ export function StoreShippingProvidersSettings({
   const router = useRouter();
   const [providers, setProviders] = useState(initialProviders);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [mode, setMode] = useState<"create" | "edit">("create");
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
   const [form, setForm] = useState<ShippingProviderFormState>(emptyFormState());
@@ -255,16 +256,26 @@ export function StoreShippingProvidersSettings({
   };
 
   return (
-    <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-slate-900">ผู้ให้บริการขนส่ง</h2>
-          <p className="text-xs text-slate-500">รายการนี้ถูกใช้เป็นปุ่มเลือกใน flow สั่งออนไลน์</p>
         </div>
-        <Button onClick={openCreateSheet} disabled={!canUpdate} className="h-9 rounded-lg px-3">
-          <Plus className="h-4 w-4" />
-          เพิ่มขนส่ง
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 w-9 rounded-full px-0"
+            onClick={() => setIsHelpOpen(true)}
+            aria-label="วิธีตั้งค่าผู้ให้บริการขนส่ง"
+          >
+            <Info className="h-4 w-4" />
+          </Button>
+          <Button onClick={openCreateSheet} disabled={!canUpdate} className="h-9 rounded-lg px-3">
+            <Plus className="h-4 w-4" />
+            เพิ่มขนส่ง
+          </Button>
+        </div>
       </div>
 
       {!canUpdate ? (
@@ -317,6 +328,35 @@ export function StoreShippingProvidersSettings({
           ))}
         </ul>
       )}
+
+      <SlideUpSheet
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+        title="วิธีตั้งค่าผู้ให้บริการขนส่ง"
+        description="สรุปหลักที่ควรรู้ก่อนเพิ่มหรือแก้ไขรายการขนส่ง"
+        panelMaxWidthClass="min-[1200px]:max-w-md"
+      >
+        <div className="space-y-3 text-sm text-slate-700">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">ใช้เป็นตัวเลือกในออเดอร์ออนไลน์</p>
+            <p className="mt-1 text-xs text-slate-500">
+              รายการที่เปิดใช้งานจะถูกใช้เป็นปุ่มเลือกใน flow สั่งออนไลน์และจัดส่งของหน้า POS
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">ชื่อเรียกอื่นช่วยค้นหาและแมปชื่อได้ง่ายขึ้น</p>
+            <p className="mt-1 text-xs text-slate-500">
+              ใส่ alias คั่นด้วย comma เช่น ชื่อย่อหรือชื่อที่พนักงานใช้เรียก เพื่อให้ระบบหาเจอได้สะดวกขึ้น
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">ลำดับแสดงควบคุมตำแหน่งปุ่ม</p>
+            <p className="mt-1 text-xs text-slate-500">
+              ค่ายิ่งน้อยจะขึ้นก่อน เหมาะกับขนส่งที่ร้านใช้บ่อยเพื่อให้กดเลือกได้เร็วขึ้น
+            </p>
+          </div>
+        </div>
+      </SlideUpSheet>
 
       <SlideUpSheet
         isOpen={isSheetOpen}

@@ -183,7 +183,7 @@ export const createUnitSchema = z.object({
     .min(1, "กรุณากรอกรหัสหน่วย")
     .max(20, "รหัสหน่วยยาวเกินไป")
     .regex(/^[A-Za-z0-9_\-]+$/, "รหัสหน่วยใช้ได้เฉพาะ A-Z, 0-9, _ และ -"),
-  nameTh: z.string().trim().min(1, "กรุณากรอกชื่อหน่วย").max(80),
+  nameTh: z.string().trim().min(1, "กรุณากรอกชื่อที่แสดง").max(80),
 });
 
 export const updateProductSchema = z.discriminatedUnion("action", [

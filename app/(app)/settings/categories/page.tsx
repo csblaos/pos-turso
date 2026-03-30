@@ -40,23 +40,17 @@ export default async function SettingsCategoriesPage() {
   const categories = await listCategories(session.activeStoreId);
 
   return (
-    <section className="space-y-5">
-      <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
-          {t(uiLocale, "settings.link.categories.title")}
-        </h1>
-        <p className="text-sm text-slate-500">{t(uiLocale, "settings.link.categories.description")}</p>
-      </header>
-
+    <section className="space-y-2">
       <CategoriesManagement
         categories={categories}
         canCreate={canCreate}
         canUpdate={canUpdate}
         canDelete={canDelete}
+        uiLocale={uiLocale}
       />
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">
           {t(uiLocale, "settings.section.navigate")}
         </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

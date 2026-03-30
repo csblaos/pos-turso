@@ -13,6 +13,7 @@ import { type UiLocale, uiLocaleNativeLabels, uiLocaleValues } from "@/lib/i18n/
 type AccountLanguageSettingsProps = {
   locale: UiLocale;
   initialUiLocale: UiLocale;
+  embedded?: boolean;
 };
 
 type UpdateLocaleResponse = {
@@ -29,7 +30,7 @@ function getLocaleOptionLabel(option: UiLocale) {
   return uiLocaleNativeLabels[option];
 }
 
-export function AccountLanguageSettings({ locale, initialUiLocale }: AccountLanguageSettingsProps) {
+export function AccountLanguageSettings({ locale, initialUiLocale, embedded = false }: AccountLanguageSettingsProps) {
   const router = useRouter();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [uiLocale, setUiLocale] = useState<UiLocale>(initialUiLocale);
@@ -126,7 +127,11 @@ export function AccountLanguageSettings({ locale, initialUiLocale }: AccountLang
     <>
       <button
         type="button"
-        className="group w-full overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition-colors hover:bg-slate-50"
+        className={
+          embedded
+            ? "group w-full text-left transition-colors hover:bg-slate-50"
+            : "group w-full overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition-colors hover:bg-slate-50"
+        }
         onClick={() => {
           setIsSheetOpen(true);
           setSuccessMessage(null);

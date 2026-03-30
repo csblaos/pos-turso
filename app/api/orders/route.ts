@@ -511,15 +511,12 @@ export async function POST(request: Request) {
         });
         return NextResponse.json({ message: "บัญชีที่เลือกไม่ใช่บัญชี QR" }, { status: 400 });
       }
-      if (
-        selectedPaymentMethod === "BANK_TRANSFER" &&
-        selectedPaymentAccount.accountType !== "BANK"
-      ) {
+      if (selectedPaymentAccount.currency !== selectedPaymentCurrency) {
         if (idempotencyRecordId) {
           await safeMarkIdempotencyFailed({
             recordId: idempotencyRecordId,
             statusCode: 400,
-            body: { message: "บัญชีที่เลือกไม่ใช่บัญชีธนาคาร" },
+            body: { message: "บัญชีที่เลือกยังไม่รองรับสกุลเงินที่ชำระ" },
           });
         }
         await safeLogAuditEvent({
@@ -531,15 +528,18 @@ export async function POST(request: Request) {
           action,
           entityType: "order",
           result: "FAIL",
-          reasonCode: "PAYMENT_ACCOUNT_TYPE_MISMATCH",
+          reasonCode: "PAYMENT_ACCOUNT_CURRENCY_MISMATCH",
           metadata: {
             paymentAccountId: selectedPaymentAccountId,
-            expectedType: "BANK",
-            actualType: selectedPaymentAccount.accountType,
+            paymentCurrency: selectedPaymentCurrency,
+            accountCurrency: selectedPaymentAccount.currency,
           },
           request,
         });
-        return NextResponse.json({ message: "บัญชีที่เลือกไม่ใช่บัญชีธนาคาร" }, { status: 400 });
+        return NextResponse.json(
+          { message: "บัญชีที่เลือกยังไม่รองรับสกุลเงินที่ชำระ" },
+          { status: 400 },
+        );
       }
     }
 

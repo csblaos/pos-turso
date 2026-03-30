@@ -7,6 +7,7 @@ import { StorePaymentAccountsSettings } from "@/components/app/store-payment-acc
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { storePaymentAccounts, stores } from "@/lib/db/schema";
+import { parseStoreCurrency, parseSupportedCurrencies } from "@/lib/finance/store-financial";
 import { t } from "@/lib/i18n/messages";
 import { getUserPermissionsForCurrentSession, isPermissionGranted } from "@/lib/rbac/access";
 import { isPaymentQrR2Configured, resolvePaymentQrImageUrl } from "@/lib/storage/r2";
@@ -45,6 +46,8 @@ export default async function SettingsStorePaymentsPage() {
       .select({
         id: stores.id,
         name: stores.name,
+        currency: stores.currency,
+        supportedCurrencies: stores.supportedCurrencies,
       })
       .from(stores)
       .where(eq(stores.id, activeStoreId))
@@ -61,6 +64,7 @@ export default async function SettingsStorePaymentsPage() {
             accountName: storePaymentAccounts.accountName,
             accountNumber: storePaymentAccounts.accountNumber,
             qrImageUrl: storePaymentAccounts.qrImageUrl,
+            currency: storePaymentAccounts.currency,
             promptpayId: storePaymentAccounts.promptpayId,
             isDefault: storePaymentAccounts.isDefault,
             isActive: storePaymentAccounts.isActive,
@@ -102,29 +106,24 @@ export default async function SettingsStorePaymentsPage() {
           ? "LAO_QR"
         : "BANK",
     qrImageUrl: resolvePaymentQrImageUrl(account.qrImageUrl ?? account.promptpayId ?? null),
+    currency: parseStoreCurrency(account.currency, store.currency ?? "LAK"),
   }));
 
   return (
-    <section className="space-y-5">
-      <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
-          {t(uiLocale, "settings.link.paymentAccounts.title")}
-        </h1>
-        <p className="text-sm text-slate-500">
-          {t(uiLocale, "settings.paymentAccounts.page.descriptionPrefix")} {store.name}{" "}
-          {t(uiLocale, "settings.paymentAccounts.page.descriptionSuffix")}
-        </p>
-      </header>
-
+    <section className="space-y-2">
       <StorePaymentAccountsSettings
         initialAccounts={normalizedAccounts}
         initialPolicy={paymentPolicy}
         canUpdate={canUpdate}
         canUploadQrImage={isPaymentQrR2Configured()}
+        storeSupportedCurrencies={parseSupportedCurrencies(
+          store.supportedCurrencies,
+          store.currency ?? "LAK",
+        )}
       />
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">
           {t(uiLocale, "settings.section.navigate")}
         </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

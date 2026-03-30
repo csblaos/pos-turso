@@ -140,36 +140,30 @@ export default async function SettingsUsersPage() {
   }
 
   return (
-    <section className="space-y-5">
-      <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
-          {t(uiLocale, "settings.link.users.title")}
-        </h1>
-        <p className="text-sm text-slate-500">{t(uiLocale, "settings.link.users.description")}</p>
-      </header>
-
+    <section className="space-y-2">
       {systemRole === "SUPERADMIN" ? (
-        <div className="overflow-hidden rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3">
-          <p className="text-sm font-medium text-blue-800">
-            {t(uiLocale, "settings.users.superadminCallout.title")}
-          </p>
-          <p className="mt-0.5 text-xs text-blue-700">
-            {t(uiLocale, "settings.users.superadminCallout.description")}
-          </p>
-          <Link
-            href="/settings/superadmin/users"
-            className="mt-2 inline-flex items-center text-xs font-semibold text-blue-800 hover:underline"
-          >
+        <Link
+          href="/settings/superadmin/users"
+          className="group flex items-center gap-3 overflow-hidden rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 transition-colors hover:bg-blue-100/70"
+        >
+          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-blue-700 shadow-sm">
+            <Users className="h-4 w-4" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium text-blue-900">
+              {t(uiLocale, "settings.users.superadminCallout.title")}
+            </span>
+            <span className="mt-0.5 block text-xs text-blue-700">
+              {t(uiLocale, "settings.users.superadminCallout.description")}
+            </span>
+          </span>
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-800">
             {t(uiLocale, "settings.users.superadminCallout.linkLabel")}
-          </Link>
-        </div>
+            <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+          </span>
+        </Link>
       ) : null}
 
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {t(uiLocale, "settings.users.section.manage")}
-        </p>
-      </div>
       <Suspense fallback={<UsersManagementFallback />}>
         <UsersManagementContent
           storeId={session.activeStoreId}
@@ -180,7 +174,7 @@ export default async function SettingsUsersPage() {
       </Suspense>
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">
           {t(uiLocale, "settings.section.navigate")}
         </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

@@ -12,6 +12,7 @@ import { redirect } from "next/navigation";
 
 import { AccountPasswordSettings } from "@/components/app/account-password-settings";
 import { AccountProfileSettings } from "@/components/app/account-profile-settings";
+import { AccountSecurityHelpButton } from "@/components/app/account-security-help-button";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
@@ -100,116 +101,116 @@ export default async function SettingsSecurityPage() {
   const numberLocale = uiLocaleToDateLocale(uiLocale);
 
   return (
-    <section className="space-y-5">
-      <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
-          {t(uiLocale, "settings.link.accountSecurity.title")}
-        </h1>
-        <p className="text-sm text-slate-500">{t(uiLocale, "settings.security.subtitle")}</p>
-      </header>
-
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {t(uiLocale, "settings.security.section.account")}
-        </p>
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <ul className="divide-y divide-slate-100">
-            <li className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-slate-900">{account.name}</p>
-                <p className="mt-0.5 truncate text-xs text-slate-500">{account.email}</p>
-              </div>
-              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700">
-                User
-              </span>
-            </li>
-            <li className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-900">
-                  {t(uiLocale, "settings.security.passwordStatus.label")}
-                </p>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  {t(uiLocale, "settings.security.passwordStatus.updatedAtPrefix")}{" "}
-                  {formatDateTime(uiLocale, account.passwordUpdatedAt)}
-                </p>
-              </div>
-              <span
-                className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${passwordStatusToneClassName}`}
-              >
-                {passwordStatus}
-              </span>
-            </li>
-            <li className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-900">
-                  {t(uiLocale, "settings.security.sessionLimit.label")}
-                </p>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  {t(uiLocale, "settings.security.sessionLimit.description")}
-                </p>
-              </div>
-              <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700">
-                {t(uiLocale, "settings.security.sessionLimit.badge.prefix")}{" "}
-                {effectiveSessionLimit.toLocaleString(numberLocale)}{" "}
-                {t(uiLocale, "settings.security.sessionLimit.badge.suffix")}
-              </span>
-            </li>
-          </ul>
+    <section className="space-y-2">
+      <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">
+              {t(uiLocale, "settings.link.accountSecurity.title")}
+            </p>
+            <p className="mt-0.5 text-xs text-slate-500">{t(uiLocale, "settings.security.subtitle")}</p>
+          </div>
+          <AccountSecurityHelpButton uiLocale={uiLocale} />
         </div>
-      </div>
 
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {t(uiLocale, "settings.security.section.changePassword")}
-        </p>
-        <AccountPasswordSettings mustChangePassword={account.mustChangePassword} />
-      </div>
+        <div className="space-y-4 px-4 py-4">
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+            <div className="border-b border-slate-200 px-4 py-3">
+              <p className="text-sm font-medium text-slate-900">
+                {t(uiLocale, "settings.security.section.account")}
+              </p>
+            </div>
+            <ul className="divide-y divide-slate-200">
+              <li className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-900">{account.name}</p>
+                  <p className="mt-0.5 truncate text-xs text-slate-500">{account.email}</p>
+                </div>
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700">
+                  User
+                </span>
+              </li>
+              <li className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-900">
+                    {t(uiLocale, "settings.security.passwordStatus.label")}
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {t(uiLocale, "settings.security.passwordStatus.updatedAtPrefix")}{" "}
+                    {formatDateTime(uiLocale, account.passwordUpdatedAt)}
+                  </p>
+                </div>
+                <span
+                  className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${passwordStatusToneClassName}`}
+                >
+                  {passwordStatus}
+                </span>
+              </li>
+              <li className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-900">
+                    {t(uiLocale, "settings.security.sessionLimit.label")}
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {t(uiLocale, "settings.security.sessionLimit.description")}
+                  </p>
+                </div>
+                <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700">
+                  {t(uiLocale, "settings.security.sessionLimit.badge.prefix")}{" "}
+                  {effectiveSessionLimit.toLocaleString(numberLocale)}{" "}
+                  {t(uiLocale, "settings.security.sessionLimit.badge.suffix")}
+                </span>
+              </li>
+            </ul>
+          </div>
 
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {t(uiLocale, "settings.security.section.profile")}
-        </p>
-        <AccountProfileSettings initialName={account.name} email={account.email} />
-      </div>
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <AccountPasswordSettings mustChangePassword={account.mustChangePassword} embedded />
+            <div className="border-t border-slate-100">
+              <AccountProfileSettings initialName={account.name} email={account.email} embedded />
+            </div>
+          </div>
 
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {t(uiLocale, "settings.security.section.tips")}
-        </p>
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <ul className="divide-y divide-slate-100">
-            <li className="flex min-h-14 items-start gap-3 px-4 py-3">
-              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
-                <CheckCircle2 className="h-4 w-4" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-900">
-                  {t(uiLocale, "settings.security.tip.publicDevice.title")}
-                </p>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  {t(uiLocale, "settings.security.tip.publicDevice.description")}
-                </p>
-              </div>
-            </li>
-            <li className="flex min-h-14 items-start gap-3 px-4 py-3">
-              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
-                <ShieldAlert className="h-4 w-4" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-900">
-                  {t(uiLocale, "settings.security.tip.suspiciousActivity.title")}
-                </p>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  {t(uiLocale, "settings.security.tip.suspiciousActivity.description")}
-                </p>
-              </div>
-            </li>
-          </ul>
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div className="border-b border-slate-100 px-4 py-3">
+              <p className="text-sm font-medium text-slate-900">
+                {t(uiLocale, "settings.security.section.tips")}
+              </p>
+            </div>
+            <ul className="divide-y divide-slate-100">
+              <li className="flex min-h-14 items-start gap-3 px-4 py-3">
+                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                  <CheckCircle2 className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-900">
+                    {t(uiLocale, "settings.security.tip.publicDevice.title")}
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {t(uiLocale, "settings.security.tip.publicDevice.description")}
+                  </p>
+                </div>
+              </li>
+              <li className="flex min-h-14 items-start gap-3 px-4 py-3">
+                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
+                  <ShieldAlert className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-900">
+                    {t(uiLocale, "settings.security.tip.suspiciousActivity.title")}
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {t(uiLocale, "settings.security.tip.suspiciousActivity.description")}
+                  </p>
+                </div>
+              </li>
+            </ul>
+          </div>
         </div>
-      </div>
+      </article>
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">
           {t(uiLocale, "settings.section.navigate")}
         </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

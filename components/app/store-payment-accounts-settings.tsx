@@ -3,6 +3,7 @@
 import {
   ChevronRight,
   CircleAlert,
+  Info,
   Loader2,
   Plus,
   Trash2,
@@ -14,6 +15,7 @@ import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch } from "@/lib/auth/client-token";
+import { currencyLabel, type StoreCurrency } from "@/lib/finance/store-financial";
 import { getRasterImageTypeLabel, isRasterImageContentType, RASTER_IMAGE_ACCEPT } from "@/lib/media/image-upload";
 import {
   findLaosBankByCode,
@@ -24,8 +26,7 @@ import {
 } from "@/lib/payments/laos-banks";
 import {
   maskAccountValue,
-  paymentAccountTypeLabel,
-  paymentAccountTypeValues,
+  paymentAccountSupportsQr,
   type PaymentAccountType,
 } from "@/lib/payments/store-payment";
 
@@ -37,6 +38,7 @@ type StorePaymentAccount = {
   accountName: string;
   accountNumber: string | null;
   qrImageUrl: string | null;
+  currency: StoreCurrency;
   isDefault: boolean;
   isActive: boolean;
   createdAt: string;
@@ -53,6 +55,7 @@ type StorePaymentAccountsSettingsProps = {
   initialPolicy: StorePaymentPolicy;
   canUpdate: boolean;
   canUploadQrImage?: boolean;
+  storeSupportedCurrencies: StoreCurrency[];
 };
 
 type PaymentApiResponse = {
@@ -64,10 +67,11 @@ type PaymentApiResponse = {
 
 type PaymentFormState = {
   displayName: string;
-  accountType: PaymentAccountType;
+  supportsQr: boolean;
   accountName: string;
   accountNumber: string;
   qrImageUrl: string;
+  currency: StoreCurrency;
   isDefault: boolean;
   isActive: boolean;
 };
@@ -76,22 +80,24 @@ type BankSelectValue = string;
 
 const MAX_QR_IMAGE_SIZE_MB = 4;
 
-const emptyForm = (): PaymentFormState => ({
+const emptyForm = (storeSupportedCurrencies: StoreCurrency[]): PaymentFormState => ({
   displayName: "",
-  accountType: "BANK",
+  supportsQr: false,
   accountName: "",
   accountNumber: "",
   qrImageUrl: "",
+  currency: storeSupportedCurrencies[0] ?? "LAK",
   isDefault: false,
   isActive: true,
 });
 
 const formFromAccount = (account: StorePaymentAccount): PaymentFormState => ({
   displayName: account.displayName,
-  accountType: account.accountType,
+  supportsQr: paymentAccountSupportsQr(account.accountType),
   accountName: account.accountName,
   accountNumber: account.accountNumber ?? "",
   qrImageUrl: account.qrImageUrl ?? "",
+  currency: account.currency,
   isDefault: account.isDefault,
   isActive: account.isActive,
 });
@@ -130,13 +136,21 @@ const resolveBankState = (bankName: string | null | undefined) => {
 const validateForm = (params: {
   form: PaymentFormState;
   bankNameForSubmit: string;
+  storeSupportedCurrencies: StoreCurrency[];
   canUploadQrImage: boolean;
   hasQrPreview: boolean;
   hasQrFile: boolean;
   removeQrImage: boolean;
 }) => {
-  const { form, bankNameForSubmit, canUploadQrImage, hasQrPreview, hasQrFile, removeQrImage } =
-    params;
+  const {
+    form,
+    bankNameForSubmit,
+    storeSupportedCurrencies,
+    canUploadQrImage,
+    hasQrPreview,
+    hasQrFile,
+    removeQrImage,
+  } = params;
 
   if (!form.displayName.trim()) {
     return "กรุณาระบุชื่อบัญชี";
@@ -158,7 +172,11 @@ const validateForm = (params: {
     return "บัญชีหลักต้องอยู่ในสถานะใช้งาน";
   }
 
-  if (form.accountType === "LAO_QR") {
+  if (!storeSupportedCurrencies.includes(form.currency)) {
+    return "กรุณาเลือกสกุลเงินของบัญชีให้ตรงกับสกุลที่ร้านรองรับ";
+  }
+
+  if (form.supportsQr) {
     if (!hasQrPreview || removeQrImage) {
       return "กรุณาอัปโหลดรูป QR";
     }
@@ -176,6 +194,7 @@ export function StorePaymentAccountsSettings({
   initialPolicy,
   canUpdate,
   canUploadQrImage = false,
+  storeSupportedCurrencies,
 }: StorePaymentAccountsSettingsProps) {
   const [accounts, setAccounts] = useState(initialAccounts);
   const [policy, setPolicy] = useState(initialPolicy);
@@ -184,7 +203,8 @@ export function StorePaymentAccountsSettings({
   );
   const [mode, setMode] = useState<"create" | "edit">("create");
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [form, setForm] = useState<PaymentFormState>(emptyForm());
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [form, setForm] = useState<PaymentFormState>(() => emptyForm(storeSupportedCurrencies));
   const [bankSelectValue, setBankSelectValue] = useState<BankSelectValue>("");
   const [bankCustomName, setBankCustomName] = useState("");
   const [qrImageFile, setQrImageFile] = useState<File | null>(null);
@@ -219,7 +239,7 @@ export function StorePaymentAccountsSettings({
   const reachedPolicyLimit = accounts.length >= policy.maxAccountsPerStore;
 
   const hasQrPreview = useMemo(() => {
-    if (form.accountType !== "LAO_QR") {
+    if (!form.supportsQr) {
       return false;
     }
 
@@ -232,15 +252,15 @@ export function StorePaymentAccountsSettings({
     }
 
     return form.qrImageUrl.trim().length > 0;
-  }, [form.accountType, form.qrImageUrl, qrImagePreviewUrl, removeQrImage]);
+  }, [form.qrImageUrl, form.supportsQr, qrImagePreviewUrl, removeQrImage]);
 
   const previewImageSrc = useMemo(() => {
-    if (removeQrImage || form.accountType !== "LAO_QR") {
+    if (removeQrImage || !form.supportsQr) {
       return null;
     }
 
     return qrImagePreviewUrl || form.qrImageUrl.trim() || null;
-  }, [form.accountType, form.qrImageUrl, qrImagePreviewUrl, removeQrImage]);
+  }, [form.qrImageUrl, form.supportsQr, qrImagePreviewUrl, removeQrImage]);
 
   const bankNameForSubmit = useMemo(() => {
     if (bankSelectValue === LAOS_BANK_OTHER_OPTION_CODE) {
@@ -251,7 +271,7 @@ export function StorePaymentAccountsSettings({
   }, [bankCustomName, bankSelectValue]);
 
   const resetFormState = () => {
-    setForm(emptyForm());
+    setForm(emptyForm(storeSupportedCurrencies));
     setBankSelectValue("");
     setBankCustomName("");
     setQrImageFile(null);
@@ -345,6 +365,7 @@ export function StorePaymentAccountsSettings({
     const validationError = validateForm({
       form,
       bankNameForSubmit,
+      storeSupportedCurrencies,
       canUploadQrImage,
       hasQrPreview,
       hasQrFile: Boolean(qrImageFile),
@@ -360,12 +381,14 @@ export function StorePaymentAccountsSettings({
     setSuccessMessage(null);
 
     try {
+      const accountType: PaymentAccountType = form.supportsQr ? "LAO_QR" : "BANK";
       const formData = new FormData();
       formData.set("displayName", form.displayName.trim());
-      formData.set("accountType", form.accountType);
+      formData.set("accountType", accountType);
       formData.set("accountName", form.accountName.trim());
       formData.set("bankName", bankNameForSubmit);
       formData.set("accountNumber", form.accountNumber.trim());
+      formData.set("currency", form.currency);
       formData.set("isDefault", String(form.isDefault));
       formData.set("isActive", String(form.isActive));
 
@@ -373,7 +396,7 @@ export function StorePaymentAccountsSettings({
         formData.set("id", selectedAccountId);
       }
 
-      if (form.accountType === "LAO_QR") {
+      if (form.supportsQr) {
         if (qrImageFile) {
           formData.set("qrImageFile", qrImageFile);
         }
@@ -385,6 +408,8 @@ export function StorePaymentAccountsSettings({
         if (mode === "edit") {
           formData.set("removeQrImage", String(removeQrImage));
         }
+      } else if (mode === "edit") {
+        formData.set("removeQrImage", "true");
       }
 
       const response = await authFetch("/api/settings/store/payment-accounts", {
@@ -470,16 +495,27 @@ export function StorePaymentAccountsSettings({
               {policy.maxAccountsPerStore.toLocaleString("th-TH")} บัญชี
             </p>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-9 rounded-full px-3"
-            onClick={openCreateSheet}
-            disabled={!canUpdate || reachedPolicyLimit || isSaving || isDeleting}
-          >
-            <Plus className="h-4 w-4" />
-            เพิ่มบัญชี
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 w-9 rounded-full px-0"
+              onClick={() => setIsHelpOpen(true)}
+              aria-label="วิธีตั้งค่าบัญชีรับเงิน"
+            >
+              <Info className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 rounded-full px-3"
+              onClick={openCreateSheet}
+              disabled={!canUpdate || reachedPolicyLimit || isSaving || isDeleting}
+            >
+              <Plus className="h-4 w-4" />
+              เพิ่มบัญชี
+            </Button>
+          </div>
         </div>
 
         {accounts.length === 0 ? (
@@ -500,14 +536,13 @@ export function StorePaymentAccountsSettings({
                       {account.displayName}
                     </span>
                     <span className="mt-0.5 block truncate text-xs text-slate-500">
-                      {paymentAccountTypeLabel(account.accountType)} •{" "}
                       {resolveLaosBankDisplayName(account.bankName)} •{" "}
-                      {maskAccountValue(account.accountNumber)}{" "}
-                      {account.accountType === "LAO_QR"
+                      {maskAccountValue(account.accountNumber)} • {currencyLabel(account.currency)}{" "}
+                      {paymentAccountSupportsQr(account.accountType)
                         ? account.qrImageUrl
                           ? "• QR พร้อมใช้"
                           : "• ยังไม่มีรูป QR"
-                        : ""}
+                        : "• ไม่มี QR"}
                     </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-1">
@@ -534,13 +569,9 @@ export function StorePaymentAccountsSettings({
         )}
       </article>
 
-      <p className="text-xs text-slate-500">
-        นโยบายปัจจุบัน: {policy.requireSlipForLaoQr ? "บังคับแนบสลิปเมื่อจ่ายแบบ QR" : "ไม่บังคับแนบสลิปเมื่อจ่ายแบบ QR"}
-      </p>
-
       {!canUploadQrImage ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-          ระบบยังไม่ได้ตั้งค่า Cloudflare R2 สำหรับอัปโหลด QR (สามารถบันทึกบัญชีธนาคารได้ แต่บัญชี QR จะยังเพิ่มรูปไม่ได้)
+          ระบบยังไม่ได้ตั้งค่า Cloudflare R2 สำหรับอัปโหลด QR (ยังบันทึกข้อมูลบัญชีได้ แต่จะยังแนบรูป QR ไม่ได้)
         </p>
       ) : null}
 
@@ -553,13 +584,42 @@ export function StorePaymentAccountsSettings({
       {successMessage ? <p className="text-sm text-emerald-700">{successMessage}</p> : null}
 
       <SlideUpSheet
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+        title="วิธีตั้งค่าบัญชีรับเงิน"
+        description="สรุปกติกาที่ควรรู้ก่อนเพิ่มบัญชีหรือแนบ QR"
+        panelMaxWidthClass="min-[1200px]:max-w-md"
+      >
+        <div className="space-y-3 text-sm text-slate-700">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">1 บัญชี = 1 สกุลเงิน</p>
+            <p className="mt-1 text-xs text-slate-500">
+              เลือกได้เฉพาะสกุลเงินที่ร้านเปิดใช้งานไว้ เพื่อให้เลือกบัญชีตอนรับเงินได้ตรงและไม่สับสน
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">บัญชีเดียวมีได้ทั้งเลขบัญชีและ QR</p>
+            <p className="mt-1 text-xs text-slate-500">
+              ถ้าบัญชีนี้รับโอนผ่าน QR ได้ ให้เปิดสวิตช์ QR แล้วแนบรูป QR ของบัญชีนั้นได้เลย
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">ตั้งบัญชีหลักเฉพาะตัวที่ใช้งานจริง</p>
+            <p className="mt-1 text-xs text-slate-500">
+              บัญชีหลักต้องอยู่ในสถานะเปิดใช้งาน และเหมาะกับบัญชีที่พนักงานควรเห็นก่อนเป็นค่าเริ่มต้น
+            </p>
+          </div>
+        </div>
+      </SlideUpSheet>
+
+      <SlideUpSheet
         isOpen={isSheetOpen}
         onClose={() => closeSheet()}
         title={mode === "create" ? "เพิ่มบัญชีรับเงิน" : "แก้ไขบัญชีรับเงิน"}
         description={
           mode === "create"
-            ? "กรอกข้อมูลและอัปโหลด QR ได้ทันที"
-            : "ปรับข้อมูลบัญชีและสถานะการใช้งาน"
+            ? "เพิ่มบัญชีที่เลือกได้ 1 สกุลเงิน และแนบ QR ได้"
+            : "ปรับข้อมูลบัญชี สกุลเงิน และสถานะการใช้งาน"
         }
         panelMaxWidthClass="min-[1200px]:max-w-md"
         disabled={isSaving || isDeleting}
@@ -633,36 +693,28 @@ export function StorePaymentAccountsSettings({
               />
             </div>
 
-            <div className="space-y-2">
-              <p className="text-xs text-slate-500">รูปแบบบัญชีรับเงิน</p>
-              <div className="grid grid-cols-2 gap-2">
-                {paymentAccountTypeValues.map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    className={`rounded-xl border px-3 py-2 text-sm ${
-                      form.accountType === value
-                        ? "border-blue-300 bg-blue-50 text-blue-800"
-                        : "border-slate-200 bg-white text-slate-700"
-                    }`}
-                    onClick={() => {
-                      setForm((current) => ({ ...current, accountType: value }));
-                      if (value === "BANK") {
-                        setQrImageFile(null);
-                        setRemoveQrImage(true);
-                        if (qrInputRef.current) {
-                          qrInputRef.current.value = "";
-                        }
-                      } else {
-                        setRemoveQrImage(false);
+            <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+                <span>บัญชีนี้มี QR รับโอน</span>
+                <input
+                  type="checkbox"
+                  checked={form.supportsQr}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setForm((current) => ({ ...current, supportsQr: checked }));
+                    if (!checked) {
+                      setQrImageFile(null);
+                      setRemoveQrImage(true);
+                      if (qrInputRef.current) {
+                        qrInputRef.current.value = "";
                       }
-                    }}
-                    disabled={isSaving || isDeleting}
-                  >
-                    {paymentAccountTypeLabel(value)}
-                  </button>
-                ))}
-              </div>
+                    } else {
+                      setRemoveQrImage(false);
+                    }
+                  }}
+                  disabled={isSaving || isDeleting}
+                />
+              </label>
             </div>
 
             <div className="space-y-2">
@@ -729,7 +781,28 @@ export function StorePaymentAccountsSettings({
               />
             </div>
 
-            {form.accountType === "LAO_QR" ? (
+            <div className="space-y-2">
+              <label className="text-xs text-slate-500" htmlFor="payment-currency">
+                สกุลเงินของบัญชีนี้
+              </label>
+              <select
+                id="payment-currency"
+                className={fieldClassName}
+                value={form.currency}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, currency: event.target.value as StoreCurrency }))
+                }
+                disabled={isSaving || isDeleting}
+              >
+                {storeSupportedCurrencies.map((currency) => (
+                  <option key={currency} value={currency}>
+                    {currencyLabel(currency)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {form.supportsQr ? (
               <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs font-medium text-slate-700">รูป QR รับโอน</p>
