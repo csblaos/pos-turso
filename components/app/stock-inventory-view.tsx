@@ -5,7 +5,7 @@ import {
   ArrowUpDown,
   ChevronDown,
   ListFilter,
-  LoaderCircle,
+  Loader2,
   Package,
   ScanBarcode,
   Search,
@@ -821,17 +821,19 @@ export function StockInventoryView({
               placeholder={t(uiLocale, "stock.inventory.search.placeholder")}
               className="h-10 w-full rounded-md border pl-9 pr-9 text-sm outline-none focus:border-blue-300"
             />
-            {isInventoryQueryPending ? (
-              <LoaderCircle className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400" />
-            ) : searchQuery ? (
-              <button
-                type="button"
-                onClick={clearInventorySearch}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            ) : null}
+            <div className="absolute inset-y-0 right-3 flex items-center">
+              {isInventoryQueryPending ? (
+                <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+              ) : searchQuery ? (
+                <button
+                  type="button"
+                  onClick={clearInventorySearch}
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
           </div>
 
           <Button

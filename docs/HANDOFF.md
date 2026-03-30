@@ -6,6 +6,15 @@
 
 ## Changed (ล่าสุด)
 
+- เพิ่ม flow ถ่าย/เลือกรูปสินค้าแบบมี crop ในหน้า `/products`:
+  - ปุ่มรูปสินค้าในฟอร์ม create/edit เปิด source picker ก่อนแล้ว ให้เลือก `เลือกรูปจากเครื่อง` หรือ `ถ่ายรูปด้วยกล้อง`
+  - หลังได้ไฟล์ จะเปิด custom crop sheet ของแอปก่อนเสมอ (square crop + drag + zoom) แล้วค่อยแปลงเป็น `640px WebP` ไปเก็บใน `imageFile`
+  - ตั้งใจไม่พึ่ง native crop ของอุปกรณ์เป็น flow หลัก เพื่อให้ behavior คงที่กว่าใน mobile browser และ desktop
+
+- ปรับตำแหน่งไอคอนด้านขวาใน search input ของหน้า `/stock`:
+  - ทั้งแท็บ `inventory` และ `history` ใช้ right-slot container เดียวกันสำหรับ `spinner` และปุ่ม `X`
+  - เปลี่ยน spinner ของ search input เป็น `Loader2` ด้วย เพื่อลดอาการภาพหมุนดูเหมือนไหลลงเมื่อสลับจาก state ปกติเป็น loading หรือเมื่อ sticky bar เปลี่ยน state
+
 - แก้ UX ตอนกด `X` ล้างคำค้นในหน้า `/stock`:
   - ทั้งแท็บ `inventory` และ `history` เปลี่ยนจาก full-tab loading มาเป็น list-only skeleton เมื่อ clear/search/filter แล้วผลลัพธ์ปัจจุบันว่าง
   - ปุ่ม `X` ของทั้งสองแท็บ clear query แบบ immediate แล้ว ไม่รอ debounce ฝั่ง input

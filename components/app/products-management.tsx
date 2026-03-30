@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -53,7 +54,10 @@ import type { UiLocale } from "@/lib/i18n/locales";
 import { uiLocaleToDateLocale } from "@/lib/i18n/locales";
 import { t } from "@/lib/i18n/messages";
 import { useUiLocale } from "@/lib/i18n/use-ui-locale";
-import { compressRasterImageFile, validateRasterImageFile } from "@/lib/media/client-image";
+import {
+  cropRasterImageFile,
+  validateRasterImageFile,
+} from "@/lib/media/client-image";
 import { RASTER_IMAGE_ACCEPT } from "@/lib/media/image-upload";
 
 /* ─── Types ─── */
@@ -98,6 +102,7 @@ type ProductListCacheEntry = {
   summary: ProductSummaryCounts;
 };
 type UnsavedCloseTarget = "CREATE_EDIT_SHEET" | "DETAIL_SHEET" | "COST_EDITOR";
+type ProductImageSource = "file" | "camera";
 
 function parseStatusFilter(value: string | null): StatusFilter {
   if (value === "active" || value === "inactive") {
@@ -109,6 +114,10 @@ function parseStatusFilter(value: string | null): StatusFilter {
 /* ─── Helpers ─── */
 
 const PRODUCT_PAGE_SIZE = 30;
+const PRODUCT_IMAGE_CROP_SIZE = 280;
+const PRODUCT_IMAGE_CROP_OUTPUT_SIZE = 640;
+const PRODUCT_IMAGE_CROP_MIN_ZOOM = 1;
+const PRODUCT_IMAGE_CROP_MAX_ZOOM = 3;
 
 const fmtNumber = (n: number, locale = "th-TH") => n.toLocaleString(locale);
 const fmtPrice = (n: number, cur: StoreCurrency, locale = "th-TH") =>
@@ -133,6 +142,56 @@ function getCostSourceLabel(
   if (source === "MANUAL") return t(uiLocale, "products.cost.source.MANUAL");
   if (source === "PURCHASE_ORDER") return t(uiLocale, "products.cost.source.PURCHASE_ORDER");
   return t(uiLocale, "products.cost.source.NONE");
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getProductImageCropMetrics(
+  imageSize: { width: number; height: number },
+  zoom: number,
+) {
+  const baseScale = Math.max(
+    PRODUCT_IMAGE_CROP_SIZE / Math.max(imageSize.width, 1),
+    PRODUCT_IMAGE_CROP_SIZE / Math.max(imageSize.height, 1),
+  );
+  const displayWidth = imageSize.width * baseScale * zoom;
+  const displayHeight = imageSize.height * baseScale * zoom;
+  const centeredLeft = (PRODUCT_IMAGE_CROP_SIZE - displayWidth) / 2;
+  const centeredTop = (PRODUCT_IMAGE_CROP_SIZE - displayHeight) / 2;
+  return {
+    displayWidth,
+    displayHeight,
+    centeredLeft,
+    centeredTop,
+    minLeft: PRODUCT_IMAGE_CROP_SIZE - displayWidth,
+    maxLeft: 0,
+    minTop: PRODUCT_IMAGE_CROP_SIZE - displayHeight,
+    maxTop: 0,
+  };
+}
+
+function clampProductImageCropOffset(
+  imageSize: { width: number; height: number },
+  zoom: number,
+  offset: { x: number; y: number },
+) {
+  const metrics = getProductImageCropMetrics(imageSize, zoom);
+  const left = clampNumber(
+    metrics.centeredLeft + offset.x,
+    metrics.minLeft,
+    metrics.maxLeft,
+  );
+  const top = clampNumber(
+    metrics.centeredTop + offset.y,
+    metrics.minTop,
+    metrics.maxTop,
+  );
+  return {
+    x: left - metrics.centeredLeft,
+    y: top - metrics.centeredTop,
+  };
 }
 const LAO_TO_LATIN_MAP: Record<string, string> = {
   "ກ": "k",
@@ -311,6 +370,8 @@ export function ProductsManagement({
   const [showDetailSheet, setShowDetailSheet] = useState(false);
   const [showScannerSheet, setShowScannerSheet] = useState(false);
   const [showScannerPermissionSheet, setShowScannerPermissionSheet] = useState(false);
+  const [showImageSourcePicker, setShowImageSourcePicker] = useState(false);
+  const [showImageCropSheet, setShowImageCropSheet] = useState(false);
   const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
   const [isDeactivateConfirmOpen, setIsDeactivateConfirmOpen] = useState(false);
   const [showUnsavedCloseConfirm, setShowUnsavedCloseConfirm] = useState(false);
@@ -337,6 +398,15 @@ export function ProductsManagement({
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [pendingImageSource, setPendingImageSource] = useState<ProductImageSource | null>(null);
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const [pendingImagePreview, setPendingImagePreview] = useState<string | null>(null);
+  const [pendingImageNaturalSize, setPendingImageNaturalSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  const [imageCropZoom, setImageCropZoom] = useState(PRODUCT_IMAGE_CROP_MIN_ZOOM);
+  const [imageCropOffset, setImageCropOffset] = useState({ x: 0, y: 0 });
   const [isImageProcessing, setIsImageProcessing] = useState(false);
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
   const [isImageMarkedForRemoval, setIsImageMarkedForRemoval] = useState(false);
@@ -363,7 +433,15 @@ export function ProductsManagement({
   const variantLabelSuggestRequestIdRef = useRef(0);
   const modelSuggestContainerRef = useRef<HTMLDivElement>(null);
   const variantLabelSuggestContainerRef = useRef<HTMLDivElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
+  const imageFileInputRef = useRef<HTMLInputElement>(null);
+  const imageCameraInputRef = useRef<HTMLInputElement>(null);
+  const imageCropDragStateRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startOffsetX: number;
+    startOffsetY: number;
+  } | null>(null);
 
   /* ── Detail ── */
   const [detailProduct, setDetailProduct] = useState<ProductListItem | null>(null);
@@ -375,6 +453,8 @@ export function ProductsManagement({
   const [barcodePrintLoadingId, setBarcodePrintLoadingId] = useState<string | null>(null);
   const detailContentRef = useRef<HTMLDivElement>(null);
   const [detailContentHeight, setDetailContentHeight] = useState<number | null>(null);
+  const canOpenProductImageCamera =
+    typeof window !== "undefined" && "mediaDevices" in navigator;
 
   const getEffectiveStockThresholds = (product: ProductListItem) => {
     const outThreshold = product.outStockThreshold ?? storeOutStockThreshold;
@@ -821,8 +901,111 @@ export function ProductsManagement({
     return () => URL.revokeObjectURL(url);
   }, [imageFile]);
 
+  useEffect(() => {
+    if (!pendingImageFile) {
+      setPendingImagePreview(null);
+      setPendingImageNaturalSize(null);
+      setImageCropZoom(PRODUCT_IMAGE_CROP_MIN_ZOOM);
+      setImageCropOffset({ x: 0, y: 0 });
+      return;
+    }
+
+    const url = URL.createObjectURL(pendingImageFile);
+    setPendingImagePreview(url);
+    let isCancelled = false;
+    const image = new window.Image();
+
+    image.onload = () => {
+      if (isCancelled) {
+        return;
+      }
+      setPendingImageNaturalSize({
+        width: image.naturalWidth || image.width,
+        height: image.naturalHeight || image.height,
+      });
+      setImageCropZoom(PRODUCT_IMAGE_CROP_MIN_ZOOM);
+      setImageCropOffset({ x: 0, y: 0 });
+    };
+
+    image.onerror = () => {
+      if (isCancelled) {
+        return;
+      }
+      toast.error(t(uiLocale, "products.image.error.prepareFailed"));
+      setShowImageCropSheet(false);
+      setPendingImageFile(null);
+      setPendingImageSource(null);
+    };
+
+    image.src = url;
+
+    return () => {
+      isCancelled = true;
+      URL.revokeObjectURL(url);
+    };
+  }, [pendingImageFile, uiLocale]);
+
+  useEffect(() => {
+    if (!pendingImageNaturalSize) {
+      return;
+    }
+    setImageCropOffset((current) =>
+      clampProductImageCropOffset(pendingImageNaturalSize, imageCropZoom, current),
+    );
+  }, [imageCropZoom, pendingImageNaturalSize]);
+
+  const resetPendingProductImageCrop = useCallback(() => {
+    setPendingImageSource(null);
+    setPendingImageFile(null);
+    setPendingImagePreview(null);
+    setPendingImageNaturalSize(null);
+    setImageCropZoom(PRODUCT_IMAGE_CROP_MIN_ZOOM);
+    setImageCropOffset({ x: 0, y: 0 });
+    setShowImageCropSheet(false);
+  }, []);
+
+  const openProductImageSourcePicker = useCallback(() => {
+    if (isImageProcessing) {
+      return;
+    }
+    setShowImageSourcePicker(true);
+  }, [isImageProcessing]);
+
+  const closeProductImageSourcePicker = useCallback(() => {
+    if (isImageProcessing) {
+      return;
+    }
+    setShowImageSourcePicker(false);
+  }, [isImageProcessing]);
+
+  const closeProductImageCropSheet = useCallback(() => {
+    if (isImageProcessing) {
+      return;
+    }
+    resetPendingProductImageCrop();
+  }, [isImageProcessing, resetPendingProductImageCrop]);
+
+  const pickProductImageFromDevice = useCallback(
+    (source: ProductImageSource) => {
+      if (isImageProcessing) {
+        return;
+      }
+      setShowImageSourcePicker(false);
+      setPendingImageSource(source);
+      if (source === "camera") {
+        imageCameraInputRef.current?.click();
+        return;
+      }
+      imageFileInputRef.current?.click();
+    },
+    [isImageProcessing],
+  );
+
   const handleProductImageFileChange = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
+    async (
+      event: ChangeEvent<HTMLInputElement>,
+      source: ProductImageSource,
+    ) => {
       const file = event.target.files?.[0] ?? null;
       event.target.value = "";
       if (!file) {
@@ -835,22 +1018,12 @@ export function ProductsManagement({
         return;
       }
 
-      setIsImageProcessing(true);
-      try {
-        const optimizedFile = await compressRasterImageFile(file, {
-          maxWidth: 640,
-          quality: 0.75,
-          fileNameBase: file.name,
-        });
-        setImageFile(optimizedFile);
-        setIsImageMarkedForRemoval(false);
-      } catch {
-        toast.error(t(uiLocale, "products.image.error.prepareFailed"));
-      } finally {
-        setIsImageProcessing(false);
-      }
+      setPendingImageSource(source);
+      setPendingImageFile(file);
+      setShowImageCropSheet(true);
+      setIsImageMarkedForRemoval(false);
     },
-    [uiLocale],
+    [],
   );
 
   const fetchModelSuggestions = useCallback(
@@ -1326,6 +1499,8 @@ export function ProductsManagement({
   const beginCreate = () => {
     if (!canCreate) return;
     submitIntentRef.current = "save";
+    resetPendingProductImageCrop();
+    setShowImageSourcePicker(false);
     setMode("create");
     setEditingProductId(null);
     setImageFile(null);
@@ -1354,6 +1529,8 @@ export function ProductsManagement({
     submitIntentRef.current = "save";
     hideDeactivateConfirmImmediately();
     setShowDetailImagePreview(false);
+    resetPendingProductImageCrop();
+    setShowImageSourcePicker(false);
     const hasVariantMeta = Boolean(
       product.modelId ||
         product.modelName ||
@@ -2782,6 +2959,27 @@ export function ProductsManagement({
   };
 
   const displayedImage = imagePreview ?? (isImageMarkedForRemoval ? null : currentImageUrl);
+  const pendingImageCropMetrics = useMemo(() => {
+    if (!pendingImageNaturalSize) {
+      return null;
+    }
+    const metrics = getProductImageCropMetrics(pendingImageNaturalSize, imageCropZoom);
+    const left = clampNumber(
+      metrics.centeredLeft + imageCropOffset.x,
+      metrics.minLeft,
+      metrics.maxLeft,
+    );
+    const top = clampNumber(
+      metrics.centeredTop + imageCropOffset.y,
+      metrics.minTop,
+      metrics.maxTop,
+    );
+    return {
+      ...metrics,
+      left,
+      top,
+    };
+  }, [imageCropOffset.x, imageCropOffset.y, imageCropZoom, pendingImageNaturalSize]);
   const isMatrixBulkMode = mode === "create" && isVariantEnabled && matrixRows.length > 0;
   const showSaveAndAddNextVariantButton =
     mode === "create" && isVariantEnabled && !isMatrixBulkMode;
@@ -2822,6 +3020,100 @@ export function ProductsManagement({
       pricePerUnit: undefined,
     });
   };
+
+  const applyProductImageCrop = useCallback(async () => {
+    if (!pendingImageFile || !pendingImageNaturalSize || !pendingImageCropMetrics) {
+      return;
+    }
+
+    setIsImageProcessing(true);
+    try {
+      const scaleToOriginal =
+        pendingImageNaturalSize.width / pendingImageCropMetrics.displayWidth;
+      const cropX = Math.round(-pendingImageCropMetrics.left * scaleToOriginal);
+      const cropY = Math.round(-pendingImageCropMetrics.top * scaleToOriginal);
+      const cropSize = Math.round(PRODUCT_IMAGE_CROP_SIZE * scaleToOriginal);
+      const croppedFile = await cropRasterImageFile(pendingImageFile, {
+        x: cropX,
+        y: cropY,
+        size: cropSize,
+        outputSize: PRODUCT_IMAGE_CROP_OUTPUT_SIZE,
+        quality: 0.82,
+        fileNameBase: pendingImageFile.name,
+      });
+      setImageFile(croppedFile);
+      setIsImageMarkedForRemoval(false);
+      resetPendingProductImageCrop();
+    } catch {
+      toast.error(t(uiLocale, "products.image.error.cropFailed"));
+    } finally {
+      setIsImageProcessing(false);
+    }
+  }, [
+    pendingImageCropMetrics,
+    pendingImageFile,
+    pendingImageNaturalSize,
+    resetPendingProductImageCrop,
+    uiLocale,
+  ]);
+
+  const reopenPendingProductImageSource = useCallback(() => {
+    if (isImageProcessing) {
+      return;
+    }
+    if (pendingImageSource === "camera") {
+      imageCameraInputRef.current?.click();
+      return;
+    }
+    imageFileInputRef.current?.click();
+  }, [isImageProcessing, pendingImageSource]);
+
+  const handleProductImageCropPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!pendingImageNaturalSize) {
+        return;
+      }
+      imageCropDragStateRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startOffsetX: imageCropOffset.x,
+        startOffsetY: imageCropOffset.y,
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    [imageCropOffset.x, imageCropOffset.y, pendingImageNaturalSize],
+  );
+
+  const handleProductImageCropPointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const dragState = imageCropDragStateRef.current;
+      if (!dragState || dragState.pointerId !== event.pointerId || !pendingImageNaturalSize) {
+        return;
+      }
+      const nextOffset = clampProductImageCropOffset(pendingImageNaturalSize, imageCropZoom, {
+        x: dragState.startOffsetX + (event.clientX - dragState.startX),
+        y: dragState.startOffsetY + (event.clientY - dragState.startY),
+      });
+      setImageCropOffset(nextOffset);
+    },
+    [imageCropZoom, pendingImageNaturalSize],
+  );
+
+  const handleProductImageCropPointerEnd = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (
+        imageCropDragStateRef.current &&
+        imageCropDragStateRef.current.pointerId === event.pointerId
+      ) {
+        imageCropDragStateRef.current = null;
+      }
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    },
+    [],
+  );
 
   /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    * RENDER
@@ -3238,7 +3530,7 @@ export function ProductsManagement({
               }`}
               onClick={() => {
                 if (!isImageProcessing) {
-                  imageInputRef.current?.click();
+                  openProductImageSourcePicker();
                 }
               }}
             >
@@ -3262,12 +3554,22 @@ export function ProductsManagement({
               )}
             </button>
             <input
-              ref={imageInputRef}
+              ref={imageFileInputRef}
               type="file"
               accept={RASTER_IMAGE_ACCEPT}
               className="hidden"
               onChange={(event) => {
-                void handleProductImageFileChange(event);
+                void handleProductImageFileChange(event, "file");
+              }}
+            />
+            <input
+              ref={imageCameraInputRef}
+              type="file"
+              accept={RASTER_IMAGE_ACCEPT}
+              capture="environment"
+              className="hidden"
+              onChange={(event) => {
+                void handleProductImageFileChange(event, "camera");
               }}
             />
             <p className="text-xs text-muted-foreground">
@@ -3291,7 +3593,8 @@ export function ProductsManagement({
                 className="shrink-0 rounded-lg border border-red-200 p-1.5 text-red-500 transition-colors hover:bg-red-50"
                 onClick={() => {
                   setImageFile(null);
-                  if (imageInputRef.current) imageInputRef.current.value = "";
+                  if (imageFileInputRef.current) imageFileInputRef.current.value = "";
+                  if (imageCameraInputRef.current) imageCameraInputRef.current.value = "";
                 }}
                 aria-label={t(uiLocale, "products.image.removeSelectedAria")}
               >
@@ -4409,6 +4712,148 @@ export function ProductsManagement({
           </div>
 
         </form>
+      </SlideUpSheet>
+
+      <SlideUpSheet
+        isOpen={showImageSourcePicker}
+        onClose={closeProductImageSourcePicker}
+        title={t(uiLocale, "products.image.picker.title")}
+        description={t(uiLocale, "products.image.picker.description")}
+        panelMaxWidthClass="min-[1200px]:max-w-sm"
+        disabled={isImageProcessing}
+        footer={
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 w-full rounded-xl"
+            onClick={closeProductImageSourcePicker}
+            disabled={isImageProcessing}
+          >
+            {t(uiLocale, "common.action.close")}
+          </Button>
+        }
+      >
+        <div className="space-y-2 pb-1">
+          <Button
+            type="button"
+            className="h-10 w-full rounded-xl"
+            onClick={() => pickProductImageFromDevice("file")}
+            disabled={isImageProcessing}
+          >
+            {t(uiLocale, "products.image.picker.chooseFile")}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 w-full rounded-xl"
+            onClick={() => pickProductImageFromDevice("camera")}
+            disabled={isImageProcessing || !canOpenProductImageCamera}
+          >
+            {t(uiLocale, "products.image.picker.takePhoto")}
+          </Button>
+          {!canOpenProductImageCamera ? (
+            <p className="text-[11px] text-slate-500">
+              {t(uiLocale, "products.image.picker.cameraUnsupported")}
+            </p>
+          ) : null}
+        </div>
+      </SlideUpSheet>
+
+      <SlideUpSheet
+        isOpen={showImageCropSheet}
+        onClose={closeProductImageCropSheet}
+        title={t(uiLocale, "products.image.crop.title")}
+        description={t(uiLocale, "products.image.crop.description")}
+        panelMaxWidthClass="min-[1200px]:max-w-md"
+        disabled={isImageProcessing}
+        footer={
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 rounded-xl"
+              onClick={reopenPendingProductImageSource}
+              disabled={isImageProcessing}
+            >
+              {t(
+                uiLocale,
+                pendingImageSource === "camera"
+                  ? "products.image.crop.retake"
+                  : "products.image.crop.chooseAnother",
+              )}
+            </Button>
+            <Button
+              type="button"
+              className="h-10 rounded-xl"
+              onClick={() => {
+                void applyProductImageCrop();
+              }}
+              disabled={
+                isImageProcessing ||
+                !pendingImagePreview ||
+                !pendingImageNaturalSize ||
+                !pendingImageCropMetrics
+              }
+            >
+              {isImageProcessing
+                ? t(uiLocale, "products.image.processing")
+                : t(uiLocale, "products.image.crop.confirm")}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4 pb-1">
+          <div
+            className="mx-auto relative overflow-hidden rounded-[1.25rem] bg-slate-950 touch-none select-none"
+            style={{ width: PRODUCT_IMAGE_CROP_SIZE, height: PRODUCT_IMAGE_CROP_SIZE }}
+            onPointerDown={handleProductImageCropPointerDown}
+            onPointerMove={handleProductImageCropPointerMove}
+            onPointerUp={handleProductImageCropPointerEnd}
+            onPointerCancel={handleProductImageCropPointerEnd}
+          >
+            {pendingImagePreview && pendingImageCropMetrics ? (
+              <Image
+                src={pendingImagePreview}
+                alt={t(uiLocale, "products.image.alt.newSelected")}
+                unoptimized
+                width={pendingImageNaturalSize?.width ?? PRODUCT_IMAGE_CROP_SIZE}
+                height={pendingImageNaturalSize?.height ?? PRODUCT_IMAGE_CROP_SIZE}
+                className="pointer-events-none absolute max-w-none"
+                style={{
+                  width: pendingImageCropMetrics.displayWidth,
+                  height: pendingImageCropMetrics.displayHeight,
+                  left: pendingImageCropMetrics.left,
+                  top: pendingImageCropMetrics.top,
+                }}
+              />
+            ) : null}
+            <div className="pointer-events-none absolute inset-0 rounded-[1.25rem] ring-1 ring-white/40" />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
+              <span>{t(uiLocale, "products.image.crop.zoomLabel")}</span>
+              <span>{imageCropZoom.toFixed(1)}x</span>
+            </div>
+            <input
+              type="range"
+              min={PRODUCT_IMAGE_CROP_MIN_ZOOM}
+              max={PRODUCT_IMAGE_CROP_MAX_ZOOM}
+              step={0.1}
+              value={imageCropZoom}
+              onChange={(event) => {
+                const nextZoom = Number.parseFloat(event.target.value);
+                if (!Number.isFinite(nextZoom)) {
+                  return;
+                }
+                setImageCropZoom(nextZoom);
+              }}
+              className="w-full accent-blue-600"
+            />
+          </div>
+          <p className="text-center text-[11px] text-slate-500">
+            {t(uiLocale, "products.image.crop.dragHint")}
+          </p>
+        </div>
       </SlideUpSheet>
 
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

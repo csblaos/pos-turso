@@ -9,7 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ListFilter,
-  LoaderCircle,
+  Loader2,
   ScanBarcode,
   Search,
   X,
@@ -922,21 +922,23 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
               placeholder={t(uiLocale, "stock.history.filter.product.placeholder")}
               className="h-10 w-full rounded-md border pl-9 pr-9 text-sm outline-none focus:border-blue-300"
             />
-            {isHistorySearchPending ? (
-              <LoaderCircle
-                className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400"
-                aria-hidden="true"
-              />
-            ) : productQueryInput ? (
-              <button
-                type="button"
-                onClick={clearHistorySearch}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                aria-label={t(uiLocale, "stock.history.filter.clear")}
-              >
-                <X className="h-4 w-4" />
-              </button>
-            ) : null}
+            <div className="absolute inset-y-0 right-3 flex items-center">
+              {isHistorySearchPending ? (
+                <Loader2
+                  className="h-4 w-4 animate-spin text-slate-400"
+                  aria-hidden="true"
+                />
+              ) : productQueryInput ? (
+                <button
+                  type="button"
+                  onClick={clearHistorySearch}
+                  className="text-slate-400 hover:text-slate-600"
+                  aria-label={t(uiLocale, "stock.history.filter.clear")}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
           </div>
           <Button
             type="button"

@@ -376,6 +376,8 @@ npm run po:audit:integrity
   - ฟอร์มเพิ่ม/แก้ไขสินค้าใน `/products` จะย่อรูปฝั่ง client ก่อนอัปโหลด (`640px WebP`) และฝั่ง API รับเฉพาะไฟล์ raster (`JPG/PNG/WebP`) พร้อม optimize แบบ strict อีกชั้นก่อนเก็บ
   - ปุ่มรูปสินค้าใช้ `border-dashed` เฉพาะตอนยังไม่มีรูป และสลับเป็น `border-solid` เมื่อมีรูปแล้ว
   - การลบรูปสินค้าเป็นแบบ pending ในฟอร์มแก้ไข (ลบจริงเมื่อกด `บันทึก` เท่านั้น; กดยกเลิก/ปิดฟอร์มจะไม่ลบ)
+  - ฟอร์มเพิ่ม/แก้ไขสินค้าใน `/products` มี image source picker แล้ว: แตะ thumbnail เพื่อเลือก `เลือกรูปจากเครื่อง` หรือ `ถ่ายรูปด้วยกล้อง` (camera input ใช้ `capture="environment"` เมื่อ browser รองรับ)
+  - หลังเลือกรูปหรือถ่ายรูปเสร็จ ระบบจะเปิด custom crop sheet ของแอปก่อนเสมอ โดยใช้ square crop + drag + zoom slider แล้วค่อยแปลงเป็น `640px WebP`; ไม่พึ่ง native crop ของระบบปฏิบัติการเป็นหลักเพื่อให้ UX คงที่ทุกอุปกรณ์
   - หน้า Product Detail ไม่แสดงปุ่ม quick action เกี่ยวกับรูปแล้ว (จัดการรูปผ่านปุ่ม `แก้ไข` ในฟอร์มเดียว)
   - หน้า Product Detail ย้าย action หลัก (`แก้ไข/สำเนา/เปิด-ปิดใช้งาน/พิมพ์บาร์โค้ด`) ไป footer ของ `SlideUpSheet` แบบ sticky และเพิ่ม custom confirm dialog ก่อน `ปิดใช้งาน` (ไม่ใช้ browser alert) พร้อม animation เปิด/ปิด และจัดวางกล่องยืนยันกึ่งกลางจอ
   - modal `Product Detail` ตั้งค่าไม่ให้ปิดเมื่อกด backdrop แล้ว (`closeOnBackdrop=false`) เพื่อลดการปิดรายละเอียดสินค้าโดยไม่ตั้งใจ
@@ -484,6 +486,7 @@ npm run po:audit:integrity
   - สแกนบาร์โค้ดในแท็บ `ดูสต็อก` จะเติมค่า barcode ลง search input ทันที, แสดง loading ระหว่างรอ fetch รายการสต็อกจาก `GET /api/stock/products?...&q=...`, และยังใช้ `GET /api/products/search?q&includeStock=true` เป็น exact-barcode resolver สำหรับ toast/guard กรณีเจอสินค้าแต่ติด filter หมวดหมู่; scanner modal จะเริ่มกล้องเฉพาะตอนเปิดจริงเพื่อลดความเสี่ยงเปิดกล้องค้างตอนปิดแผ่นสแกน
   - URL sync ของแท็บ `ดูสต็อก` (`inventoryQ/inventoryFilter/inventorySort/inventoryCategoryId`) ใช้ `window.history.replaceState(...)` แล้ว ไม่ใช้ `router.replace(...)` สำหรับการค้นหา/กรองในแท็บ จึงไม่กระตุ้นให้หน้า `/stock` rerender ทั้งหน้า; loading ระหว่างค้นหาจึงเกิดเฉพาะ section รายการสินค้า ไม่ใช่ skeleton ทั้งแท็บ และไม่มี loading helper text ใต้ search input แล้ว
   - ปุ่ม `X` ล้างคำค้นของแท็บ `ดูสต็อก` จะ clear query แบบ immediate แล้ว และถ้าต้อง fetch ใหม่จาก state ว่างจะใช้ list-only skeleton แทน full-tab loading เพื่อคง toolbar/search/filter ของแท็บไว้
+  - ไอคอนด้านขวาใน search input ของแท็บ `ดูสต็อก` (`spinner`/`X`) ใช้ right-slot container เดียวกันแล้ว และเปลี่ยน spinner เป็น `Loader2` เพื่อให้ภาพหมุนนิ่งขึ้น ลดอาการดูเหมือน icon ไหลลงระหว่าง animate
   - scanner ในแท็บ `ดูสต็อก` และ `บันทึกสต็อก` ใช้ UI/logic ชุดเดียวกับหน้า `/products` ผ่านคอมโพเนนต์กลาง `components/app/barcode-scanner-panel.tsx` (มี camera dropdown, pause/resume, torch/zoom, manual barcode fallback, และ cleanup ตอนปิด)
   - คอมโพเนนต์ legacy `components/app/stock-ledger.tsx` (ยังไม่ถูก mount ใน `/stock` ปัจจุบัน) ปรับ scanner ให้ใช้คอมโพเนนต์กลางเดียวกันแล้ว เพื่อคงพฤติกรรมเปิด/ปิดกล้องและ permission flow มาตรฐานเดียวกับ `/products`
   - นโยบาย scanner กลางของระบบ: หากเพิ่มปุ่ม `สแกนบาร์โค้ด` ใหม่ในหน้าอื่น ให้ reuse `BarcodeScannerPanel` + permission sheet มาตรฐานเดียวกันเสมอ เพื่อคง UX/permission/camera cleanup ให้สอดคล้องทั้งระบบ
@@ -505,6 +508,7 @@ npm run po:audit:integrity
   - ช่อง `ค้นหา` ในแท็บ `ประวัติ` มีปุ่ม `X` สำหรับล้างคำค้นแล้ว โดยใช้ pattern เดียวกับแท็บ `ดูสต็อก`: ถ้าไม่มี loading spinner และมีข้อความใน input จะแสดงปุ่มล้างที่ด้านขวา
   - URL sync ของแท็บ `ประวัติ` (`historyType/historyQ/historyDateFrom/historyDateTo/historyPage`) ใช้ `window.history.replaceState(...)` แล้วสำหรับการค้นหา/กรองในแท็บ เพื่อลดอาการหน้า `/stock` rerender ทั้งหน้า; ตอนค้นหา/สแกนจึงควรเห็น loading เฉพาะ movement list เป็นหลัก และไม่มี loading helper text ใต้ search input แล้ว
   - ปุ่ม `X` ล้างคำค้นของแท็บ `ประวัติ` จะ clear query แบบ immediate, seed cache ของ initial history key ตั้งแต่ props แรก, และถ้าต้อง fetch บน state ว่างจะใช้ list-only skeleton แทน full-tab loading
+  - ไอคอนด้านขวาใน search input ของแท็บ `ประวัติ` (`spinner`/`X`) ใช้ right-slot container เดียวกันแล้ว และเปลี่ยน spinner เป็น `Loader2` เพื่อให้ภาพหมุนนิ่งขึ้น ลดอาการดูเหมือน icon ไหลลงเมื่อ sticky bar เปลี่ยน state หรือสลับ loading
   - แก้บั๊กในฟอร์มกรองแท็บ `ประวัติ`: ค่า dropdown/วันที่ไม่ถูก reset กลับจาก URL ระหว่างพิมพ์แล้ว (URL sync จะดันค่าเข้าฟอร์มเฉพาะตอน query เปลี่ยนจริง)
   - ช่องวันที่ในแท็บ `ประวัติ` เปลี่ยนเป็น custom datepicker (calendar popover) แบบเดียวกับ PO เพื่อลดปัญหา native date input บนมือถือ
   - แท็บ `ประวัติ` จะ sync query/fetch เฉพาะตอน active tab เป็น `history` แล้ว เพื่อลด race condition ที่เคยเด้งแท็บ/โหลดซ้ำเมื่อมีหลายแท็บถูก keep-mounted พร้อมกัน
