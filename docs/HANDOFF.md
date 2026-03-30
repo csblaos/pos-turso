@@ -6,6 +6,47 @@
 
 ## Changed (ล่าสุด)
 
+- แก้ UX ตอนกด `X` ล้างคำค้นในหน้า `/stock`:
+  - ทั้งแท็บ `inventory` และ `history` เปลี่ยนจาก full-tab loading มาเป็น list-only skeleton เมื่อ clear/search/filter แล้วผลลัพธ์ปัจจุบันว่าง
+  - ปุ่ม `X` ของทั้งสองแท็บ clear query แบบ immediate แล้ว ไม่รอ debounce ฝั่ง input
+  - history tab seed cache ของ initial key จาก props แรกไว้ด้วย เพื่อลดเคส clear กลับ query ว่างแล้วต้องโหลดจาก state ว่าง
+
+- ปรับ sticky search ของแท็บ `/stock?tab=history` ให้ล้างคำค้นได้เร็วขึ้น:
+  - เพิ่มปุ่ม `X` ด้านขวาใน search input เมื่อมีข้อความและไม่มี loading spinner
+  - กดแล้วจะล้าง query และ apply ค่าว่างทันที
+
+- ปรับ search loading ของหน้า `/stock` ให้สะอาดขึ้น:
+  - ลบ loading helper text ใต้ search input ออกจากทั้งแท็บ `inventory` และ `history`
+  - คง feedback หลักไว้เหมือนเดิมคือ spinner ใน input, disable scan button ตามจังหวะที่เกี่ยวข้อง, และ loading/fade ที่ section list
+
+- แก้อาการหน้า `/stock` ดูเหมือน reload ทั้งหน้าเวลาค้นหา/กรองในแท็บ:
+  - เปลี่ยน URL sync ของ `inventory` และ `history` จาก `router.replace(...)` เป็น `window.history.replaceState(...)` สำหรับ query ภายในแท็บ
+  - ผลคือ search/filter/page ยังอัปเดต URL ได้เหมือนเดิม แต่ไม่ trigger route navigation ของ `/stock` ทั้งหน้าอีก
+  - loading ระหว่างค้นหาจึงเหลือเฉพาะ section content list ของแท็บ แทนการเสี่ยงเห็น skeleton/fallback ของทั้งแท็บจาก server rerender
+  - `components/app/stock-tabs.tsx` ปรับตอนสลับแท็บให้ดึง query ล่าสุดจาก `window.location.search` เพื่อ preserve ค่าค้นหา/ตัวกรองที่ sync ด้วย `replaceState`
+
+- ปรับ history tab ให้ search เป็น live search:
+  - ช่อง `ค้นหา` ใน `/stock?tab=history` จะ debounce ประมาณ `350ms` แล้ว auto apply/fetch เอง ไม่ต้องกด `ใช้ตัวกรอง`
+  - loading ใน sticky search bar จะขึ้นตั้งแต่ช่วงรอ debounce/fetch เพื่อสื่อว่ากำลังค้นหาอยู่
+  - ปุ่ม `ใช้ตัวกรอง` ยังคงมีไว้สำหรับ filter `ประเภท / from / to` เป็นหลัก
+
+- ปรับแท็บ `/stock?tab=history` ให้ `search + scan` เป็น sticky bar:
+  - ย้ายแถวค้นหา/สแกนออกจาก card filter ไปเป็น sticky bar ใต้ toolbar เพื่อให้เรียกใช้ซ้ำได้ตลอดระหว่างเลื่อนดู movement list
+  - ใช้ visual pattern เดียวกับแท็บ `inventory`: ตอน stuck จะเปลี่ยนเป็นแถบขาวบางลงพร้อม border/shadow
+  - ตั้งใจ sticky เฉพาะ `search + scan`; filter `ประเภท / from / to / apply` ยังอยู่ใน card ปกติเพื่อไม่กินพื้นที่ผลลัพธ์บนมือถือมากเกินไป
+
+- ปรับ scanner ของแท็บ `/stock?tab=history` ให้ feedback ชัดขึ้น:
+  - หลังสแกนสำเร็จ ระบบจะปิด scanner แล้วเติม barcode ลง search input ก่อนทันที
+  - ระหว่างรอ `GET /api/stock/movements?view=history&q=...` จะมี spinner inline ในช่องค้นหา, disable ปุ่ม scan ชั่วคราว, และลด opacity ของผลลัพธ์เดิมเพื่อสื่อว่ากำลังโหลดข้อมูลใหม่
+  - คง fetch/apply logic เดิมของ history tab ไว้ ไม่ได้เปลี่ยน API หรือโครง filter อื่น
+
+- ปรับแท็บ `/stock?tab=inventory` ให้ search/scanner เร็วและตรงขึ้น:
+  - ขยาย API `GET /api/stock/products` ให้รองรับ query `q` สำหรับค้นหา `sku/name/barcode` แบบ server-backed โดยยังใช้ pagination + `categoryId` เดิม
+  - หน้า `/stock` server render จะอ่าน `inventoryQ` และ `inventoryCategoryId` มาตั้งต้นใน initial list แล้ว ทำให้เปิด deep link ของ stock inventory search ได้ตรงตั้งแต่ render แรก
+  - `components/app/stock-inventory-view.tsx` เปลี่ยนจาก search แบบกรองเฉพาะ `productItems` ที่โหลดค้างอยู่ มาเป็น fetch ใหม่จาก server ตาม `inventoryQ`
+  - ตอนสแกนบาร์โค้ด ระบบจะปิด scanner แล้วเติม barcode ลง search input ทันที จากนั้นแสดง loading inline ใน search bar/ผลลัพธ์ระหว่างรอ fetch
+  - scanner ยังใช้ `GET /api/products/search?q&includeStock=true` เป็น exact barcode resolver สำหรับ toast `พบสินค้า/ไม่พบสินค้า` และเคส `เจอสินค้าแต่ไม่อยู่ในหมวดที่เลือก`
+
 - ปรับ header ของหน้า `/products`, `/settings`, และ `/stock` ให้เหลือแค่ title (ตัด subtitle ออก) เพื่อประหยัดพื้นที่บนจอเล็ก
 - เปลี่ยนพฤติกรรม sheet เปลี่ยนภาษาในหน้า `/settings/language`: บันทึกสำเร็จแล้วปิด sheet อัตโนมัติ (ถ้าไม่มี warning)
 - ปรับ UI sheet เปลี่ยนภาษาในหน้า `/settings/language` จาก dropdown เป็น list option เพื่อเลือกภาษาได้เร็วขึ้นบนมือถือ

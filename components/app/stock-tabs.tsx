@@ -189,7 +189,11 @@ export function StockTabs({
                         };
                   }
                   setActiveTab(tab.id);
-                  const params = new URLSearchParams(searchParams.toString());
+                  const params = new URLSearchParams(
+                    typeof window !== "undefined"
+                      ? window.location.search
+                      : searchParams.toString(),
+                  );
                   params.set("tab", tab.id);
                   router.replace(`?${params.toString()}`, { scroll: false });
                 }}

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 
 import { db } from "@/lib/db/client";
@@ -307,11 +307,22 @@ export async function getStockProductsForStorePage(
   limit: number,
   offset: number,
   categoryId?: string | null,
+  query?: string | null,
 ): Promise<StockProductOption[]> {
   const baseUnits = alias(units, "base_units");
-  const whereClause = categoryId
-    ? and(eq(products.storeId, storeId), eq(products.categoryId, categoryId))
-    : eq(products.storeId, storeId);
+  const normalizedQuery = query?.trim().toLowerCase() ?? "";
+  const searchClause = normalizedQuery
+    ? or(
+        like(sql`lower(${products.name})`, `%${normalizedQuery}%`),
+        like(sql`lower(${products.sku})`, `%${normalizedQuery}%`),
+        like(sql`lower(coalesce(${products.barcode}, ''))`, `%${normalizedQuery}%`),
+      )
+    : undefined;
+  const whereClause = and(
+    eq(products.storeId, storeId),
+    categoryId ? eq(products.categoryId, categoryId) : undefined,
+    searchClause,
+  );
 
   const productRows = await db
     .select({

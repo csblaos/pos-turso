@@ -1,9 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, ChevronDown, ListFilter, Package, ScanBarcode, Search, X } from "lucide-react";
+import {
+  ArrowUpDown,
+  ChevronDown,
+  ListFilter,
+  LoaderCircle,
+  Package,
+  ScanBarcode,
+  Search,
+  X,
+} from "lucide-react";
 import toast from "react-hot-toast";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 import { BarcodeScannerPanel } from "@/components/app/barcode-scanner-panel";
 import { Button } from "@/components/ui/button";
@@ -11,7 +20,6 @@ import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import {
   StockTabEmptyState,
   StockTabErrorState,
-  StockTabLoadingState,
   StockTabToolbar,
 } from "@/components/app/stock-tab-feedback";
 import { authFetch } from "@/lib/auth/client-token";
@@ -38,6 +46,7 @@ const INVENTORY_Q_QUERY_KEY = "inventoryQ";
 const INVENTORY_FILTER_QUERY_KEY = "inventoryFilter";
 const INVENTORY_SORT_QUERY_KEY = "inventorySort";
 const INVENTORY_CATEGORY_QUERY_KEY = "inventoryCategoryId";
+const INVENTORY_LIST_SKELETON_COUNT = 3;
 
 function parseInventoryFilter(value: string | null): FilterOption | null {
   if (value === "all" || value === "low" || value === "out") {
@@ -73,6 +82,13 @@ function mergeUniqueProducts(
   return merged;
 }
 
+function buildInventoryFetchKey(params: {
+  categoryId: string;
+  query: string;
+}) {
+  return `${params.categoryId}::${params.query.trim().toLowerCase()}`;
+}
+
 export function StockInventoryView({
   products,
   categories,
@@ -81,7 +97,6 @@ export function StockInventoryView({
   pageSize,
   initialHasMore,
 }: StockInventoryViewProps) {
-  const router = useRouter();
   const pathname = usePathname() ?? "/";
   const rawSearchParams = useSearchParams();
   const searchParams = useMemo(
@@ -104,8 +119,10 @@ export function StockInventoryView({
   const [productPage, setProductPage] = useState(1);
   const [hasMoreProducts, setHasMoreProducts] = useState(initialHasMore);
   const [isRefreshingData, setIsRefreshingData] = useState(false);
+  const [isInventoryQueryLoading, setIsInventoryQueryLoading] = useState(false);
   const [isLoadingMoreProducts, setIsLoadingMoreProducts] = useState(false);
   const [isSearchingByBarcode, setIsSearchingByBarcode] = useState(false);
+  const [pendingScannedBarcode, setPendingScannedBarcode] = useState<string | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(
     products.length > 0 ? new Date().toISOString() : null,
@@ -122,20 +139,33 @@ export function StockInventoryView({
   const [showScanner, setShowScanner] = useState(false);
   const [showScannerPermission, setShowScannerPermission] = useState(false);
   const [hasSeenScannerPermission, setHasSeenScannerPermission] = useState(false);
-  const lastFetchedCategoryIdRef = useRef<string | null>(null);
+  const lastFetchedInventoryKeyRef = useRef(
+    buildInventoryFetchKey({
+      categoryId: categoryIdFromUrl,
+      query: searchQueryFromUrl,
+    }),
+  );
+  const inventoryQueryRequestIdRef = useRef(0);
   const hasActiveInventorySearchQuery = searchQuery.trim().length > 0;
   const isInventoryCompactSearchMode =
     hasActiveInventorySearchQuery && isInventorySearchStickyStuck;
-  const isInitialInventoryLoading = isRefreshingData && productItems.length === 0;
+  const hasPendingInventorySearchInput = searchQuery.trim() !== searchQueryForUrlSync;
+  const isInventoryQueryPending = hasPendingInventorySearchInput || isInventoryQueryLoading;
+  const shouldShowInventoryListSkeleton =
+    (isRefreshingData || isInventoryQueryLoading) && productItems.length === 0;
 
   useEffect(() => {
     setProductItems(products);
     setProductPage(1);
     setHasMoreProducts(initialHasMore);
+    lastFetchedInventoryKeyRef.current = buildInventoryFetchKey({
+      categoryId: categoryIdFromUrl,
+      query: searchQueryFromUrl,
+    });
     if (products.length > 0) {
       setLastUpdatedAt(new Date().toISOString());
     }
-  }, [initialHasMore, products]);
+  }, [categoryIdFromUrl, initialHasMore, products, searchQueryFromUrl]);
 
   useEffect(() => {
     const seen = window.localStorage.getItem(SCANNER_PERMISSION_STORAGE_KEY) === "1";
@@ -189,7 +219,9 @@ export function StockInventoryView({
       return;
     }
 
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(
+      typeof window !== "undefined" ? window.location.search : searchParams.toString(),
+    );
     let changed = false;
 
     if (searchQueryForUrlSync) {
@@ -237,14 +269,17 @@ export function StockInventoryView({
     }
 
     const nextQuery = params.toString();
-    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
-      scroll: false,
-    });
+    if (typeof window !== "undefined") {
+      window.history.replaceState(
+        window.history.state,
+        "",
+        nextQuery ? `${pathname}?${nextQuery}` : pathname,
+      );
+    }
   }, [
     filter,
     isInventoryTabActive,
     pathname,
-    router,
     searchParams,
     searchQueryForUrlSync,
     selectedCategoryId,
@@ -279,13 +314,6 @@ export function StockInventoryView({
       });
     }
 
-    const keyword = searchQuery.trim().toLowerCase();
-    if (keyword) {
-      items = items.filter((p) =>
-        [p.sku, p.name, p.barcode ?? ""].join(" ").toLowerCase().includes(keyword),
-      );
-    }
-
     items.sort((a, b) => {
       switch (sortBy) {
         case "sku":
@@ -302,7 +330,7 @@ export function StockInventoryView({
     });
 
     return items;
-  }, [filter, productItems, resolveThresholds, searchQuery, sortBy, uiLocale]);
+  }, [filter, productItems, resolveThresholds, sortBy, uiLocale]);
 
   const stats = useMemo(() => {
     let low = 0;
@@ -338,13 +366,24 @@ export function StockInventoryView({
   }, []);
 
   const fetchStockProductsPage = useCallback(
-    async (page: number) => {
+    async (
+      page: number,
+      options?: {
+        categoryId?: string;
+        query?: string;
+      },
+    ) => {
       const params = new URLSearchParams({
         page: String(page),
         pageSize: String(pageSize),
       });
-      if (selectedCategoryId) {
-        params.set("categoryId", selectedCategoryId);
+      const categoryId = options?.categoryId ?? selectedCategoryId;
+      const query = options?.query ?? searchQueryForUrlSync;
+      if (categoryId) {
+        params.set("categoryId", categoryId);
+      }
+      if (query.trim()) {
+        params.set("q", query.trim());
       }
 
       const res = await authFetch(`/api/stock/products?${params.toString()}`);
@@ -371,47 +410,103 @@ export function StockInventoryView({
         page: Number(data.page ?? page),
       };
     },
-    [pageSize, selectedCategoryId, uiLocale],
+    [pageSize, searchQueryForUrlSync, selectedCategoryId, uiLocale],
   );
 
   const refreshInventoryData = useCallback(async () => {
+    const requestId = ++inventoryQueryRequestIdRef.current;
+    const currentFetchKey = buildInventoryFetchKey({
+      categoryId: selectedCategoryId,
+      query: searchQueryForUrlSync,
+    });
     setIsRefreshingData(true);
     try {
-      const next = await fetchStockProductsPage(1);
+      const next = await fetchStockProductsPage(1, {
+        categoryId: selectedCategoryId,
+        query: searchQueryForUrlSync,
+      });
+      if (requestId !== inventoryQueryRequestIdRef.current) {
+        return;
+      }
       setProductItems(next.products);
       setProductPage(next.page);
       setHasMoreProducts(next.hasMore);
       setDataError(null);
+      lastFetchedInventoryKeyRef.current = currentFetchKey;
       setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
+      if (requestId !== inventoryQueryRequestIdRef.current) {
+        return;
+      }
       const message =
         error instanceof Error ? error.message : t(uiLocale, "stock.error.serverUnreachableRetry");
       setDataError(message);
     } finally {
-      setIsRefreshingData(false);
+      if (requestId === inventoryQueryRequestIdRef.current) {
+        setIsRefreshingData(false);
+      }
     }
-  }, [fetchStockProductsPage, uiLocale]);
+  }, [fetchStockProductsPage, searchQueryForUrlSync, selectedCategoryId, uiLocale]);
 
   useEffect(() => {
     if (!isInventoryTabActive) {
       return;
     }
-
-    if (lastFetchedCategoryIdRef.current === null) {
-      lastFetchedCategoryIdRef.current = selectedCategoryId;
-      if (!selectedCategoryId) {
-        return;
-      }
-    } else if (lastFetchedCategoryIdRef.current === selectedCategoryId) {
+    const nextFetchKey = buildInventoryFetchKey({
+      categoryId: selectedCategoryId,
+      query: searchQueryForUrlSync,
+    });
+    if (lastFetchedInventoryKeyRef.current === nextFetchKey) {
       return;
     }
-    lastFetchedCategoryIdRef.current = selectedCategoryId;
 
-    setProductItems([]);
-    setProductPage(1);
-    setHasMoreProducts(false);
-    void refreshInventoryData();
-  }, [isInventoryTabActive, refreshInventoryData, selectedCategoryId]);
+    const requestId = ++inventoryQueryRequestIdRef.current;
+    let isCancelled = false;
+
+    setIsInventoryQueryLoading(true);
+    setDataError(null);
+
+    void (async () => {
+      try {
+        const next = await fetchStockProductsPage(1, {
+          categoryId: selectedCategoryId,
+          query: searchQueryForUrlSync,
+        });
+        if (isCancelled || requestId !== inventoryQueryRequestIdRef.current) {
+          return;
+        }
+        setProductItems(next.products);
+        setProductPage(next.page);
+        setHasMoreProducts(next.hasMore);
+        setDataError(null);
+        lastFetchedInventoryKeyRef.current = nextFetchKey;
+        setLastUpdatedAt(new Date().toISOString());
+      } catch (error) {
+        if (isCancelled || requestId !== inventoryQueryRequestIdRef.current) {
+          return;
+        }
+        const message =
+          error instanceof Error
+            ? error.message
+            : t(uiLocale, "stock.inventory.error.loadFailed");
+        setDataError(message);
+      } finally {
+        if (!isCancelled && requestId === inventoryQueryRequestIdRef.current) {
+          setIsInventoryQueryLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    fetchStockProductsPage,
+    isInventoryTabActive,
+    searchQueryForUrlSync,
+    selectedCategoryId,
+    uiLocale,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -498,14 +593,24 @@ export function StockInventoryView({
 
   const loadMoreProducts = useCallback(
     async (options?: { silent?: boolean }) => {
-      if (isLoadingMoreProducts || !hasMoreProducts) {
+      if (isLoadingMoreProducts || isInventoryQueryPending || !hasMoreProducts) {
         return false;
       }
 
+      const currentFetchKey = buildInventoryFetchKey({
+        categoryId: selectedCategoryId,
+        query: searchQueryForUrlSync,
+      });
       setIsLoadingMoreProducts(true);
       try {
         const nextPage = productPage + 1;
-        const next = await fetchStockProductsPage(nextPage);
+        const next = await fetchStockProductsPage(nextPage, {
+          categoryId: selectedCategoryId,
+          query: searchQueryForUrlSync,
+        });
+        if (currentFetchKey !== lastFetchedInventoryKeyRef.current) {
+          return false;
+        }
         setProductItems((prev) => mergeUniqueProducts(prev, next.products));
         setProductPage(next.page);
         setHasMoreProducts(next.hasMore);
@@ -524,7 +629,16 @@ export function StockInventoryView({
         setIsLoadingMoreProducts(false);
       }
     },
-    [fetchStockProductsPage, hasMoreProducts, isLoadingMoreProducts, productPage, uiLocale],
+    [
+      fetchStockProductsPage,
+      hasMoreProducts,
+      isInventoryQueryPending,
+      isLoadingMoreProducts,
+      productPage,
+      searchQueryForUrlSync,
+      selectedCategoryId,
+      uiLocale,
+    ],
   );
 
   const resolveProductFromBarcode = useCallback(async (barcode: string) => {
@@ -555,91 +669,72 @@ export function StockInventoryView({
         return;
       }
 
+      setFilter("all");
+      setSearchQuery(trimmed);
+      setSearchQueryForUrlSync(trimmed);
+      setPendingScannedBarcode(trimmed);
       setIsSearchingByBarcode(true);
       try {
         const matchedProduct = await resolveProductFromBarcode(trimmed);
         if (!matchedProduct) {
-          setSearchQuery(trimmed);
+          setPendingScannedBarcode(null);
+          setIsSearchingByBarcode(false);
           toast.error(t(uiLocale, "stock.recording.toast.barcodeNotFound"));
           return;
         }
-
-        setFilter("all");
-        setSearchQuery(trimmed);
 
         if (
           selectedCategoryId &&
           matchedProduct.categoryId &&
           matchedProduct.categoryId !== selectedCategoryId
         ) {
+          setPendingScannedBarcode(null);
+          setIsSearchingByBarcode(false);
           toast(
             `${t(uiLocale, "stock.recording.toast.foundProduct.prefix")} ${matchedProduct.name} ${t(uiLocale, "stock.inventory.toast.notInSelectedCategory.suffix")}`,
           );
           return;
         }
-
-        const inCurrentList = productItems.some(
-          (item) => item.productId === matchedProduct.id,
-        );
-
-        if (inCurrentList) {
-          toast.success(
-            `${t(uiLocale, "stock.recording.toast.foundProduct.prefix")} ${matchedProduct.name}`,
-          );
-          highlightProduct(matchedProduct.id);
-          return;
-        }
-
-        let loaded = false;
-        let nextPage = productPage;
-        let canLoadMore = hasMoreProducts;
-        let attempts = 0;
-
-        while (canLoadMore && attempts < 12) {
-          attempts += 1;
-          const result = await fetchStockProductsPage(nextPage + 1);
-          setProductItems((prev) => mergeUniqueProducts(prev, result.products));
-          setProductPage(result.page);
-          setHasMoreProducts(result.hasMore);
-          setLastUpdatedAt(new Date().toISOString());
-
-          if (result.products.some((item) => item.productId === matchedProduct.id)) {
-            loaded = true;
-            break;
-          }
-
-          nextPage = result.page;
-          canLoadMore = result.hasMore;
-        }
-
-        if (loaded) {
-          toast.success(
-            `${t(uiLocale, "stock.recording.toast.foundProduct.prefix")} ${matchedProduct.name}`,
-          );
-          highlightProduct(matchedProduct.id);
-          return;
-        }
-
-        toast.success(
-          `${t(uiLocale, "stock.recording.toast.foundProduct.prefix")} ${matchedProduct.name} ${t(uiLocale, "stock.inventory.toast.outsideLoadedList.suffix")}`,
-        );
       } catch {
-        toast.error(t(uiLocale, "stock.inventory.toast.searchBarcodeFailed"));
-      } finally {
+        setPendingScannedBarcode(null);
         setIsSearchingByBarcode(false);
+        toast.error(t(uiLocale, "stock.inventory.toast.searchBarcodeFailed"));
       }
     },
     [
-      fetchStockProductsPage,
-      hasMoreProducts,
-      highlightProduct,
-      productItems,
-      productPage,
       resolveProductFromBarcode,
       selectedCategoryId,
       uiLocale,
     ],
   );
+
+  useEffect(() => {
+    if (!pendingScannedBarcode || isInventoryQueryPending) {
+      return;
+    }
+
+    const matchedProduct = productItems.find(
+      (item) => item.barcode?.toLowerCase() === pendingScannedBarcode.toLowerCase(),
+    );
+
+    if (matchedProduct) {
+      toast.success(
+        `${t(uiLocale, "stock.recording.toast.foundProduct.prefix")} ${matchedProduct.name}`,
+      );
+      highlightProduct(matchedProduct.productId);
+    } else {
+      toast.error(t(uiLocale, "stock.recording.toast.barcodeNotFound"));
+    }
+
+    setPendingScannedBarcode(null);
+    setIsSearchingByBarcode(false);
+  }, [
+    highlightProduct,
+    isInventoryQueryPending,
+    pendingScannedBarcode,
+    productItems,
+    uiLocale,
+  ]);
 
   const openScanner = () => {
     if (hasSeenScannerPermission) {
@@ -648,14 +743,11 @@ export function StockInventoryView({
       setShowScannerPermission(true);
     }
   };
-
-  if (isInitialInventoryLoading) {
-    return (
-      <section className="space-y-2">
-        <StockTabLoadingState variant="inventory" />
-      </section>
-    );
-  }
+  const clearInventorySearch = () => {
+    setPendingScannedBarcode(null);
+    setSearchQuery("");
+    setSearchQueryForUrlSync("");
+  };
 
   return (
     <section className="space-y-2">
@@ -729,15 +821,17 @@ export function StockInventoryView({
               placeholder={t(uiLocale, "stock.inventory.search.placeholder")}
               className="h-10 w-full rounded-md border pl-9 pr-9 text-sm outline-none focus:border-blue-300"
             />
-            {searchQuery && (
+            {isInventoryQueryPending ? (
+              <LoaderCircle className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400" />
+            ) : searchQuery ? (
               <button
                 type="button"
-                onClick={() => setSearchQuery("")}
+                onClick={clearInventorySearch}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
                 <X className="h-4 w-4" />
               </button>
-            )}
+            ) : null}
           </div>
 
           <Button
@@ -750,9 +844,6 @@ export function StockInventoryView({
             <ScanBarcode className="h-4 w-4" />
           </Button>
         </div>
-        <p className="mt-1 text-[11px] text-slate-500">
-          {t(uiLocale, "stock.inventory.search.helper")}
-        </p>
       </div>
 
       <article className="rounded-xl border bg-white p-4 shadow-sm">
@@ -805,7 +896,32 @@ export function StockInventoryView({
         </p>
       </article>
 
-      {dataError && productItems.length === 0 ? (
+      {shouldShowInventoryListSkeleton ? (
+        <div className="space-y-2">
+          {Array.from({ length: INVENTORY_LIST_SKELETON_COUNT }).map((_, index) => (
+            <article
+              key={`inventory-loading-${index}`}
+              className="rounded-xl border bg-white p-4 shadow-sm"
+            >
+              <div className="animate-pulse space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 w-20 rounded bg-slate-200" />
+                    <div className="h-4 w-40 rounded bg-slate-200" />
+                    <div className="h-3 w-24 rounded bg-slate-100" />
+                  </div>
+                  <div className="h-6 w-16 rounded-full bg-slate-200" />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="h-20 rounded-lg bg-slate-100" />
+                  <div className="h-20 rounded-lg bg-slate-100" />
+                  <div className="h-20 rounded-lg bg-slate-100" />
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : dataError && productItems.length === 0 ? (
         <StockTabErrorState
           message={dataError}
           onRetry={() => {
@@ -821,7 +937,9 @@ export function StockInventoryView({
         <>
           <div
             ref={inventoryResultsRef}
-            className="space-y-2"
+            className={`space-y-2 transition-opacity ${
+              isInventoryQueryPending ? "opacity-60" : "opacity-100"
+            }`}
             style={
               isInventoryCompactSearchMode
                 ? { minHeight: "calc(100dvh - 11rem)" }
@@ -947,7 +1065,7 @@ export function StockInventoryView({
                 onClick={() => {
                   void loadMoreProducts();
                 }}
-                disabled={isLoadingMoreProducts}
+                disabled={isLoadingMoreProducts || isInventoryQueryPending}
               >
                 {isLoadingMoreProducts
                   ? t(uiLocale, "products.list.loadingMore")

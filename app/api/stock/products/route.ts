@@ -13,12 +13,14 @@ export async function GET(request: Request) {
       Math.max(5, Number(url.searchParams.get("pageSize") ?? 20)),
     );
     const categoryId = url.searchParams.get("categoryId")?.trim() || undefined;
+    const query = url.searchParams.get("q")?.trim() || undefined;
     const offset = (page - 1) * pageSize;
     const rows = await getStockProductsPage({
       storeId,
       limit: pageSize + 1,
       offset,
       categoryId,
+      query,
     });
     const hasMore = rows.length > pageSize;
     const products = rows.slice(0, pageSize);

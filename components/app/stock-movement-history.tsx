@@ -1,8 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Calendar, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ListFilter, ScanBarcode, Search } from "lucide-react";
+import { usePathname, useSearchParams } from "next/navigation";
+import {
+  Calendar,
+  CalendarDays,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ListFilter,
+  LoaderCircle,
+  ScanBarcode,
+  Search,
+  X,
+} from "lucide-react";
 
 import { BarcodeScannerPanel } from "@/components/app/barcode-scanner-panel";
 import { Button } from "@/components/ui/button";
@@ -10,7 +21,6 @@ import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import {
   StockTabEmptyState,
   StockTabErrorState,
-  StockTabLoadingState,
   StockTabToolbar,
 } from "@/components/app/stock-tab-feedback";
 import { authFetch } from "@/lib/auth/client-token";
@@ -59,6 +69,7 @@ const HISTORY_PAGE_QUERY_KEY = "historyPage";
 const HISTORY_Q_QUERY_KEY = "historyQ";
 const HISTORY_DATE_FROM_QUERY_KEY = "historyDateFrom";
 const HISTORY_DATE_TO_QUERY_KEY = "historyDateTo";
+const HISTORY_LIST_SKELETON_COUNT = 4;
 
 const isDateOnly = (value: string | null) =>
   Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
@@ -350,7 +361,6 @@ function buildHistoryCacheKey(params: {
 }
 
 export function StockMovementHistory({ movements, initialTotal }: StockMovementHistoryProps) {
-  const router = useRouter();
   const pathname = usePathname() ?? "/";
   const rawSearchParams = useSearchParams();
   const searchParams = useMemo(
@@ -401,6 +411,10 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
   const [showScanner, setShowScanner] = useState(false);
   const [showScannerPermission, setShowScannerPermission] = useState(false);
   const [hasSeenScannerPermission, setHasSeenScannerPermission] = useState(false);
+  const [pendingScannedQuery, setPendingScannedQuery] = useState<string | null>(null);
+  const [hasPendingScanFetchStarted, setHasPendingScanFetchStarted] = useState(false);
+  const historySearchStickyRef = useRef<HTMLDivElement | null>(null);
+  const [isHistorySearchStickyStuck, setIsHistorySearchStickyStuck] = useState(false);
   const historyCacheRef = useRef<
     Map<string, { movements: InventoryMovementView[]; total: number; fetchedAt: string }>
   >(new Map());
@@ -421,13 +435,36 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
     dateFrom: appliedDateFrom,
     dateTo: appliedDateTo,
   });
+  const initialHistoryCacheKey = useMemo(
+    () =>
+      buildHistoryCacheKey({
+        page: pageFromQuery,
+        typeFilter: typeFilterFromQuery,
+        query: queryFromUrl,
+        dateFrom: dateFromFromUrl,
+        dateTo: dateToFromUrl,
+      }),
+    [
+      dateFromFromUrl,
+      dateToFromUrl,
+      pageFromQuery,
+      queryFromUrl,
+      typeFilterFromQuery,
+    ],
+  );
 
   useEffect(() => {
     setMovementItems(movements);
     setTotalItems(initialTotal);
     setErrorMessage(null);
-    setLastUpdatedAt(movements.length > 0 ? new Date().toISOString() : null);
-  }, [initialTotal, movements]);
+    const fetchedAt = movements.length > 0 ? new Date().toISOString() : null;
+    setLastUpdatedAt(fetchedAt);
+    historyCacheRef.current.set(initialHistoryCacheKey, {
+      movements,
+      total: initialTotal,
+      fetchedAt: fetchedAt ?? new Date().toISOString(),
+    });
+  }, [initialHistoryCacheKey, initialTotal, movements]);
 
   useEffect(() => {
     if (!isHistoryTabActive) {
@@ -468,6 +505,26 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
     isHistoryTabActive,
     searchParams,
   ]);
+
+  useEffect(() => {
+    if (!isHistoryTabActive) {
+      return;
+    }
+
+    const nextQuery = productQueryInput.trim();
+    if (nextQuery === appliedProductQuery) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setAppliedProductQuery(nextQuery);
+      setPage(1);
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [appliedProductQuery, isHistoryTabActive, productQueryInput]);
 
   const fetchHistory = useCallback(
     async (options?: { manual?: boolean; signal?: AbortSignal; background?: boolean }) => {
@@ -603,7 +660,9 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
       return;
     }
 
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(
+      typeof window !== "undefined" ? window.location.search : searchParams.toString(),
+    );
     let changed = false;
 
     if (appliedTypeFilter === "all") {
@@ -661,9 +720,13 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
     }
 
     const nextQuery = params.toString();
-    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
-      scroll: false,
-    });
+    if (typeof window !== "undefined") {
+      window.history.replaceState(
+        window.history.state,
+        "",
+        nextQuery ? `${pathname}?${nextQuery}` : pathname,
+      );
+    }
   }, [
     appliedDateFrom,
     appliedDateTo,
@@ -671,10 +734,83 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
     currentPage,
     isHistoryTabActive,
     pathname,
-    router,
     searchParams,
     appliedTypeFilter,
   ]);
+
+  useEffect(() => {
+    if (!pendingScannedQuery) {
+      return;
+    }
+
+    if (!hasPendingScanFetchStarted && isLoading) {
+      setHasPendingScanFetchStarted(true);
+      return;
+    }
+
+    if (!hasPendingScanFetchStarted && historyCacheRef.current.has(currentCacheKey)) {
+      setPendingScannedQuery(null);
+      return;
+    }
+
+    if (hasPendingScanFetchStarted && !isLoading && !isRefreshing) {
+      setPendingScannedQuery(null);
+      setHasPendingScanFetchStarted(false);
+    }
+  }, [
+    currentCacheKey,
+    hasPendingScanFetchStarted,
+    isLoading,
+    isRefreshing,
+    pendingScannedQuery,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const updateStuckState = () => {
+      const stickyEl = historySearchStickyRef.current;
+      if (!stickyEl) {
+        return;
+      }
+
+      const style = window.getComputedStyle(stickyEl);
+      if (style.position !== "sticky") {
+        setIsHistorySearchStickyStuck(false);
+        return;
+      }
+
+      const topPx = Number.parseFloat(style.top || "0") || 0;
+      const nextStuck = stickyEl.getBoundingClientRect().top <= topPx + 0.5;
+      setIsHistorySearchStickyStuck((prev) => (prev === nextStuck ? prev : nextStuck));
+    };
+
+    updateStuckState();
+
+    let rafId = 0;
+    const scheduleUpdate = () => {
+      if (rafId !== 0) {
+        return;
+      }
+      rafId = window.requestAnimationFrame(() => {
+        rafId = 0;
+        updateStuckState();
+      });
+    };
+
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+
+    return () => {
+      if (rafId !== 0) {
+        window.cancelAnimationFrame(rafId);
+      }
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+    };
+  }, []);
 
   const applyFilters = () => {
     if (dateFromInput && dateToInput && dateFromInput > dateToInput) {
@@ -723,6 +859,8 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
     if (!trimmed) {
       return;
     }
+    setPendingScannedQuery(trimmed);
+    setHasPendingScanFetchStarted(false);
     setProductQueryInput(trimmed);
     setAppliedProductQuery(trimmed);
     setPage(1);
@@ -733,20 +871,24 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
     Boolean(appliedProductQuery) ||
     Boolean(appliedDateFrom) ||
     Boolean(appliedDateTo);
-  const isInitialHistoryLoading = isLoading && movementItems.length === 0;
+  const isScanSearchPending = pendingScannedQuery !== null;
+  const isSearchTypingPending = productQueryInput.trim() !== appliedProductQuery;
+  const isHistorySearchPending = isScanSearchPending || isSearchTypingPending;
+  const shouldShowHistoryListSkeleton =
+    (isLoading || isRefreshing) && movementItems.length === 0;
 
   const getTypeFilterLabel = (value: MovementTypeFilter) => {
     const option = movementTypeFilterOptions.find((item) => item.value === value);
     return t(uiLocale, option?.labelKey ?? "common.filter.all");
   };
 
-  if (isInitialHistoryLoading) {
-    return (
-      <section className="space-y-4">
-        <StockTabLoadingState variant="history" />
-      </section>
-    );
-  }
+  const clearHistorySearch = () => {
+    setPendingScannedQuery(null);
+    setHasPendingScanFetchStarted(false);
+    setProductQueryInput("");
+    setAppliedProductQuery("");
+    setPage(1);
+  };
 
   return (
     <section className="space-y-4">
@@ -759,7 +901,14 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
         }}
       />
 
-      <article className="space-y-3 rounded-xl border bg-white p-3 shadow-sm">
+      <div
+        ref={historySearchStickyRef}
+        className={`sticky top-[3.8rem] z-10 transition-[margin,padding,background-color,box-shadow,border-color] ${
+          isHistorySearchStickyStuck
+            ? "-mx-4 border-y border-slate-200 bg-white px-4 py-2 shadow-sm supports-[backdrop-filter]:bg-white md:-mx-6 md:px-6 min-[1200px]:-mx-8 min-[1200px]:px-8"
+            : "px-0 py-2"
+        }`}
+      >
         <div className="flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <Search
@@ -771,8 +920,23 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
               value={productQueryInput}
               onChange={(event) => setProductQueryInput(event.target.value)}
               placeholder={t(uiLocale, "stock.history.filter.product.placeholder")}
-              className="h-10 w-full rounded-md border pl-9 pr-3 text-sm outline-none focus:border-blue-300"
+              className="h-10 w-full rounded-md border pl-9 pr-9 text-sm outline-none focus:border-blue-300"
             />
+            {isHistorySearchPending ? (
+              <LoaderCircle
+                className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400"
+                aria-hidden="true"
+              />
+            ) : productQueryInput ? (
+              <button
+                type="button"
+                onClick={clearHistorySearch}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                aria-label={t(uiLocale, "stock.history.filter.clear")}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
           </div>
           <Button
             type="button"
@@ -780,11 +944,14 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
             className="h-10 w-10 shrink-0 px-0"
             onClick={openScanner}
             aria-label={t(uiLocale, "products.search.scanAria")}
+            disabled={isHistorySearchPending}
           >
             <ScanBarcode className="h-4 w-4" />
           </Button>
         </div>
+      </div>
 
+      <article className="space-y-3 rounded-xl border bg-white p-3 shadow-sm">
         <div className="grid grid-cols-3 gap-2">
           <div className="relative min-w-0">
             <ListFilter
@@ -878,7 +1045,28 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
         ) : null}
       </article>
 
-      {errorMessage && movementItems.length === 0 ? (
+      {shouldShowHistoryListSkeleton ? (
+        <div className="space-y-2">
+          {Array.from({ length: HISTORY_LIST_SKELETON_COUNT }).map((_, index) => (
+            <article
+              key={`history-loading-${index}`}
+              className="rounded-xl border bg-white p-4 shadow-sm"
+            >
+              <div className="animate-pulse space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 w-20 rounded bg-slate-200" />
+                    <div className="h-4 w-44 rounded bg-slate-200" />
+                  </div>
+                  <div className="h-6 w-16 rounded-full bg-slate-200" />
+                </div>
+                <div className="h-8 w-24 rounded bg-slate-100" />
+                <div className="h-10 rounded-lg bg-slate-100" />
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : errorMessage && movementItems.length === 0 ? (
         <StockTabErrorState
           message={errorMessage}
           onRetry={() => {
@@ -891,7 +1079,7 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
           description={t(uiLocale, "stock.history.empty.description")}
         />
       ) : (
-        <div className="space-y-2">
+        <div className={`space-y-2 transition-opacity ${isHistorySearchPending ? "opacity-60" : "opacity-100"}`}>
           <p className="text-xs text-slate-500">
             {t(uiLocale, "stock.history.summary.showing.prefix")}{" "}
             {movementItems.length.toLocaleString(numberLocale)}{" "}

@@ -144,12 +144,14 @@ export async function getStockProductsPage(params: {
   limit: number;
   offset: number;
   categoryId?: string | null;
+  query?: string | null;
 }): Promise<StockProductOption[]> {
   return listStockProductsByStorePage(
     params.storeId,
     params.limit,
     params.offset,
     params.categoryId,
+    params.query,
   );
 }
 

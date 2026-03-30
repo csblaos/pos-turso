@@ -23,7 +23,11 @@ import { listCategories } from "@/lib/products/service";
 export default async function StockPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ tab?: string }>;
+  searchParams?: Promise<{
+    tab?: string;
+    inventoryQ?: string;
+    inventoryCategoryId?: string;
+  }>;
 }) {
   const perf = createPerfScope("page.stock", "render");
 
@@ -122,6 +126,10 @@ export default async function StockPage({
     const PO_PAGE_SIZE = 20;
     const HISTORY_PAGE_SIZE = 10;
 
+    const params = await searchParams;
+    const inventorySearchQuery = params?.inventoryQ?.trim() ?? "";
+    const inventoryCategoryId = params?.inventoryCategoryId?.trim() ?? "";
+
     const [historyPage, purchaseOrderRows, stockProductRows, storeRow, categories] =
       await perf.step("service.getStockAndPO", async () =>
         Promise.all([
@@ -135,6 +143,8 @@ export default async function StockPage({
             storeId: activeStoreId,
             limit: PRODUCT_PAGE_SIZE + 1,
             offset: 0,
+            categoryId: inventoryCategoryId || undefined,
+            query: inventorySearchQuery || undefined,
           }),
           db
             .select({
@@ -176,7 +186,6 @@ export default async function StockPage({
     };
     const storeOutStockThreshold = storeRow?.outStockThreshold ?? 0;
     const storeLowStockThreshold = storeRow?.lowStockThreshold ?? 10;
-    const params = await searchParams;
     const initialTab = params?.tab === "purchase"
       ? "purchase"
       : params?.tab === "inventory"
