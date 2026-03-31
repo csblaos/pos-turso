@@ -1,20 +1,24 @@
 "use client";
 
-import { CheckCircle2, CircleAlert, Loader2 } from "lucide-react";
+import { Check, CheckCircle2, CircleAlert, Info, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch } from "@/lib/auth/client-token";
 import {
-  currencyLabel,
+  currencyCodeLabel,
   storeCurrencyValues,
   storeVatModeValues,
   vatModeLabel,
   type StoreCurrency,
   type StoreVatMode,
 } from "@/lib/finance/store-financial";
+import type { UiLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
 
 type StoreFinancialSettingsProps = {
+  uiLocale: UiLocale;
   initialCurrency: StoreCurrency;
   initialSupportedCurrencies: StoreCurrency[];
   initialVatEnabled: boolean;
@@ -53,8 +57,17 @@ const normalizeRateToBasisPoints = (value: number) => {
 };
 
 const toPercentText = (basisPoints: number) => (basisPoints / 100).toFixed(2);
+const toggleClassName = (enabled: boolean) =>
+  `relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+    enabled ? "bg-primary" : "bg-slate-300"
+  }`;
+const toggleKnobClassName = (enabled: boolean) =>
+  `inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+    enabled ? "translate-x-5" : "translate-x-0.5"
+  }`;
 
 export function StoreFinancialSettings({
+  uiLocale,
   initialCurrency,
   initialSupportedCurrencies,
   initialVatEnabled,
@@ -62,6 +75,7 @@ export function StoreFinancialSettings({
   initialVatMode,
   canUpdate,
 }: StoreFinancialSettingsProps) {
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [currency, setCurrency] = useState<StoreCurrency>(initialCurrency);
   const [supportedCurrencies, setSupportedCurrencies] =
     useState<StoreCurrency[]>(initialSupportedCurrencies);
@@ -195,18 +209,40 @@ export function StoreFinancialSettings({
   return (
     <section className="space-y-4">
       <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-          <p className="text-sm font-semibold text-slate-900">Currency & VAT Policy</p>
-          <span
-            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-              isDirty
-                ? "border-amber-200 bg-amber-50 text-amber-700"
-                : "border-emerald-200 bg-emerald-50 text-emerald-700"
-            }`}
-          >
-            {isDirty ? <CircleAlert className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-            {isDirty ? "ยังไม่บันทึก" : "บันทึกแล้ว"}
-          </span>
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-4 py-4">
+          <div className="space-y-1">
+            <p className="text-base font-semibold text-slate-900">
+              {t(uiLocale, "settings.store.section.financial")}
+            </p>
+            <p className="text-sm text-slate-500">{t(uiLocale, "settings.store.financial.subtitle")}</p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 w-9 rounded-full px-0"
+              onClick={() => setIsHelpOpen(true)}
+              aria-label={t(uiLocale, "settings.store.help.financial.ariaLabel")}
+            >
+              <Info className="h-4 w-4" />
+            </Button>
+
+            <span
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${
+                isDirty
+                  ? "border-amber-200 bg-amber-50 text-amber-700"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
+              }`}
+            >
+              {isDirty ? (
+                <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+              )}
+              {isDirty ? "ยังไม่บันทึก" : "บันทึกแล้ว"}
+            </span>
+          </div>
         </div>
 
         <div className="space-y-4 p-4">
@@ -223,7 +259,7 @@ export function StoreFinancialSettings({
             >
               {storeCurrencyValues.map((item) => (
                 <option key={item} value={item}>
-                  {currencyLabel(item)}
+                  {currencyCodeLabel(item)}
                 </option>
               ))}
             </select>
@@ -234,42 +270,64 @@ export function StoreFinancialSettings({
 
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground">สกุลที่ร้านรองรับตอนรับชำระ</p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="flex flex-wrap gap-2">
               {storeCurrencyValues.map((item) => {
                 const checked = normalizedSupported.includes(item);
                 const isBase = item === currency;
 
                 return (
-                  <label
+                  <button
+                    type="button"
                     key={item}
-                    className={`flex items-center justify-between rounded-xl border px-3 py-2 text-sm ${
-                      checked ? "border-blue-300 bg-blue-50 text-blue-800" : "border-slate-200 bg-white text-slate-700"
+                    aria-pressed={checked}
+                    disabled={!canUpdate || isSaving || isBase}
+                    onClick={() => toggleSupportedCurrency(item)}
+                    className={`inline-flex min-h-10 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+                      checked
+                        ? "border-blue-300 bg-blue-50 text-blue-800"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    } ${
+                      !canUpdate || isSaving
+                        ? "cursor-not-allowed opacity-70"
+                        : isBase
+                          ? "cursor-default"
+                          : ""
                     }`}
                   >
-                    <span>{currencyLabel(item)}</span>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={!canUpdate || isSaving || isBase}
-                      onChange={() => toggleSupportedCurrency(item)}
-                    />
-                  </label>
+                    <span>{currencyCodeLabel(item)}</span>
+                    {isBase ? (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-700">
+                        หลัก
+                      </span>
+                    ) : checked ? (
+                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                        <Check className="h-3.5 w-3.5" />
+                      </span>
+                    ) : null}
+                  </button>
                 );
               })}
             </div>
-            <p className="text-xs text-slate-500">Base currency ต้องถูกเปิดไว้เสมอ</p>
+            <p className="text-xs text-slate-500">เลือกได้หลายสกุล โดย base currency ต้องเปิดไว้เสมอ</p>
           </div>
 
-          <div className="space-y-2">
-            <label className="inline-flex items-center gap-2 text-sm text-slate-800">
-              <input
-                type="checkbox"
-                checked={vatEnabled}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">เปิดใช้งาน VAT ในใบขาย</p>
+                <p className="text-xs text-slate-500">ใช้เปิดหรือปิดการคำนวณ VAT ในเอกสารขายของร้าน</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={vatEnabled}
+                onClick={() => setVatEnabled(!vatEnabled)}
+                className={toggleClassName(vatEnabled)}
                 disabled={!canUpdate || isSaving}
-                onChange={(event) => setVatEnabled(event.target.checked)}
-              />
-              เปิดใช้งาน VAT ในใบขาย
-            </label>
+              >
+                <span className={toggleKnobClassName(vatEnabled)} />
+              </button>
+            </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -332,6 +390,39 @@ export function StoreFinancialSettings({
           </div>
         </div>
       </article>
+
+      <SlideUpSheet
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+        title={t(uiLocale, "settings.store.help.financial.sheet.title")}
+        description={t(uiLocale, "settings.store.help.financial.sheet.description")}
+        panelMaxWidthClass="min-[1200px]:max-w-md"
+      >
+        <div className="space-y-3 text-sm text-slate-700">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">
+              {t(uiLocale, "settings.store.help.financial.baseCurrency.title")}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {t(uiLocale, "settings.store.help.financial.baseCurrency.description")}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">
+              {t(uiLocale, "settings.store.help.financial.supportedCurrencies.title")}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {t(uiLocale, "settings.store.help.financial.supportedCurrencies.description")}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">{t(uiLocale, "settings.store.help.financial.vat.title")}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {t(uiLocale, "settings.store.help.financial.vat.description")}
+            </p>
+          </div>
+        </div>
+      </SlideUpSheet>
     </section>
   );
 }

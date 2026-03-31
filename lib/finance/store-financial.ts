@@ -79,6 +79,10 @@ export function currencyLabel(currency: StoreCurrency) {
   return "$";
 }
 
+export function currencyCodeLabel(currency: StoreCurrency) {
+  return currency;
+}
+
 const CURRENCY_SYMBOLS: Record<StoreCurrency, string> = {
   LAK: "₭",
   THB: "฿",

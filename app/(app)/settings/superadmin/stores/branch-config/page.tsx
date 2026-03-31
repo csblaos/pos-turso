@@ -1,7 +1,7 @@
-import Link from "next/link";
-import { Building2, ChevronRight, Settings2, ShieldCheck, Store } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { redirect } from "next/navigation";
 
+import { SuperadminBranchConfigHelpButton } from "@/components/app/superadmin-branch-config-help-button";
 import { StoresManagement } from "@/components/app/stores-management";
 import { getSession } from "@/lib/auth/session";
 import { listActiveMemberships } from "@/lib/auth/session-db";
@@ -22,16 +22,20 @@ export default async function SettingsSuperadminBranchConfigPage() {
   const uiLocale = session.uiLocale;
 
   return (
-    <section className="space-y-5">
-      <header className="space-y-1 px-1">
-        <p className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
-          <ShieldCheck className="h-3.5 w-3.5" />
-          {t(uiLocale, "superadmin.workspaceBadge")}
-        </p>
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
-          {t(uiLocale, "superadmin.branchConfig.title")}
-        </h1>
-        <p className="text-sm text-slate-500">{t(uiLocale, "superadmin.branchConfig.subtitle")}</p>
+    <section className="space-y-2">
+      <header className="flex items-start justify-between gap-3 px-1">
+        <div className="min-w-0 flex-1 space-y-2">
+          <p className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            {t(uiLocale, "superadmin.workspaceBadge")}
+          </p>
+          <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">
+            {t(uiLocale, "superadmin.branchConfig.title")}
+          </h1>
+        </div>
+        <div className="shrink-0">
+          <SuperadminBranchConfigHelpButton uiLocale={uiLocale} />
+        </div>
       </header>
 
       <StoresManagement
@@ -46,66 +50,6 @@ export default async function SettingsSuperadminBranchConfigPage() {
         mode="branch-config"
       />
 
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {t(uiLocale, "superadmin.nav.section")}
-        </p>
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <Link
-            href="/settings/superadmin"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Store className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.nav.backToCenter.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.branchConfig.nav.backToCenter.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/superadmin/stores/store-config"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Building2 className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.branchConfig.nav.toStoreConfig.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.branchConfig.nav.toStoreConfig.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/stores"
-            className="group flex min-h-14 items-center gap-3 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Settings2 className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.nav.exitMode.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.nav.exitMode.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-        </div>
-      </div>
     </section>
   );
 }

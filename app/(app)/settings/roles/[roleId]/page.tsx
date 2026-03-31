@@ -28,19 +28,47 @@ const RolePermissionsEditor = dynamic(
 function RoleDetailContentFallback() {
   return (
     <>
-      <article className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="h-6 w-40 animate-pulse rounded bg-slate-200" />
-        <div className="h-4 w-64 animate-pulse rounded bg-slate-100" />
-      </article>
-
-      <article className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="h-4 w-24 animate-pulse rounded bg-slate-200" />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div key={index} className="h-10 animate-pulse rounded-xl bg-slate-100" />
-          ))}
+      <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-4">
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="h-5 w-40 animate-pulse rounded bg-slate-200" />
+              <div className="h-6 w-20 animate-pulse rounded-full bg-slate-100" />
+            </div>
+            <div className="h-4 w-64 animate-pulse rounded bg-slate-100" />
+          </div>
+          <div className="h-9 w-9 animate-pulse rounded-full bg-slate-100" />
+        </div>
+        <div className="space-y-3 px-4 py-4">
+          <div className="hidden sm:block">
+            <div className="h-48 animate-pulse rounded-xl bg-slate-100" />
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:hidden">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="h-10 animate-pulse rounded-xl bg-slate-100" />
+            ))}
+          </div>
+        </div>
+        <div className="border-t border-slate-100 px-4 py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="h-4 w-32 animate-pulse rounded bg-slate-100" />
+            <div className="h-11 w-full animate-pulse rounded-full bg-slate-100 sm:w-48" />
+          </div>
         </div>
       </article>
+
+      <div className="space-y-2">
+        <div className="h-3 w-20 animate-pulse rounded bg-slate-100 px-1" />
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex min-h-14 items-center gap-3 px-4 py-3">
+            <div className="h-9 w-9 animate-pulse rounded-lg bg-slate-100" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="h-4 w-32 animate-pulse rounded bg-slate-200" />
+              <div className="h-3 w-40 animate-pulse rounded bg-slate-100" />
+            </div>
+          </div>
+        </div>
+      </div>
     </>
   );
 }
@@ -96,10 +124,11 @@ async function RoleDetailContent({
         canManage={canManage}
         permissions={allPermissions}
         assignedPermissionKeys={assignedPermissionKeys}
+        uiLocale={uiLocale}
       />
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">
           {t(uiLocale, "settings.section.navigate")}
         </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -168,16 +197,6 @@ export default async function SettingsRoleDetailPage({
 
     return (
       <section className="space-y-5">
-        <header className="space-y-1 px-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            {t(uiLocale, "settings.roles.detail.kicker")}
-          </p>
-          <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
-            {t(uiLocale, "settings.roles.detail.title")}
-          </h1>
-          <p className="text-sm text-slate-500">{t(uiLocale, "settings.roles.detail.subtitle")}</p>
-        </header>
-
         <Suspense fallback={<RoleDetailContentFallback />}>
           <RoleDetailContent
             roleId={roleId}

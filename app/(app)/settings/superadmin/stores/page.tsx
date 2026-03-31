@@ -1,20 +1,11 @@
-import Link from "next/link";
 import {
   AlertTriangle,
-  BarChart3,
-  Building2,
-  ChevronRight,
-  ClipboardList,
-  Gauge,
-  PlugZap,
-  Settings2,
   ShieldCheck,
-  Store,
-  Users,
 } from "lucide-react";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
+import { SuperadminGovernanceHelpButton } from "@/components/app/superadmin-governance-help-button";
 import { getSession } from "@/lib/auth/session";
 import { listActiveMemberships } from "@/lib/auth/session-db";
 import { db } from "@/lib/db/client";
@@ -149,13 +140,19 @@ export default async function SettingsSuperadminStoresPage() {
 
   return (
     <section className="space-y-5">
-      <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
-          {t(uiLocale, "superadmin.governance.title")}
-        </h1>
-        <p className="text-sm text-slate-500">
-          {t(uiLocale, "superadmin.governance.subtitle")}
-        </p>
+      <header className="flex items-start justify-between gap-3 px-1">
+        <div className="min-w-0 flex-1 space-y-2">
+          <p className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            {t(uiLocale, "superadmin.workspaceBadge")}
+          </p>
+          <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">
+            {t(uiLocale, "superadmin.governance.title")}
+          </h1>
+        </div>
+        <div className="shrink-0">
+          <SuperadminGovernanceHelpButton uiLocale={uiLocale} />
+        </div>
       </header>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -250,224 +247,6 @@ export default async function SettingsSuperadminStoresPage() {
         )}
       </article>
 
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {t(uiLocale, "superadmin.governance.section.manageMenu")}
-        </p>
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <Link
-            href="/settings/superadmin/stores/store-config"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Store className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.governance.link.storeConfig.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.governance.link.storeConfig.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/superadmin/stores/branch-config"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Building2 className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.governance.link.branchConfig.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.governance.link.branchConfig.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/superadmin/users"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Users className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.governance.link.users.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.governance.link.users.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/superadmin/security"
-            className="group flex min-h-14 items-center gap-3 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <ShieldCheck className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.governance.link.security.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.governance.link.security.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {t(uiLocale, "superadmin.governance.section.analyticsMenu")}
-        </p>
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <Link
-            href="/settings/superadmin/overview"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <BarChart3 className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.governance.link.overview.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.governance.link.overview.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/superadmin/integrations"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <PlugZap className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.integrations.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.integrations.subtitle")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/superadmin/audit-log"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <ClipboardList className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.governance.link.auditLog.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.governance.link.auditLog.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/superadmin/quotas"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Gauge className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.governance.link.quotas.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.governance.link.quotas.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/superadmin/global-config"
-            className="group flex min-h-14 items-center gap-3 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Settings2 className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.governance.link.globalConfig.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.governance.link.globalConfig.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {t(uiLocale, "settings.section.navigate")}
-        </p>
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <Link
-            href="/settings/stores"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Building2 className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "settings.link.switchStore.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "settings.link.switchStore.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings"
-            className="group flex min-h-14 items-center gap-3 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Settings2 className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "common.backToSettings")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "common.backToSettings.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-        </div>
-      </div>
     </section>
   );
 }

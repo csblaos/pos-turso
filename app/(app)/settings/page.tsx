@@ -192,6 +192,14 @@ export default async function SettingsPage() {
       visible: true,
     },
     {
+      id: "store-finance",
+      href: "/settings/store/finance",
+      title: t(uiLocale, "settings.link.storeFinance.title"),
+      description: t(uiLocale, "settings.link.storeFinance.description"),
+      icon: Landmark,
+      visible: true,
+    },
+    {
       id: "switch-store",
       href: "/settings/stores",
       title: t(uiLocale, "settings.link.switchStore.title"),
@@ -355,9 +363,9 @@ export default async function SettingsPage() {
     : t(uiLocale, "settings.value.notSpecified");
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-4">
       <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
+        <h1 className="text-xl font-semibold text-slate-900">
           {t(uiLocale, "settings.page.title")}
         </h1>
       </header>
@@ -564,12 +572,23 @@ export default async function SettingsPage() {
             {t(uiLocale, "settings.section.security")}
           </p>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-3 flex items-start gap-2 text-sm text-slate-700">
-              <PlugZap className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
-              {t(uiLocale, "settings.logout.hint")}
-            </div>
-            <div className="sm:max-w-[220px]">
-              <LogoutButton />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                  <PlugZap className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-900">
+                    {t(uiLocale, "settings.logout.title")}
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {t(uiLocale, "settings.logout.hint")}
+                  </p>
+                </div>
+              </div>
+              <div className="sm:w-[220px] sm:shrink-0">
+                <LogoutButton />
+              </div>
             </div>
           </div>
         </div>

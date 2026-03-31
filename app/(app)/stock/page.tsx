@@ -19,6 +19,7 @@ import {
 } from "@/server/services/stock.service";
 import { getPurchaseOrderListPage } from "@/server/services/purchase.service";
 import { listCategories } from "@/lib/products/service";
+import { StockPageSkeleton } from "@/components/app/stock-page-skeleton";
 
 export default async function StockPage({
   searchParams,
@@ -51,20 +52,7 @@ export default async function StockPage({
         import("@/components/app/stock-tabs").then((module) => module.StockTabs),
     );
 
-    const loadingFallback = () => (
-      <div className="rounded-xl border bg-white p-4 shadow-sm">
-        <div className="animate-pulse space-y-3">
-          <div className="h-10 rounded-md bg-slate-200" />
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="h-10 rounded-md bg-slate-200" />
-            <div className="h-10 rounded-md bg-slate-200" />
-            <div className="h-10 rounded-md bg-slate-200" />
-            <div className="h-10 rounded-md bg-slate-200" />
-          </div>
-          <div className="h-28 rounded-xl bg-slate-200" />
-        </div>
-      </div>
-    );
+    const loadingFallback = () => <StockPageSkeleton />;
 
     const StockRecordingForm = dynamic(
       () =>

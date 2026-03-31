@@ -1,9 +1,12 @@
 export default function SettingsSuperadminOverviewLoading() {
   return (
     <section className="space-y-5">
-      <header className="space-y-1 px-1">
-        <div className="h-8 w-56 animate-pulse rounded bg-slate-200" />
-        <div className="h-4 w-80 animate-pulse rounded bg-slate-100" />
+      <header className="flex items-start justify-between gap-3 px-1">
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="h-6 w-40 animate-pulse rounded bg-blue-100" />
+          <div className="h-7 w-56 animate-pulse rounded bg-slate-200" />
+        </div>
+        <div className="h-9 w-9 animate-pulse rounded-full bg-slate-100" />
       </header>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">

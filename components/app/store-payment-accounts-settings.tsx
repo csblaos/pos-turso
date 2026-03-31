@@ -15,7 +15,7 @@ import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch } from "@/lib/auth/client-token";
-import { currencyLabel, type StoreCurrency } from "@/lib/finance/store-financial";
+import { currencyCodeLabel, type StoreCurrency } from "@/lib/finance/store-financial";
 import { getRasterImageTypeLabel, isRasterImageContentType, RASTER_IMAGE_ACCEPT } from "@/lib/media/image-upload";
 import {
   findLaosBankByCode,
@@ -47,7 +47,6 @@ type StorePaymentAccount = {
 
 type StorePaymentPolicy = {
   maxAccountsPerStore: number;
-  requireSlipForLaoQr: boolean;
 };
 
 type StorePaymentAccountsSettingsProps = {
@@ -537,7 +536,7 @@ export function StorePaymentAccountsSettings({
                     </span>
                     <span className="mt-0.5 block truncate text-xs text-slate-500">
                       {resolveLaosBankDisplayName(account.bankName)} •{" "}
-                      {maskAccountValue(account.accountNumber)} • {currencyLabel(account.currency)}{" "}
+                      {maskAccountValue(account.accountNumber)} • {currencyCodeLabel(account.currency)}{" "}
                       {paymentAccountSupportsQr(account.accountType)
                         ? account.qrImageUrl
                           ? "• QR พร้อมใช้"
@@ -796,7 +795,7 @@ export function StorePaymentAccountsSettings({
               >
                 {storeSupportedCurrencies.map((currency) => (
                   <option key={currency} value={currency}>
-                    {currencyLabel(currency)}
+                    {currencyCodeLabel(currency)}
                   </option>
                 ))}
               </select>

@@ -26,14 +26,7 @@ export default async function SettingsStoresPage() {
   const activeStoreId = session.activeStoreId ?? memberships[0].storeId;
 
   return (
-    <section className="space-y-5">
-      <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
-          {t(uiLocale, "settings.link.switchStore.title")}
-        </h1>
-        <p className="text-sm text-slate-500">{t(uiLocale, "settings.link.switchStore.description")}</p>
-      </header>
-
+    <section className="space-y-2">
       <StoresManagement
         memberships={memberships}
         activeStoreId={activeStoreId}
@@ -44,11 +37,12 @@ export default async function SettingsStoresPage() {
         createStoreBlockedReason={null}
         storeQuotaSummary={null}
         mode="quick"
+        embeddedQuickCard
       />
 
       {isSuperadmin ? (
         <div className="space-y-2">
-          <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">
             {t(uiLocale, "settings.section.adminArea")}
           </p>
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -74,7 +68,7 @@ export default async function SettingsStoresPage() {
       ) : null}
 
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        <p className="px-1 text-[11px] font-semibold uppercase text-slate-500">
           {t(uiLocale, "settings.section.navigate")}
         </p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

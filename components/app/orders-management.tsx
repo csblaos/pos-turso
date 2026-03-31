@@ -54,6 +54,7 @@ import {
   setNewOrderDraftPayload,
   type NewOrderDraftPayload,
 } from "@/lib/orders/new-order-draft";
+import { fetchImageAsDataUrl, waitForImagesBeforePrint } from "@/lib/print/client";
 import { buildOrderQrSvgMarkup, parseOrderSearchValue } from "@/lib/orders/print";
 import { buildShippingLabelPrintMarkup } from "@/lib/orders/shipping-label-print";
 import type {
@@ -2879,10 +2880,15 @@ export function OrdersManagement(props: OrdersManagementProps) {
     [uiLocale],
   );
 
-  const buildReceiptPrintHtml = useCallback((order: ReceiptPreviewOrder) => {
+  const buildReceiptPrintHtml = useCallback((order: ReceiptPreviewOrder, paymentQrImageSrcOverride?: string | null) => {
     const receiptDateText = new Date(order.createdAt).toLocaleString(numberLocale);
     const receiptCustomerName =
       order.customerName || order.contactDisplayName || t(uiLocale, "orders.customer.guest");
+    const paymentQrImageSrc =
+      paymentQrImageSrcOverride ??
+      (order.paymentAccountId && order.paymentAccountQrImageUrl
+        ? `/api/orders/payment-accounts/${order.paymentAccountId}/qr-image`
+        : order.paymentAccountQrImageUrl);
     const rowsHtml = order.items
       .map((item) => {
         const productName = escapeHtml(item.productName);
@@ -2933,6 +2939,13 @@ export function OrdersManagement(props: OrdersManagementProps) {
       .totals-row { display: flex; justify-content: space-between; margin: 2px 0; }
       .totals-main { font-weight: 700; font-size: 12px; }
       .muted { color: #475569; }
+      .qr-block { text-align: center; }
+      .qr-title { margin: 0; font-size: 11px; font-weight: 700; }
+      .qr-hint { margin: 4px 0 0; font-size: 10px; color: #475569; }
+      .qr-image { display: block; width: 112px; height: 112px; margin: 8px auto 0; object-fit: contain; }
+      .qr-meta { margin-top: 6px; text-align: left; font-size: 10px; line-height: 1.45; }
+      .qr-meta p { margin: 2px 0 0; }
+      .qr-meta p:first-child { margin-top: 0; }
       .thanks { text-align: center; margin-top: 6px; font-size: 10px; }
     </style>
   </head>
@@ -2969,6 +2982,34 @@ export function OrdersManagement(props: OrdersManagementProps) {
       <div class="totals-row totals-main"><span>${escapeHtml(t(uiLocale, "orders.print.receipt.summary.netTotal"))}</span><span>${order.total.toLocaleString(numberLocale)} ${escapeHtml(order.storeCurrency)}</span></div>
       <div class="totals-row muted"><span>${escapeHtml(t(uiLocale, "orders.print.receipt.summary.paymentCurrency"))}</span><span>${escapeHtml(currencyLabel(order.paymentCurrency))}</span></div>
       <div class="totals-row muted"><span>${escapeHtml(t(uiLocale, "orders.print.receipt.summary.paymentMethod"))}</span><span>${escapeHtml(t(uiLocale, paymentMethodLabelKey[order.paymentMethod]))}</span></div>
+      ${
+        paymentQrImageSrc
+          ? `
+      <div class="sep"></div>
+      <div class="qr-block">
+        <p class="qr-title">${escapeHtml(t(uiLocale, "orders.print.receipt.qrTitle"))}</p>
+        <p class="qr-hint">${escapeHtml(t(uiLocale, "orders.print.receipt.qrHint"))}</p>
+        <img class="qr-image" src="${escapeHtml(paymentQrImageSrc)}" alt="${escapeHtml(t(uiLocale, "orders.print.receipt.qrTitle"))}" />
+        <div class="qr-meta">
+          ${
+            order.paymentAccountDisplayName
+              ? `<p>${escapeHtml(order.paymentAccountDisplayName)}</p>`
+              : ""
+          }
+          ${
+            order.paymentAccountBankName
+              ? `<p>${escapeHtml(t(uiLocale, "orders.create.paymentAccount.details.bankPrefix"))} ${escapeHtml(order.paymentAccountBankName)}</p>`
+              : ""
+          }
+          ${
+            order.paymentAccountNumber
+              ? `<p>${escapeHtml(t(uiLocale, "orders.create.paymentAccount.details.accountNumberLabel"))}: ${escapeHtml(order.paymentAccountNumber)}</p>`
+              : ""
+          }
+        </div>
+      </div>`
+          : ""
+      }
 
       <div class="sep"></div>
       <p class="thanks">${escapeHtml(t(uiLocale, "orders.print.receipt.thanks"))}</p>
@@ -3200,27 +3241,31 @@ export function OrdersManagement(props: OrdersManagementProps) {
 
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
-        try {
-          window.focus();
-          window.print();
-        } catch {
-          window.removeEventListener("afterprint", handleAfterPrint);
-            setErrorMessage(
-              kind === "receipt"
-                ? t(uiLocale, "orders.print.error.receiptPrintFailed")
-                : kind === "label"
-                  ? t(uiLocale, "orders.print.error.labelPrintFailed")
-                  : t(uiLocale, "orders.print.error.packPrintFailed"),
-            );
-            settleLoading();
-            cleanup();
-        }
+        void waitForImagesBeforePrint(printRoot)
+          .catch(() => undefined)
+          .then(() => {
+            try {
+              window.focus();
+              window.print();
+            } catch {
+              window.removeEventListener("afterprint", handleAfterPrint);
+              setErrorMessage(
+                kind === "receipt"
+                  ? t(uiLocale, "orders.print.error.receiptPrintFailed")
+                  : kind === "label"
+                    ? t(uiLocale, "orders.print.error.labelPrintFailed")
+                    : t(uiLocale, "orders.print.error.packPrintFailed"),
+              );
+              settleLoading();
+              cleanup();
+            }
+          });
       });
     });
   }, [uiLocale]);
 
   const openOrderReceiptPrint = useCallback(
-    (orderId: string) => {
+    async (orderId: string) => {
       if (typeof window === "undefined") {
         return;
       }
@@ -3236,7 +3281,19 @@ export function OrdersManagement(props: OrdersManagementProps) {
       }
 
       try {
-        printDocumentViaWindow(buildReceiptPrintHtml(order), "receipt");
+        const paymentQrImageSrc =
+          order.paymentAccountQrImageUrl
+            ? await fetchImageAsDataUrl(
+                order.paymentAccountId
+                  ? `/api/orders/payment-accounts/${order.paymentAccountId}/qr-image`
+                  : order.paymentAccountQrImageUrl,
+              ).catch(() =>
+                order.paymentAccountId
+                  ? `/api/orders/payment-accounts/${order.paymentAccountId}/qr-image`
+                  : order.paymentAccountQrImageUrl,
+              )
+            : null;
+        printDocumentViaWindow(buildReceiptPrintHtml(order, paymentQrImageSrc), "receipt");
       } catch (error) {
         const message =
           error instanceof Error && error.message
@@ -3380,14 +3437,32 @@ export function OrdersManagement(props: OrdersManagementProps) {
           throw new Error(t(uiLocale, "orders.management.bulk.print.error.noPrintableLabels"));
         }
 
-        const mergedHtml = mergePrintDocuments(
-          printableOrders.map((order) =>
-            kind === "receipt"
-              ? buildReceiptPrintHtml(order)
-              : buildShippingLabelPrintHtml(order),
-          ),
-          kind,
-        );
+        const mergedHtml =
+          kind === "receipt"
+            ? mergePrintDocuments(
+                await Promise.all(
+                  printableOrders.map(async (order) => {
+                    const paymentQrImageSrc =
+                      order.paymentAccountQrImageUrl
+                        ? await fetchImageAsDataUrl(
+                            order.paymentAccountId
+                              ? `/api/orders/payment-accounts/${order.paymentAccountId}/qr-image`
+                              : order.paymentAccountQrImageUrl,
+                          ).catch(() =>
+                            order.paymentAccountId
+                              ? `/api/orders/payment-accounts/${order.paymentAccountId}/qr-image`
+                              : order.paymentAccountQrImageUrl,
+                          )
+                        : null;
+                    return buildReceiptPrintHtml(order, paymentQrImageSrc);
+                  }),
+                ),
+                kind,
+              )
+            : mergePrintDocuments(
+                printableOrders.map((order) => buildShippingLabelPrintHtml(order)),
+                kind,
+              );
 
         if (kind === "receipt") {
           setReceiptPrintLoading(true);
@@ -5102,11 +5177,6 @@ export function OrdersManagement(props: OrdersManagementProps) {
                     ) : null}
                   </div>
                 ) : null}
-                <p className="text-xs text-slate-500">
-                  {catalog.requireSlipForLaoQr
-                    ? t(uiLocale, "orders.create.paymentAccount.policy.requireSlip")
-                    : t(uiLocale, "orders.create.paymentAccount.policy.noSlip")}
-                </p>
               </div>
             ) : null}
 
@@ -6859,6 +6929,46 @@ export function OrdersManagement(props: OrdersManagementProps) {
                       {receiptPreviewOrder.total.toLocaleString(numberLocale)} {receiptPreviewOrder.storeCurrency}
                     </span>
                   </p>
+                  {receiptPreviewOrder.paymentAccountQrImageUrl ? (
+                    <>
+                      <div className="my-1 border-t border-dashed border-slate-400" />
+                      <div className="space-y-1 text-center">
+                        <p className="font-semibold">{t(uiLocale, "orders.print.receipt.qrTitle")}</p>
+                        <p className="text-[9px] text-slate-500">
+                          {t(uiLocale, "orders.print.receipt.qrHint")}
+                        </p>
+                        <Image
+                          src={
+                            receiptPreviewOrder.paymentAccountId
+                              ? `/api/orders/payment-accounts/${receiptPreviewOrder.paymentAccountId}/qr-image`
+                              : receiptPreviewOrder.paymentAccountQrImageUrl
+                          }
+                          alt={t(uiLocale, "orders.print.receipt.qrTitle")}
+                          width={96}
+                          height={96}
+                          unoptimized
+                          className="mx-auto h-24 w-24 object-contain"
+                        />
+                        <div className="space-y-0.5 text-left text-[9px] text-slate-600">
+                          {receiptPreviewOrder.paymentAccountDisplayName ? (
+                            <p>{receiptPreviewOrder.paymentAccountDisplayName}</p>
+                          ) : null}
+                          {receiptPreviewOrder.paymentAccountBankName ? (
+                            <p>
+                              {t(uiLocale, "orders.create.paymentAccount.details.bankPrefix")}{" "}
+                              {receiptPreviewOrder.paymentAccountBankName}
+                            </p>
+                          ) : null}
+                          {receiptPreviewOrder.paymentAccountNumber ? (
+                            <p>
+                              {t(uiLocale, "orders.create.paymentAccount.details.accountNumberLabel")}:{" "}
+                              {receiptPreviewOrder.paymentAccountNumber}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
                 </div>
               ) : (
                 <p className="text-xs text-slate-500">

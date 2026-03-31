@@ -15,6 +15,7 @@ import { db } from "@/lib/db/client";
 import { stores } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { ProductsHeaderRefreshButton } from "@/components/app/products-header-refresh-button";
+import { ProductsPageSkeleton } from "@/components/app/products-page-skeleton";
 import dynamic from "next/dynamic";
 
 const PRODUCT_PAGE_SIZE = 30;
@@ -55,11 +56,7 @@ export default async function ProductsPage({
         (module) => module.ProductsManagement,
       ),
     {
-      loading: () => (
-        <div className="rounded-xl border bg-white p-4 text-sm text-muted-foreground">
-          {t(uiLocale, "products.page.loadingManagement")}
-        </div>
-      ),
+      loading: () => <ProductsPageSkeleton />,
     },
   );
 

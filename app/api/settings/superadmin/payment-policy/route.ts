@@ -8,7 +8,6 @@ import { safeLogAuditEvent } from "@/server/services/audit.service";
 
 const updateGlobalPaymentPolicySchema = z.object({
   maxAccountsPerStore: z.number().int().min(1).max(20),
-  requireSlipForLaoQr: z.boolean(),
 });
 
 async function enforceSuperadmin() {

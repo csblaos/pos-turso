@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
-import { ChevronRight, Gauge, Settings2, ShieldCheck, Store } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { redirect } from "next/navigation";
 
+import { SuperadminGlobalConfigHelpButton } from "@/components/app/superadmin-global-config-help-button";
 import { SuperadminPaymentPolicyConfig } from "@/components/app/superadmin-payment-policy-config";
 import { getSession } from "@/lib/auth/session";
 import { listActiveMemberships } from "@/lib/auth/session-db";
@@ -117,18 +117,32 @@ export default async function SettingsSuperadminGlobalConfigPage() {
     globalBranchPolicy.defaultMaxBranchesPerStore === null
       ? t(uiLocale, "superadmin.globalConfig.branchDefault.unlimited")
       : `${t(uiLocale, "superadmin.globalConfig.branchDefault.maxPrefix")} ${globalBranchPolicy.defaultMaxBranchesPerStore.toLocaleString(numberLocale)} ${t(uiLocale, "superadmin.globalConfig.branchDefault.maxSuffix")}`;
-  const paymentPolicyText = `${t(uiLocale, "superadmin.globalConfig.systemDefaults.paymentPolicy.maxAccountsPrefix")} ${globalPaymentPolicy.maxAccountsPerStore.toLocaleString(numberLocale)} ${t(uiLocale, "superadmin.globalConfig.systemDefaults.paymentPolicy.maxAccountsSuffix")} • ${globalPaymentPolicy.requireSlipForLaoQr ? t(uiLocale, "superadmin.globalConfig.systemDefaults.paymentPolicy.requireSlip") : t(uiLocale, "superadmin.globalConfig.systemDefaults.paymentPolicy.noSlip")}`;
-  const logoUploadText = `${t(uiLocale, "superadmin.globalConfig.systemDefaults.logoUpload.maxSizePrefix")} ${globalStoreLogoPolicy.maxSizeMb.toLocaleString(numberLocale)} MB • ${t(uiLocale, "superadmin.globalConfig.systemDefaults.logoUpload.autoResizePrefix")} ${globalStoreLogoPolicy.autoResize ? t(uiLocale, "superadmin.globalConfig.systemDefaults.logoUpload.enabled") : t(uiLocale, "superadmin.globalConfig.systemDefaults.logoUpload.disabled")} • ${t(uiLocale, "superadmin.globalConfig.systemDefaults.logoUpload.maxWidthPrefix")} ${globalStoreLogoPolicy.resizeMaxWidth.toLocaleString(numberLocale)} px`;
+  const sessionLimitText = `${globalSessionPolicy.defaultSessionLimit.toLocaleString(numberLocale)} ${t(uiLocale, "superadmin.globalConfig.systemDefaults.sessionLimit.suffix")}`;
+  const branchCreationText = globalBranchPolicy.defaultCanCreateBranches
+    ? t(uiLocale, "superadmin.globalConfig.systemDefaults.branchCreation.allowed")
+    : t(uiLocale, "superadmin.globalConfig.systemDefaults.branchCreation.blocked");
+  const branchQuotaText =
+    globalBranchPolicy.defaultMaxBranchesPerStore === null
+      ? t(uiLocale, "superadmin.globalConfig.systemDefaults.branchQuota.unlimited")
+      : `${globalBranchPolicy.defaultMaxBranchesPerStore.toLocaleString(numberLocale)} ${t(uiLocale, "superadmin.globalConfig.systemDefaults.branchQuota.suffix")}`;
+  const paymentPolicyText = `${t(uiLocale, "superadmin.globalConfig.systemDefaults.paymentPolicy.maxAccountsPrefix")} ${globalPaymentPolicy.maxAccountsPerStore.toLocaleString(numberLocale)} ${t(uiLocale, "superadmin.globalConfig.systemDefaults.paymentPolicy.maxAccountsSuffix")}`;
+  const logoUploadText = `${globalStoreLogoPolicy.maxSizeMb.toLocaleString(numberLocale)} MB · ${t(uiLocale, "superadmin.globalConfig.systemDefaults.logoUpload.resizeLabel")} ${globalStoreLogoPolicy.autoResize ? t(uiLocale, "superadmin.globalConfig.systemDefaults.logoUpload.enabled") : t(uiLocale, "superadmin.globalConfig.systemDefaults.logoUpload.disabled")} · ${globalStoreLogoPolicy.resizeMaxWidth.toLocaleString(numberLocale)} px`;
 
   return (
     <section className="space-y-5">
-      <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
-          {t(uiLocale, "superadmin.globalConfig.title")}
-        </h1>
-        <p className="text-sm text-slate-500">
-          {t(uiLocale, "superadmin.globalConfig.subtitle")}
-        </p>
+      <header className="flex items-start justify-between gap-3 px-1">
+        <div className="min-w-0 flex-1 space-y-2">
+          <p className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            {t(uiLocale, "superadmin.workspaceBadge")}
+          </p>
+          <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">
+            {t(uiLocale, "superadmin.globalConfig.title")}
+          </h1>
+        </div>
+        <div className="shrink-0">
+          <SuperadminGlobalConfigHelpButton uiLocale={uiLocale} />
+        </div>
       </header>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -176,39 +190,38 @@ export default async function SettingsSuperadminGlobalConfigPage() {
             {t(uiLocale, "superadmin.globalConfig.systemDefaults.subtitle")}
           </p>
         </div>
-        <ul className="divide-y divide-slate-100">
-          <li className="px-4 py-3 text-sm text-slate-700">
-            {t(uiLocale, "superadmin.globalConfig.systemDefaults.sessionLimit.prefix")}{" "}
-            <span className="font-medium">
-              {globalSessionPolicy.defaultSessionLimit.toLocaleString(numberLocale)}{" "}
-              {t(uiLocale, "superadmin.globalConfig.systemDefaults.sessionLimit.suffix")}
-            </span>
-          </li>
-          <li className="px-4 py-3 text-sm text-slate-700">
-            {t(uiLocale, "superadmin.globalConfig.systemDefaults.branchCreation.prefix")}{" "}
-            <span className="font-medium">
-              {globalBranchPolicy.defaultCanCreateBranches
-                ? t(uiLocale, "superadmin.globalConfig.systemDefaults.branchCreation.allowed")
-                : t(uiLocale, "superadmin.globalConfig.systemDefaults.branchCreation.blocked")}
-            </span>
-          </li>
-          <li className="px-4 py-3 text-sm text-slate-700">
-            {t(uiLocale, "superadmin.globalConfig.systemDefaults.branchQuota.prefix")}{" "}
-            <span className="font-medium">
-              {globalBranchPolicy.defaultMaxBranchesPerStore === null
-                ? t(uiLocale, "superadmin.globalConfig.systemDefaults.branchQuota.unlimited")
-                : `${globalBranchPolicy.defaultMaxBranchesPerStore.toLocaleString(numberLocale)} ${t(uiLocale, "superadmin.globalConfig.systemDefaults.branchQuota.suffix")}`}
-            </span>
-          </li>
-          <li className="px-4 py-3 text-sm text-slate-700">
-            {t(uiLocale, "superadmin.globalConfig.systemDefaults.paymentPolicy.prefix")}{" "}
-            <span className="font-medium">{paymentPolicyText}</span>
-          </li>
-          <li className="px-4 py-3 text-sm text-slate-700">
-            {t(uiLocale, "superadmin.globalConfig.systemDefaults.logoUpload.prefix")}{" "}
-            <span className="font-medium">{logoUploadText}</span>
-          </li>
-        </ul>
+        <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+            <p className="text-xs text-slate-500">
+              {t(uiLocale, "superadmin.globalConfig.systemDefaults.sessionLimit.label")}
+            </p>
+            <p className="mt-1 text-sm font-medium text-slate-900">{sessionLimitText}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+            <p className="text-xs text-slate-500">
+              {t(uiLocale, "superadmin.globalConfig.systemDefaults.branchCreation.label")}
+            </p>
+            <p className="mt-1 text-sm font-medium text-slate-900">{branchCreationText}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+            <p className="text-xs text-slate-500">
+              {t(uiLocale, "superadmin.globalConfig.systemDefaults.branchQuota.label")}
+            </p>
+            <p className="mt-1 text-sm font-medium text-slate-900">{branchQuotaText}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+            <p className="text-xs text-slate-500">
+              {t(uiLocale, "superadmin.globalConfig.systemDefaults.paymentPolicy.label")}
+            </p>
+            <p className="mt-1 text-sm font-medium text-slate-900">{paymentPolicyText}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 sm:col-span-2">
+            <p className="text-xs text-slate-500">
+              {t(uiLocale, "superadmin.globalConfig.systemDefaults.logoUpload.label")}
+            </p>
+            <p className="mt-1 text-sm font-medium text-slate-900">{logoUploadText}</p>
+          </div>
+        </div>
       </article>
 
       <SuperadminPaymentPolicyConfig initialConfig={globalPaymentPolicy} />
@@ -271,84 +284,6 @@ export default async function SettingsSuperadminGlobalConfigPage() {
         </div>
       </article>
 
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {t(uiLocale, "superadmin.globalConfig.nav.section")}
-        </p>
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <Link
-            href="/settings/superadmin/quotas"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Gauge className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.globalConfig.nav.toQuotas.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.globalConfig.nav.toQuotas.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/superadmin/security"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <ShieldCheck className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.globalConfig.nav.toSecurity.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.globalConfig.nav.toSecurity.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/superadmin"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Settings2 className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.nav.backToCenter.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.globalConfig.nav.backToCenter.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/stores"
-            className="group flex min-h-14 items-center gap-3 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Store className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.globalConfig.nav.exitMode.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.nav.exitMode.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-        </div>
-      </div>
     </section>
   );
 }

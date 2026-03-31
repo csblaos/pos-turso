@@ -19,6 +19,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
+import { StoresManagementHelpButton } from "@/components/app/stores-management-help-button";
 import { authFetch, setClientAuthToken } from "@/lib/auth/client-token";
 import {
   DEFAULT_UI_LOCALE,
@@ -92,6 +93,7 @@ type StoresManagementProps = {
   createStoreBlockedReason: string | null;
   storeQuotaSummary: string | null;
   mode?: StoresManagementMode;
+  embeddedQuickCard?: boolean;
 };
 
 const storeTypeOptions = [
@@ -283,6 +285,7 @@ export function StoresManagement({
   createStoreBlockedReason,
   storeQuotaSummary,
   mode = "all",
+  embeddedQuickCard = false,
 }: StoresManagementProps) {
   const router = useRouter();
   const numberLocale = uiLocaleToDateLocale(uiLocale);
@@ -834,12 +837,14 @@ export function StoresManagement({
     setIsCreateStoreSheetOpen(false);
   };
 
-  return (
-    <section className="space-y-5">
+  const useEmbeddedQuickCard = embeddedQuickCard && mode === "quick";
+  const sectionLabelClassName = useEmbeddedQuickCard
+    ? "px-1 text-[11px] font-semibold uppercase text-slate-500"
+    : "px-1 text-[11px] font-semibold uppercase text-slate-500";
+  const quickPanels = (
+    <>
       <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {t(uiLocale, "storesManagement.currentStore.section")}
-        </p>
+        <p className={sectionLabelClassName}>{t(uiLocale, "storesManagement.currentStore.section")}</p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="px-4 py-3">
             <p className="text-sm font-semibold text-slate-900">{activeStore?.storeName ?? "-"}</p>
@@ -853,131 +858,150 @@ export function StoresManagement({
       </div>
 
       {showSwitchPanels ? (
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {t(uiLocale, "storesManagement.switchStore.section")}
-        </p>
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 px-4 py-3">
-            <p className="text-xs text-slate-500">
-              {t(uiLocale, "storesManagement.switchStore.countPrefix")} {formatNumber(memberships.length)}{" "}
-              {t(uiLocale, "storesManagement.switchStore.countSuffix")}
-            </p>
-          </div>
-          <ul className="divide-y divide-slate-100">
-            {memberships.map((membership) => {
-              const isActive = membership.storeId === activeStoreId;
-
-              return (
-                <li key={membership.storeId} className="flex min-h-14 items-center gap-3 px-4 py-3">
-                  <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-                    <Store className="h-4 w-4" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-slate-900">{membership.storeName}</p>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">
-                      {t(uiLocale, storeTypeLabelKeys[membership.storeType])} ·{" "}
-                      {t(uiLocale, "storesManagement.currentStore.rolePrefix")} {membership.roleName}
-                    </p>
-                  </div>
-                  {isActive ? (
-                    <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                      <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                      {t(uiLocale, "storesManagement.switchStore.activeBadge")}
-                    </span>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-8 px-3 text-xs"
-                      disabled={loadingKey !== null}
-                      onClick={() => switchStore(membership.storeId)}
-                    >
-                      {loadingKey === `switch-${membership.storeId}`
-                        ? t(uiLocale, "storesManagement.common.loading")
-                        : t(uiLocale, "storesManagement.common.select")}
-                    </Button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      </div>
-      ) : null}
-
-      {showSwitchPanels ? (
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {t(uiLocale, "storesManagement.switchBranch.section")}
-        </p>
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 px-4 py-3">
-            <p className="text-xs text-slate-500">
-              {t(uiLocale, "storesManagement.switchBranch.countPrefix")} {formatNumber(branches.length)}{" "}
-              {t(uiLocale, "storesManagement.switchBranch.countSuffix")}
-            </p>
-          </div>
-          {loadingKey === "load-branches" ? (
-            <p className="px-4 py-4 text-sm text-slate-500">
-              {t(uiLocale, "storesManagement.switchBranch.loading")}
-            </p>
-          ) : branches.length === 0 ? (
-            <p className="px-4 py-4 text-sm text-slate-500">
-              {t(uiLocale, "storesManagement.switchBranch.empty")}
-            </p>
-          ) : (
+        <div className="space-y-2">
+          <p className={sectionLabelClassName}>{t(uiLocale, "storesManagement.switchStore.section")}</p>
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-100 px-4 py-3">
+              <p className="text-xs text-slate-500">
+                {t(uiLocale, "storesManagement.switchStore.countPrefix")} {formatNumber(memberships.length)}{" "}
+                {t(uiLocale, "storesManagement.switchStore.countSuffix")}
+              </p>
+            </div>
             <ul className="divide-y divide-slate-100">
-              {branches.map((branch) => {
-                const isActiveBranch = branch.id === activeBranchId;
-                const canAccessBranch = branch.canAccess ?? true;
+              {memberships.map((membership) => {
+                const isActive = membership.storeId === activeStoreId;
 
                 return (
-                  <li key={branch.id} className="flex min-h-14 items-center gap-3 px-4 py-3">
+                  <li key={membership.storeId} className="flex min-h-14 items-center gap-3 px-4 py-3">
                     <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-                      <Building2 className="h-4 w-4" />
+                      <Store className="h-4 w-4" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-slate-900">
-                        {branch.name}
-                        {branch.code === "MAIN" ? (
-                          <span className="ml-1 rounded-full border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] text-slate-600">
-                            {t(uiLocale, "storesManagement.branchList.mainBadge")}
-                          </span>
-                        ) : null}
-                      </p>
+                      <p className="truncate text-sm font-medium text-slate-900">{membership.storeName}</p>
                       <p className="mt-0.5 truncate text-xs text-slate-500">
-                        {branch.address ?? t(uiLocale, "storesManagement.switchBranch.noAddress")}
+                        {t(uiLocale, storeTypeLabelKeys[membership.storeType])} ·{" "}
+                        {t(uiLocale, "storesManagement.currentStore.rolePrefix")} {membership.roleName}
                       </p>
                     </div>
-                    {isActiveBranch ? (
+                    {isActive ? (
                       <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
                         <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                        {t(uiLocale, "storesManagement.switchBranch.activeBadge")}
+                        {t(uiLocale, "storesManagement.switchStore.activeBadge")}
                       </span>
                     ) : (
                       <Button
                         type="button"
                         variant="outline"
                         className="h-8 px-3 text-xs"
-                        disabled={loadingKey !== null || !canAccessBranch}
-                        onClick={() => switchBranch(branch.id)}
+                        disabled={loadingKey !== null}
+                        onClick={() => switchStore(membership.storeId)}
                       >
-                        {canAccessBranch
-                          ? loadingKey === `switch-branch-${branch.id}`
-                            ? t(uiLocale, "storesManagement.common.loading")
-                            : t(uiLocale, "storesManagement.common.select")
-                          : t(uiLocale, "storesManagement.switchBranch.noAccess")}
+                        {loadingKey === `switch-${membership.storeId}`
+                          ? t(uiLocale, "storesManagement.common.loading")
+                          : t(uiLocale, "storesManagement.common.select")}
                       </Button>
                     )}
                   </li>
                 );
               })}
             </ul>
-          )}
+          </div>
         </div>
-      </div>
       ) : null}
+
+      {showSwitchPanels ? (
+        <div className="space-y-2">
+          <p className={sectionLabelClassName}>{t(uiLocale, "storesManagement.switchBranch.section")}</p>
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-100 px-4 py-3">
+              <p className="text-xs text-slate-500">
+                {t(uiLocale, "storesManagement.switchBranch.countPrefix")} {formatNumber(branches.length)}{" "}
+                {t(uiLocale, "storesManagement.switchBranch.countSuffix")}
+              </p>
+            </div>
+            {loadingKey === "load-branches" ? (
+              <p className="px-4 py-4 text-sm text-slate-500">
+                {t(uiLocale, "storesManagement.switchBranch.loading")}
+              </p>
+            ) : branches.length === 0 ? (
+              <p className="px-4 py-4 text-sm text-slate-500">
+                {t(uiLocale, "storesManagement.switchBranch.empty")}
+              </p>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {branches.map((branch) => {
+                  const isActiveBranch = branch.id === activeBranchId;
+                  const canAccessBranch = branch.canAccess ?? true;
+
+                  return (
+                    <li key={branch.id} className="flex min-h-14 items-center gap-3 px-4 py-3">
+                      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                        <Building2 className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-slate-900">
+                          {branch.name}
+                          {branch.code === "MAIN" ? (
+                            <span className="ml-1 rounded-full border border-slate-300 bg-white px-1.5 text-[10px] text-slate-600">
+                              {t(uiLocale, "storesManagement.branchList.mainBadge")}
+                            </span>
+                          ) : null}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs text-slate-500">
+                          {branch.address ?? t(uiLocale, "storesManagement.switchBranch.noAddress")}
+                        </p>
+                      </div>
+                      {isActiveBranch ? (
+                        <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                          <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                          {t(uiLocale, "storesManagement.switchBranch.activeBadge")}
+                        </span>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 px-3 text-xs"
+                          disabled={loadingKey !== null || !canAccessBranch}
+                          onClick={() => switchBranch(branch.id)}
+                        >
+                          {canAccessBranch
+                            ? loadingKey === `switch-branch-${branch.id}`
+                              ? t(uiLocale, "storesManagement.common.loading")
+                              : t(uiLocale, "storesManagement.common.select")
+                            : t(uiLocale, "storesManagement.switchBranch.noAccess")}
+                        </Button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+
+  return (
+    <section className="space-y-5">
+      {useEmbeddedQuickCard ? (
+        <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">
+                {t(uiLocale, "settings.link.switchStore.title")}
+              </p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {t(uiLocale, "settings.link.switchStore.description")}
+              </p>
+            </div>
+            <StoresManagementHelpButton uiLocale={uiLocale} />
+          </div>
+          <div className="space-y-4 px-4 py-4">{quickPanels}</div>
+        </article>
+      ) : (
+        quickPanels
+      )}
 
       {showStoreCreatePanel ? (
         <div className="space-y-2">

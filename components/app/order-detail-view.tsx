@@ -27,6 +27,7 @@ import { compressRasterImageFile, validateRasterImageFile } from "@/lib/media/cl
 import { RASTER_IMAGE_ACCEPT } from "@/lib/media/image-upload";
 import { buildOrderQrSvgMarkup } from "@/lib/orders/print";
 import { buildShippingLabelPrintMarkup } from "@/lib/orders/shipping-label-print";
+import { fetchImageAsDataUrl, waitForImagesBeforePrint } from "@/lib/print/client";
 import type { OrderCatalogPaymentAccount, OrderDetail } from "@/lib/orders/queries";
 import { maskAccountValue } from "@/lib/payments/store-payment";
 
@@ -703,7 +704,9 @@ export function OrderDetailView({
     }
   };
 
-  const buildReceiptPrintMarkup = useCallback(() => {
+  const buildReceiptPrintMarkup = useCallback((paymentQrImageSrcOverride?: string | null) => {
+    const paymentQrImageSrc =
+      paymentQrImageSrcOverride ?? getOrderQrImageActionUrl(false) ?? order.paymentAccountQrImageUrl;
     const rows = order.items
       .map(
         (item) => `<tr>
@@ -741,10 +744,37 @@ export function OrderDetailView({
       <div style="font-size:12px;font-weight:700;display:flex;justify-content:space-between;gap:8px;"><span>${escapeHtml(t(uiLocale, "orders.print.receipt.summary.netTotal"))}</span><span>${order.total.toLocaleString(numberLocale)} ${escapeHtml(storeCurrencyDisplay)}</span></div>
       <div style="font-size:11px;display:flex;justify-content:space-between;gap:8px;"><span>${escapeHtml(t(uiLocale, "orders.print.receipt.summary.paymentCurrency"))}</span><span>${escapeHtml(paymentCurrencyDisplay)}</span></div>
       <div style="font-size:11px;display:flex;justify-content:space-between;gap:8px;"><span>${escapeHtml(t(uiLocale, "orders.print.receipt.summary.paymentMethod"))}</span><span>${escapeHtml(t(uiLocale, paymentMethodLabelKey[order.paymentMethod]))}</span></div>
+      ${
+        paymentQrImageSrc
+          ? `<hr style="border:0;border-top:1px dashed #64748b;margin:8px 0;" />
+      <div style="text-align:center;">
+        <p style="margin:0;font-size:11px;font-weight:700;">${escapeHtml(t(uiLocale, "orders.print.receipt.qrTitle"))}</p>
+        <p style="margin:4px 0 0;font-size:10px;color:#475569;">${escapeHtml(t(uiLocale, "orders.print.receipt.qrHint"))}</p>
+        <img src="${escapeHtml(paymentQrImageSrc)}" alt="${escapeHtml(t(uiLocale, "orders.print.receipt.qrTitle"))}" style="display:block;margin:8px auto 0;width:112px;height:112px;object-fit:contain;" />
+        <div style="margin-top:6px;text-align:left;font-size:10px;line-height:1.45;">
+          ${
+            order.paymentAccountDisplayName
+              ? `<p style="margin:0;">${escapeHtml(order.paymentAccountDisplayName)}</p>`
+              : ""
+          }
+          ${
+            order.paymentAccountBankName
+              ? `<p style="margin:2px 0 0;">${escapeHtml(t(uiLocale, "orders.create.paymentAccount.details.bankPrefix"))} ${escapeHtml(order.paymentAccountBankName)}</p>`
+              : ""
+          }
+          ${
+            order.paymentAccountNumber
+              ? `<p style="margin:2px 0 0;">${escapeHtml(t(uiLocale, "orders.create.paymentAccount.details.accountNumberLabel"))}: ${escapeHtml(order.paymentAccountNumber)}</p>`
+              : ""
+          }
+        </div>
+      </div>`
+          : ""
+      }
       <hr style="border:0;border-top:1px dashed #64748b;margin:8px 0;" />
       <p style="margin:0;text-align:center;font-size:11px;">${escapeHtml(t(uiLocale, "orders.print.receipt.thanks"))}</p>
     </section>`;
-  }, [numberLocale, order, paymentCurrencyDisplay, storeCurrencyDisplay, uiLocale]);
+  }, [getOrderQrImageActionUrl, numberLocale, order, paymentCurrencyDisplay, storeCurrencyDisplay, uiLocale]);
 
   const buildLabelPrintMarkup = useCallback(() => {
     return buildShippingLabelPrintMarkup({
@@ -818,7 +848,7 @@ export function OrderDetailView({
   }, [numberLocale, order, orderFlowLabel, storeCurrencyDisplay, uiLocale]);
 
   const printViaWindow = useCallback(
-    (kind: "receipt" | "label" | "pack") => {
+    async (kind: "receipt" | "label" | "pack") => {
       if (typeof window === "undefined") {
         return;
       }
@@ -841,9 +871,20 @@ export function OrderDetailView({
       const printRoot = document.createElement("div");
       printRoot.id = printRootId;
       printRoot.setAttribute("aria-hidden", "true");
+      let receiptQrInlineSrc: string | null = null;
+      if (kind === "receipt" && order.paymentAccountQrImageUrl) {
+        try {
+          receiptQrInlineSrc = await fetchImageAsDataUrl(
+            getOrderQrImageActionUrl(false) ?? order.paymentAccountQrImageUrl,
+          );
+        } catch {
+          receiptQrInlineSrc = getOrderQrImageActionUrl(false) ?? order.paymentAccountQrImageUrl;
+        }
+      }
+
       printRoot.innerHTML =
         kind === "receipt"
-          ? buildReceiptPrintMarkup()
+          ? buildReceiptPrintMarkup(receiptQrInlineSrc)
           : kind === "label"
             ? buildLabelPrintMarkup()
             : buildPackPrintMarkup();
@@ -940,25 +981,37 @@ export function OrderDetailView({
 
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
-          try {
-            window.focus();
-            window.print();
-          } catch {
-            window.removeEventListener("afterprint", handleAfterPrint);
-            setErrorMessage(
-              kind === "receipt"
-                ? t(uiLocale, "orders.print.error.receiptPrintFailed")
-                : kind === "label"
-                  ? t(uiLocale, "orders.print.error.labelPrintFailed")
-                  : t(uiLocale, "orders.print.error.packPrintFailed"),
-            );
-            settleLoading();
-            cleanup();
-          }
+          void waitForImagesBeforePrint(printRoot)
+            .catch(() => undefined)
+            .then(() => {
+              try {
+                window.focus();
+                window.print();
+              } catch {
+                window.removeEventListener("afterprint", handleAfterPrint);
+                setErrorMessage(
+                  kind === "receipt"
+                    ? t(uiLocale, "orders.print.error.receiptPrintFailed")
+                    : kind === "label"
+                      ? t(uiLocale, "orders.print.error.labelPrintFailed")
+                      : t(uiLocale, "orders.print.error.packPrintFailed"),
+                );
+                settleLoading();
+                cleanup();
+              }
+            });
         });
       });
     },
-    [buildLabelPrintMarkup, buildPackPrintMarkup, buildReceiptPrintMarkup, printFontFamily, uiLocale],
+    [
+      buildLabelPrintMarkup,
+      buildPackPrintMarkup,
+      buildReceiptPrintMarkup,
+      getOrderQrImageActionUrl,
+      order.paymentAccountQrImageUrl,
+      printFontFamily,
+      uiLocale,
+    ],
   );
 
   const handlePrintPackFromSheet = useCallback(() => {

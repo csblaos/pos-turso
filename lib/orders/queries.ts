@@ -26,7 +26,6 @@ import { timeDbQuery } from "@/lib/perf/server";
 import { DEFAULT_SHIPPING_PROVIDER_SEEDS } from "@/lib/shipping/provider-master";
 import { resolvePaymentQrImageUrl, resolveProductImageUrl } from "@/lib/storage/r2";
 import { getStoreFinancialConfig } from "@/lib/stores/financial";
-import { getGlobalPaymentPolicy } from "@/lib/system-config/policy";
 
 export const PAID_LIKE_STATUSES = ["PAID", "PACKED", "SHIPPED"] as const;
 
@@ -238,7 +237,6 @@ export type OrderCatalog = {
   vatMode: "EXCLUSIVE" | "INCLUSIVE";
   paymentAccounts: OrderCatalogPaymentAccount[];
   shippingProviders: OrderCatalogShippingProvider[];
-  requireSlipForLaoQr: boolean;
   products: OrderCatalogProduct[];
   contacts: OrderCatalogContact[];
 };
@@ -923,10 +921,7 @@ export async function getOrderDetail(storeId: string, orderId: string): Promise<
 
 export async function getOrderCatalogForStore(storeId: string): Promise<OrderCatalog> {
   const baseUnits = alias(units, "base_units");
-  const [financial, globalPaymentPolicy] = await Promise.all([
-    getStoreFinancialConfig(storeId),
-    getGlobalPaymentPolicy(),
-  ]);
+  const financial = await getStoreFinancialConfig(storeId);
 
   const [productRows, conversionRows, contactRows, paymentAccountRows, shippingProviderRows, balances] =
     await Promise.all([
@@ -1142,7 +1137,6 @@ export async function getOrderCatalogForStore(storeId: string): Promise<OrderCat
             branchName: null,
             aliases: [],
           })),
-    requireSlipForLaoQr: globalPaymentPolicy.requireSlipForLaoQr,
     products: productsPayload,
     contacts: contactRows,
   };
@@ -1200,7 +1194,6 @@ export async function getOrderManageCatalogForStore(storeId: string): Promise<Or
     vatMode: financial?.vatMode ?? defaultStoreVatMode,
     paymentAccounts: paymentAccountRows.map(mapOrderCatalogPaymentAccount),
     shippingProviders: [],
-    requireSlipForLaoQr: false,
     products: [],
     contacts: [],
   };

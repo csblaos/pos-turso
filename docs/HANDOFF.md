@@ -6,6 +6,117 @@
 
 ## Changed (ล่าสุด)
 
+- `npm run build` มี `prebuild` ล้าง `.next` อัตโนมัติแล้ว (`rm -rf .next`) เพื่อกัน error ของ Next/Turbopack cache ค้าง เช่น `_document.js` หรือ `/_not-found` ไปอ้าง `../chunks/ssr/[turbopack]_runtime.js` ที่ไม่มีอยู่จริงจาก artifact รอบก่อน
+
+- ใบเสร็จพิมพ์ `/orders/[orderId]/print/receipt` รองรับ QR รับชำระแล้ว:
+  - ถ้าออเดอร์มี `paymentAccountQrImageUrl` ระบบจะพิมพ์ footer `QR รับชำระ` ต่อท้ายบิลทุกกรณี
+  - ถ้ามี `paymentAccountId` ระบบจะโหลด QR ผ่าน route same-origin `GET /api/orders/payment-accounts/[accountId]/qr-image`; ถ้าไม่มี id จะ fallback ใช้ `paymentAccountQrImageUrl` ตรง
+  - ใต้ QR แสดง `ชื่อบัญชี / ธนาคาร / เลขบัญชี` เพื่อให้ลูกค้าสแกนหรือเช็กข้อมูลรับชำระได้จากบิลทันที
+  - รอบล่าสุดเติมให้ครบทั้ง route print receipt, current-page print จากหน้า order detail, และ success/bulk receipt print ใน `orders-management`
+  - flow `window.print()` ฝั่ง client ถูกปรับให้รอ `<img>` ภายใน print root โหลดก่อนค่อยพิมพ์ เพื่อลดเคสที่ QR ยังไม่ทันโหลดแล้วหายจากบิล
+
+- หน้า `/products` ใช้ skeleton เฉพาะหน้าแล้ว:
+  - เพิ่ม `components/app/products-page-skeleton.tsx` ให้โครงตอนโหลดใกล้กับหน้าใช้งานจริง (`summary strip + sticky search/search action + filter row + product cards`)
+  - `app/(app)/products/loading.tsx` เปลี่ยนจาก `PageLoadingSkeleton` กลาง มาใช้ skeleton เฉพาะหน้าพร้อม header/refresh slot
+  - dynamic fallback ของ `ProductsManagement` ใน `app/(app)/products/page.tsx` เปลี่ยนจากกล่องข้อความ loading เป็น skeleton เดียวกัน เพื่อลดอาการ UI สลับคนละชุดระหว่างรอโหลด
+  - route-level loading ของ `/products` ไม่แสดง title จริงระหว่างโหลดแล้ว แต่ใช้ header skeleton bar แทน เพื่อให้ทั้งหน้าดูเป็น loading state ชุดเดียวกัน
+  - ปรับ `ProductsPageSkeleton` เพิ่มเติมให้ match list layout จริงของหน้าแล้ว: ส่วนรายการเปลี่ยนจาก card grid generic เป็น `divide-y list rows` ที่มี thumbnail, text stack, price/status block, และ chevron slot ใกล้กับ card list ของ `ProductsManagement`
+- หน้า `/settings` route loading ไม่แสดง title จริง (`ການຕັ້ງຄ່າ`) ระหว่างโหลดแล้ว แต่ใช้ header skeleton bar แทน เพื่อให้ทั้งหน้าดูเป็น loading state ชุดเดียวกัน
+- เปลี่ยน label กลางของเมนูและหน้าปลายทาง `/settings/store` จาก `ข้อมูลร้าน/ຂໍ້ມູນຮ້ານ/Store profile` เป็น `ตั้งค่าร้าน/ຕັ້ງຄ່າຮ້ານ/Store settings` เพื่อให้ตรงกับ scope จริงของหน้าที่รวมทั้ง profile และ financial settings
+- แยกหน้า `/settings/store` ออกเป็น 2 mental models ชัดเจนแล้ว:
+  - `/settings/store` เหลือเฉพาะ `ข้อมูลร้าน` และ render แค่ `StoreProfileSettings`
+  - เพิ่ม route ใหม่ `/settings/store/finance` สำหรับ `การเงินร้าน` โดยย้าย `StoreFinancialSettings` ไปอยู่หน้าใหม่
+  - หน้า `/settings` เพิ่มเมนู `การเงินร้าน` แยกจาก `ข้อมูลร้าน` แล้ว
+  - `loading.tsx` ของ `/settings/store` ถูกย่อให้ match หน้า info-only ส่วน `/settings/store/finance` มี route-level loading ของตัวเอง
+
+- หน้า `/stock` ใช้ skeleton เฉพาะหน้าแล้ว:
+  - เพิ่ม `components/app/stock-page-skeleton.tsx` ให้โครงตอนโหลดใกล้กับหน้าใช้งานจริง (`tab bar + summary row + sticky search/filter + list cards`)
+  - `app/(app)/stock/loading.tsx` เปลี่ยนจาก `PageLoadingSkeleton` กลาง มาใช้ skeleton เฉพาะหน้า
+  - dynamic fallback ใน `app/(app)/stock/page.tsx` ของ tab components เปลี่ยนจากกล่อง generic เป็น skeleton เดียวกัน เพื่อลดอาการ UI สลับคนละชุดระหว่างรอโหลด
+
+- ปรับหน้า `/settings/superadmin/audit-log` ให้ใช้ pattern เดียวกับหน้า superadmin ชุดล่าสุด:
+  - คง badge `Superadmin Workspace` เหนือ title และเอา subtitle ออก
+  - เพิ่มปุ่ม `i` พร้อม help sheet ใหม่ผ่าน `components/app/superadmin-audit-log-help-button.tsx`
+  - รวม filter + result list ไว้ใน parent card เดียว และช่องค้นหาเพิ่มไอคอน `search`
+  - date range filter เปลี่ยนจาก native `input type="date"` เป็น `AuditLogDateRangeFields` แบบเดียวกับ `/settings/audit-log`
+  - บน mobile ช่อง `จากวันที่ / ถึงวันที่` อยู่แถวเดียวกันแล้ว
+  - placeholder ของ custom date picker ถูกเปลี่ยนเป็น `dd/mm/yyyy` เพื่อลด label ซ้ำกับข้อความใน field และบน desktop ช่อง `ร้าน` ถูกขยายเป็น 2 คอลัมน์ ทำให้แถว `ร้าน + ช่วงวันที่` สมดุลขึ้น
+  - route-level loading ของหน้านี้ถูกอัปเดตให้ตรงกับ badge/title/help + parent-card layout ใหม่
+
+- หน้า `/settings/audit-log` ปรับ desktop filter grid เพิ่มเติมแล้ว:
+  - ช่อง `ผลลัพธ์` กิน 2 คอลัมน์บน `lg`
+  - ทำให้แถว `ผลลัพธ์ + ช่วงวันที่` สมดุลขึ้นและไม่เหลือช่องว่างท้ายแถว
+
+- ทำ safe cleanup ให้ policy `บังคับแนบสลิปเมื่อชำระแบบ QR` ที่ไม่ได้ถูก enforce จริง:
+  - หน้า `/settings/superadmin/global-config` และ card `Payment Account Policy` เอาตัวเลือกนี้ออกแล้ว เหลือ config จริงเฉพาะ `จำนวนบัญชีรับเงินสูงสุดต่อร้าน`
+  - dashboard `/settings/superadmin` และ summary `Global Configuration` ไม่แสดงข้อความ `บังคับ/ไม่บังคับแนบสลิป QR` อีก
+  - order create flow (`components/app/orders-management.tsx` + `lib/orders/queries.ts`) เอาข้อความ policy นี้ออก และ `OrderCatalog` ไม่คืน `requireSlipForLaoQr` อีก
+  - `GET/PATCH /api/settings/superadmin/payment-policy` ถูกย่อให้ expose เฉพาะ `maxAccountsPerStore`; รอบนี้ยังไม่ลบคอลัมน์เดิมใน schema เพื่อเลี่ยง migration ใหญ่
+  - ปุ่ม `บันทึก Payment Policy` ใน card นี้จะ disabled จนกว่าจะมีการแก้ค่า `จำนวนบัญชีรับเงินสูงสุดต่อร้าน` จริง และหลังบันทึกสำเร็จจะกลับไป disabled ตาม baseline ใหม่
+  - section `System Defaults` ในหน้าเดียวกันถูก redesign เป็น compact rows แบบ `label + value` แทน sentence list ยาว, subtitle ถูกย่อให้สั้นลง, และไม่เพิ่ม icon รายบรรทัดเพื่อให้หน้าอ่านเร็วขึ้นบนมือถือ
+
+- ปรับหน้า `/settings/superadmin/global-config` ให้ใช้ header pattern เดียวกับหน้า superadmin ชุดใหม่:
+  - คง badge `Superadmin Workspace` เหนือ title และเอา subtitle ออก
+  - เพิ่มปุ่ม `i` แถวเดียวกับ title ผ่าน `components/app/superadmin-global-config-help-button.tsx`
+  - route-level loading ของหน้านี้เปลี่ยนเป็น badge/title/help skeleton ให้ตรงกับหน้าใช้งานจริง
+
+- ปรับหน้า `/settings/audit-log` ให้ใช้ pattern เดียวกับหน้า settings ชุดใหม่:
+  - state ปกติของหน้าถอด page title ด้านบนออก และรวม filter + result list ไว้ใน parent card เดียว
+  - card header ใช้ `title + subtitle + ปุ่ม i` แล้ว พร้อม help sheet อธิบาย scope, การใช้ตัวกรอง, และลำดับ timeline
+  - detail ของแต่ละรายการถูก humanize แล้ว: ซ่อน `entityType#uuid` และ raw metadata key-value เป็น default, แปล `SUCCESS/FAIL`, ใช้ `before/after` กับ metadata เพื่อสรุปเป็นภาษาคนสำหรับ action หลัก เช่น product cost, PO exchange rate, member update, payment account update, และ account profile update
+  - เพิ่ม action labels ที่เคย fallback เป็น raw code เช่น `product.cost.manual_update`, `product.cost.auto_from_po`, `po.exchange_rate.lock`, `po.payment.settle`, `po.extra_cost.apply`, `order.create_shipping_label`, `order.confirm_paid.bulk_cod_reconcile`, และ `account.locale.update`
+  - ตัดฟิลด์ `Action (ค้นหาเพิ่ม)` ออกจากทั้ง `/settings/audit-log` และ `/settings/superadmin/audit-log` แล้ว เหลือ `ค้นหา` + dropdown `Action` เพื่อลด filter ซ้ำความหมาย
+  - ปุ่มค้นหา/ล้างตัวกรองและ pagination เปลี่ยนเป็นทรง `rounded-full` ให้ตรงกับหน้า settings ชุดใหม่
+  - ช่องค้นหาใน filter row เพิ่มไอคอน `search` ด้านซ้ายแล้ว และปรับ `pl-9` ให้ field ดูเป็น search input ชัดขึ้น
+  - date range filter เปลี่ยนจาก native `input type="date"` เป็น custom date picker แบบเดียวกับหน้า stock/reconcile แล้ว และบน mobile จัด `จากวันที่ / ถึงวันที่` ให้อยู่แถวเดียวกัน
+  - route-level loading ของ `/settings/audit-log` ถูกเพิ่มเป็น parent-card skeleton ตาม layout จริง
+  - หัวข้อ `navigate` ถอด `tracking-[0.14em]` ออก
+
+- ปรับหน้า detail `/settings/roles/[roleId]` ให้ใช้ pattern เดียวกับหน้า settings ชุดใหม่:
+  - ถอด page hero เก่า (`kicker + title + subtitle`) ออก และย้ายไปใช้ parent card header ภายในตัว editor แทน
+  - `RolePermissionsEditor` ถูก flatten จากหลาย card แยก เป็น parent card เดียวที่มี `role name + badge สถานะบันทึก + ปุ่ม i`
+  - desktop permission matrix ถูกย้ายเข้า section กลางของ parent card โดยตรง และ mobile cards ลดน้ำหนักลงเป็น section blocks ภายในการ์ดเดียว
+  - save area ถูกย้ายมาอยู่ท้าย parent card พร้อมปุ่ม pill และข้อความสรุปจำนวนสิทธิ์ที่เลือก
+  - ปรับข้อความสถานะ/save/network ของ editor ให้รองรับ i18n แล้ว และ localize ชื่อโมดูล/ชื่อ action ใน editor ตาม locale
+  - route-level loading และ dynamic editor loading ของ `/settings/roles/[roleId]` ถูกปรับเป็น parent-card skeleton ให้ตรงกับ layout ใหม่
+  - หัวข้อ `navigate` ถอด `tracking-[0.14em]` ออก
+
+- ปรับหน้า hub `/settings/superadmin` แบบ keep-header:
+  - คง page header ไว้เพราะหน้าเป็น dashboard/hub หลายส่วน ไม่ใช่ single-card page
+  - ลดขนาด title จาก hero เดิมให้เบาลงเป็น `text-xl / sm:text-2xl`
+  - จำกัด subtitle ด้วย `max-w-2xl` และคงไว้เป็น page anchor
+  - เพิ่มปุ่ม `i` ที่ header ของหน้า และ help sheet อธิบายการอ่าน overview, quick actions, alerts/health, และ policy snapshot
+  - หัวข้อ `quick actions` ถอด `tracking-[0.14em]` ออกให้ใกล้กับ settings หน้าใหม่
+  - card `Global Policy Snapshot` ถูก redesign จาก paragraph list ยาวเป็น compact rows แบบ `label + value` พร้อม subtitle สั้น เพื่อให้อ่านเร็วขึ้นบน mobile และสอดคล้องกับ card `System Defaults`
+
+- ปรับหน้า `/settings/superadmin/stores` ให้ไปทางเดียวกับ superadmin hub ใหม่:
+  - คง page header ไว้ แต่ลด title เป็น `text-xl / sm:text-2xl` และจำกัด subtitle ด้วย `max-w-2xl`
+  - เพิ่มปุ่ม `i` ที่ header พร้อม help sheet อธิบาย metrics, governance board, management menu, และ analytics menu
+  - หัวข้อ section `เมนูจัดการ` และ `วิเคราะห์และกำกับ` ถอด `tracking-[0.14em]` ออก
+  - route-level loading ของ `/settings/superadmin/stores` ถูกปรับใหม่ให้เป็น skeleton ตาม layout จริงของหน้า (header + metrics + board + 2 menu sections)
+
+- ปรับหน้า `/settings/store` ให้ใช้ pattern เดียวกับหน้า settings ชุดใหม่ แต่คงโครง `2 parent cards`:
+  - state ปกติของหน้าถอด page title ด้านบนและ section label เก่าออกแล้ว
+  - `StoreProfileSettings` รับ `uiLocale` และถูก flatten จากหลาย nested cards เป็น parent card เดียวที่มี header `title + subtitle + ปุ่ม i` พร้อมช่วยแยก section `ชื่อร้าน/โลโก้`, `ที่อยู่`, `ติดต่อ`, และ save area ด้วย `divide-y`
+  - `StoreFinancialSettings` รับ `uiLocale` และอัปเดต header ให้ใช้ `title + subtitle + ปุ่ม i` แบบเดียวกัน โดยคง form logic เดิมไว้
+  - กลุ่ม `สกุลที่ร้านรองรับตอนรับชำระ` ในการ์ดการเงินร้านเปลี่ยนจาก checkbox grid เป็น `currency pills` แบบ multi-select พร้อม badge `หลัก` โทนเขียวบน base currency และใช้ไอคอน `check` แทนข้อความ `เลือกแล้ว`
+  - `เปิดใช้งาน VAT ในใบขาย` เปลี่ยนจาก checkbox ธรรมดาเป็น toggle switch row แบบ settings
+  - label สกุลเงินในหน้า settings/store เปลี่ยนเป็น `LAK / THB / USD` ในทุก non-amount context แล้ว; สัญลักษณ์ `₭ / ฿ / $` คงไว้สำหรับกรณีแสดงหลังจำนวนเงินจริงเท่านั้น
+  - เพิ่ม help sheet ให้ทั้ง `ข้อมูลร้าน` และ `การเงินร้าน`
+  - route-level loading ของ `/settings/store` ถูกเพิ่มเป็น parent-card skeleton ตาม layout จริงของหน้า
+  - หัวข้อ `navigate` ถอด `tracking-[0.14em]` ออกให้ตรงกับ settings หน้าใหม่
+
+- ปรับหน้า `/settings/stores` ให้ใช้ pattern เดียวกับหน้า settings ชุดใหม่:
+  - state ปกติของหน้าถอด page title ด้านบนออก
+  - `StoresManagement mode="quick"` รองรับ `embeddedQuickCard` แล้ว เพื่อให้หน้า `/settings/stores` แสดง parent card header (`title + subtitle + ปุ่ม i`) โดยไม่กระทบ quick switcher ใน navbar หรือหน้า superadmin ที่ยังใช้ quick mode เดิม
+  - embedded mode ของหน้า `/settings/stores` ลดจาก `card in card` เป็น `single card + section dividers` แล้ว เพื่อให้หน้าโปร่งขึ้นและไม่ซ้อนกรอบหลายชั้น
+  - badge `MAIN` ของสาขาถูกแยกออกจาก text `truncate` และเปลี่ยนจาก `bg-white` เป็น `bg-slate-50` + `whitespace-nowrap` เพื่อลดอาการพื้นขาวทับพื้นขาวและข้อความดูถูกบังบน mobile
+  - badge active ของร้าน/สาขาใน locale ลาวถูกย่อเป็น `ຮ້ານປັດຈຸບັນ` และ `ສາຂາປັດຈຸບັນ` เพื่อให้สั้นลงและไม่ล้นง่ายบน mobile
+  - section label ใน `StoresManagement` โหมด quick ปกติ (รวม modal quick switcher จาก navbar) ถอด `tracking-[0.14em]` ออกแล้ว เพื่อให้ typography ของ modal `เลือก/เปลี่ยนร้าน` ดูนุ่มและสอดคล้องกับ settings หน้าใหม่
+  - เพิ่ม help sheet อธิบายผลของการสลับร้าน, ขอบเขตของการสลับสาขา, และกรณีที่ควรไปทำงานต่อใน Superadmin
+  - route-level loading ของ `/settings/stores` ถูกปรับใหม่ให้เป็น parent-card skeleton ตาม layout จริงของหน้า
+  - หัวข้อ `admin area` และ `navigate` ถอด `tracking-[0.14em]` ออกให้สอดคล้องกับหน้า settings อื่น
+
 - ปรับ model `บัญชีรับเงิน` ของร้านให้ตรง usage ลาวมากขึ้น:
   - หน้า `/settings/store/payments` ไม่ให้เลือก type `BANK / LAO_QR` ตรง ๆ แล้ว แต่ใช้บัญชีเดียวที่มีข้อมูลธนาคารเสมอ + toggle `มี QR`
   - `store_payment_accounts` เพิ่ม `currency` ต่อบัญชี พร้อม migration [0043_payment_account_currency.sql](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/drizzle/0043_payment_account_currency.sql) และ backfill ค่าเริ่มต้นตาม `stores.currency`
@@ -55,6 +166,19 @@
   - ย้าย cron hint และ inbox panel เข้า parent card เดียว
   - card header ใช้ `title + subtitle + ปุ่ม i` และเพิ่ม help sheet อธิบายบทบาทของ inbox, กฎ mute/snooze, และการ sync จาก AP due rules
   - หัวข้อ `navigate` ถอด `tracking-[0.14em]` ออก
+
+- เพิ่ม route-level loading ให้ `/settings/language` และ `/settings/permissions`:
+  - ทั้งสองหน้าไม่ fallback ไปใช้ skeleton กลางของ `/settings` แล้ว
+  - loading skeleton ถูกทำให้ไปทางเดียวกับ `/settings/profile` และ `/settings/security` เพื่อให้ช่วงรอ render ดูสม่ำเสมอกันมากขึ้น
+
+- เพิ่ม route-level loading ให้ `/settings/units`, `/settings/stock`, และ `/settings/categories`:
+  - ทั้งสามหน้าไม่ fallback ไปใช้ skeleton กลางของ `/settings` แล้ว
+  - loading skeleton ถูกทำให้เป็น parent-card layout แบบเดียวกับหน้า settings ชุดใหม่ เพื่อให้หน้าระหว่างรอ render ดูคงเส้นคงวามากขึ้น
+
+- ปรับ route-level loading ของ `/settings/roles`, `/settings/users`, และ `/settings/store/payments`:
+  - loading skeleton ถูกจัดใหม่ให้เป็น parent-card layout แบบเดียวกับหน้า settings ชุดใหม่
+- เพิ่ม route-level loading ให้ `/settings/pdf` และ `/settings/store/shipping-providers`:
+  - ทั้งสองหน้าไม่ fallback ไปใช้ skeleton กลางของ `/settings` แล้ว
 
 - ปรับหน้า `/settings/roles` ให้ใช้แนวเดียวกับหน้า settings อื่น:
   - state ปกติของหน้าถอด page title ออก
@@ -142,6 +266,12 @@
   - scanner ยังใช้ `GET /api/products/search?q&includeStock=true` เป็น exact barcode resolver สำหรับ toast `พบสินค้า/ไม่พบสินค้า` และเคส `เจอสินค้าแต่ไม่อยู่ในหมวดที่เลือก`
 
 - ปรับ header ของหน้า `/products`, `/settings`, และ `/stock` ให้เหลือแค่ title (ตัด subtitle ออก) เพื่อประหยัดพื้นที่บนจอเล็ก
+- ปรับหน้า `/settings` หลักเพิ่มอีก:
+  - คง title `ການຕັ້ງຄ່າ` ไว้เพราะหน้า hub ยังไม่มี card header มารับแทน
+  - ลดขนาด title ลงเหลือ `text-xl` และกระชับ spacing ด้านบน
+  - เปลี่ยน `app/(app)/settings/loading.tsx` จาก `PageLoadingSkeleton` กลางมาเป็น route-level skeleton เฉพาะหน้า `/settings` ที่มี title + section cards หลายกลุ่ม เพื่อให้ช่วงรอ render ใกล้กับหน้า hub จริงมากขึ้น
+  - block `ออกจากระบบ` ใน section ความปลอดภัยของหน้า `/settings` หลัก ถูก redesign เป็น `info ซ้าย / action ขวา` บน desktop แล้ว
+  - เพิ่ม key `settings.logout.title` และปรับ `settings.logout.hint` ให้สื่อชัดว่าเป็นการปิด `session ในอุปกรณ์นี้`
 - เปลี่ยนพฤติกรรม sheet เปลี่ยนภาษาในหน้า `/settings/language`: บันทึกสำเร็จแล้วปิด sheet อัตโนมัติ (ถ้าไม่มี warning)
 - ปรับ UI sheet เปลี่ยนภาษาในหน้า `/settings/language` จาก dropdown เป็น list option เพื่อเลือกภาษาได้เร็วขึ้นบนมือถือ
 - ปรับ z-index ของ notification dropdown บน desktop เป็น `z-[60]` ให้สอดคล้องกับ mobile
@@ -1616,6 +1746,24 @@ npm run build
   - ถ้า tab bar ยังไม่ sticky จะ restore `window.scrollX/Y` เดิมหลัง mount
   - ถ้า tab bar กำลัง sticky อยู่ จะ restore แบบ `keep_sticky` โดยคำนวณ scroll ใหม่จาก `tabBar.getBoundingClientRect().top` เทียบกับ `computed top` ของ sticky bar เพื่อให้หลังเปลี่ยนแท็บ bar ยังคง stuck ต่อ ไม่เด้งกลับไปช่วงที่แท็บยังไม่ sticky
 - workspace tabs ภายในหน้า purchase (`components/app/purchase-order-list.tsx`) เพิ่ม stuck-state UI แล้ว: ตอนยังไม่ติด sticky คง `rounded card` เดิมไว้ แต่เมื่อชน offset `top-[3.8rem]` จะสลับเป็น full-width bar ทุก breakpoint โดยขยายตาม gutter ของหน้า (`-mx-4/md:-mx-6/min-[1200px]:-mx-8`) พร้อม `border-y px-* py-2 shadow-sm`; ใช้ `getBoundingClientRect().top` + `requestAnimationFrame` เพื่อตรวจสถานะ sticky
+- `/settings/superadmin/stores/store-config` now matches the newer superadmin/settings pattern: lighter `title + subtitle` header, same-line `i` help sheet, no tracking on the navigate label, and route-level loading that mirrors the real page layout.
+- `/settings/superadmin/stores/branch-config` now matches the same newer superadmin/settings pattern: lighter `title + subtitle` header, same-line `i` help sheet, no tracking on the navigate label, and route-level loading that mirrors the actual branch-config layout.
+- `/settings/superadmin/stores/branch-config` header was tightened further: the subtitle was removed again, while the original `Superadmin Workspace` badge with `ShieldCheck` icon was restored above the title and the same-line `i` help button remains.
+- `/settings/superadmin` header was tightened further too: the subtitle under the page title was removed, while the `Superadmin Workspace` badge, lighter title, and same-line `i` help button remain.
+- `/settings/superadmin/stores` header was tightened further too: the subtitle was removed, while the original `Superadmin Workspace` badge with `ShieldCheck` icon was restored above the title and the same-line `i` help button remains.
+- `/settings/superadmin/stores/store-config` header was tightened further too: the subtitle was removed, while the original `Superadmin Workspace` badge with `ShieldCheck` icon was restored above the title and the same-line `i` help button remains.
+- `/settings/superadmin/stores/store-config` now routes its primary back action to `/settings/superadmin/stores` instead of the broader `/settings/superadmin` hub, so returning from store-level setup lands on the store governance page directly.
+- All current routes under `/settings/superadmin/stores/*` now route their primary back action to `/settings/superadmin/stores` instead of `/settings/superadmin`, so returning from both store-level and branch-level setup stays inside the store governance flow.
+- The top app nav now treats `/settings/superadmin/stores/*` as a dedicated back group too: the global back button and its prefetch target both return to `/settings/superadmin/stores` instead of the broader `/settings/superadmin` hub.
+- `/settings/superadmin/security` now follows the same newer superadmin pattern: it keeps the `Superadmin Workspace` badge, removes the page subtitle, adds a same-line `i` help sheet, removes tracking from the navigate label, and updates route-level loading to match the page header pattern.
+- `/settings/superadmin/overview` now follows the same newer superadmin pattern too: it keeps the `Superadmin Workspace` badge, removes the page subtitle, adds a same-line `i` help sheet, removes tracking from the navigate label, and updates route-level loading to match the page header pattern.
+- `/settings/superadmin/integrations` now follows the same newer superadmin pattern too: it keeps the `Superadmin Workspace` badge, removes the page subtitle, adds a same-line `i` help sheet, removes tracking from the navigate label, and updates route-level loading to match the page header pattern.
+- `/settings/superadmin/stores` no longer repeats the analytics/oversight menu from the main superadmin hub. The page now focuses on store-governance actions only (`store config`, `branch config`, `users`, `security`) and ends with a single link back to `/settings/superadmin`.
+- The current `/settings/superadmin*` pages no longer show a separate `navigate/ນຳທາງ` section label. The footer link cards remain, but the redundant heading was removed across the superadmin cluster to keep the screens tighter.
+- The child pages under `/settings/superadmin*` now remove the footer navigation cards entirely, not just the `navigate/ນຳທາງ` label. Each page now ends at its primary content instead of repeating bottom links back to hub/settings pages.
+- `/settings/superadmin/quotas` now follows the same newer superadmin pattern too: it keeps the `Superadmin Workspace` badge, removes the page subtitle, adds a same-line `i` help sheet, and updates route-level loading to match the new header pattern.
+- Cleaned up `/settings/superadmin/security` i18n by removing the unused subtitle key in all three locales so the copy now matches the badge + title + help-button header that is actually rendered.
+- `/settings/superadmin/users` now follows the newer superadmin header pattern too: it keeps the `Superadmin Workspace` badge, removes the page subtitle, adds a same-line `i` help sheet, removes tracking from section labels, and updates route-level loading to better match the real page layout.
 - workspace tabs ในหน้า purchase ถอดข้อความ `purchase.workspace.title` ออกจาก bar แล้ว เพื่อลดความสูงทั้งตอนปกติและตอน sticky
 - ตอนสลับ workspace ภายในหน้า purchase เพิ่ม scroll restore 2 โหมดแล้ว:
   - ถ้า workspace bar ยังไม่ sticky จะ restore `window.scrollX/Y` เดิมหลัง workspace ใหม่พร้อม

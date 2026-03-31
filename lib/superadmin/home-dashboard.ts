@@ -39,7 +39,6 @@ export type SuperadminHomeSnapshot = {
   };
   globalPaymentPolicy: {
     maxAccountsPerStore: number;
-    requireSlipForLaoQr: boolean;
   };
 };
 

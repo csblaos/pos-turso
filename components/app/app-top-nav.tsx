@@ -175,6 +175,10 @@ export function AppTopNav({
   const showNotificationButton = canViewNotifications;
   const storeInitial = getStoreInitial(activeStoreName);
   const backHref = useMemo(() => {
+    if (pathname.startsWith("/settings/superadmin/stores/")) {
+      return "/settings/superadmin/stores";
+    }
+
     if (pathname.startsWith("/settings/superadmin/")) {
       return "/settings/superadmin";
     }
@@ -194,6 +198,11 @@ export function AppTopNav({
     : t(uiLocale, "nav.back");
 
   useEffect(() => {
+    if (pathname.startsWith("/settings/superadmin/stores/")) {
+      router.prefetch("/settings/superadmin/stores");
+      return;
+    }
+
     if (!pathname.startsWith("/settings/superadmin/")) {
       return;
     }

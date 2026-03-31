@@ -3,6 +3,7 @@
 import {
   CheckCircle2,
   CircleAlert,
+  Info,
   ImagePlus,
   Loader2,
   Lock,
@@ -14,7 +15,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch } from "@/lib/auth/client-token";
+import type { UiLocale } from "@/lib/i18n/locales";
+import { t } from "@/lib/i18n/messages";
 import {
   formatLaosAddress,
   getDistrictsByProvinceId,
@@ -32,6 +36,7 @@ type StoreProfileSettingsProps = {
   initialLogoUrl: string | null;
   initialAddress: string | null;
   initialPhoneNumber: string | null;
+  uiLocale: UiLocale;
   canUpdate: boolean;
 };
 
@@ -91,16 +96,16 @@ function createAddressFieldsFromAddress(address: string | null): AddressFields {
 function CardStatusBadge({ dirty }: { dirty: boolean }) {
   if (dirty) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
-        <CircleAlert className="h-3.5 w-3.5" />
+      <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 whitespace-nowrap">
+        <CircleAlert className="h-3.5 w-3.5 shrink-0" />
         ยังไม่บันทึก
       </span>
     );
   }
 
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-      <CheckCircle2 className="h-3.5 w-3.5" />
+    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 whitespace-nowrap">
+      <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
       บันทึกแล้ว
     </span>
   );
@@ -113,11 +118,12 @@ export function StoreProfileSettings({
   initialLogoUrl,
   initialAddress,
   initialPhoneNumber,
+  uiLocale,
   canUpdate,
 }: StoreProfileSettingsProps) {
   const router = useRouter();
   const logoInputRef = useRef<HTMLInputElement | null>(null);
-  const saveActionRef = useRef<HTMLElement | null>(null);
+  const saveActionRef = useRef<HTMLDivElement | null>(null);
   const initialAddressFields = useMemo(
     () => createAddressFieldsFromAddress(initialAddress),
     [initialAddress],
@@ -144,6 +150,7 @@ export function StoreProfileSettings({
   const [isSaving, setIsSaving] = useState(false);
   const [showSlowLoading, setShowSlowLoading] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -444,50 +451,65 @@ export function StoreProfileSettings({
 
   return (
     <section className="space-y-5">
-      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">จัดการข้อมูลหน้าร้านให้พร้อมใช้งานจริง</p>
+      <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-4 py-4">
+          <div className="space-y-1">
+            <p className="text-base font-semibold text-slate-900">
+              {t(uiLocale, "settings.link.storeProfile.title")}
+            </p>
+            <p className="text-sm text-slate-500">{t(uiLocale, "settings.store.profile.subtitle")}</p>
+          </div>
+
           <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 w-9 rounded-full px-0"
+              onClick={() => setIsHelpOpen(true)}
+              aria-label={t(uiLocale, "settings.store.help.profile.ariaLabel")}
+            >
+              <Info className="h-4 w-4" />
+            </Button>
+
             {canUpdate ? (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-8 rounded-lg text-xs"
+                className="h-9 rounded-full px-4 text-sm"
                 onClick={scrollToSaveAction}
               >
                 ไปปุ่มบันทึก
               </Button>
             ) : null}
+          </div>
+        </div>
+
+        <div className="divide-y divide-slate-100">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <p className="text-xs text-muted-foreground">จัดการข้อมูลหน้าร้านให้พร้อมใช้งานจริง</p>
             {canUpdate ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                <CheckCircle2 className="h-3.5 w-3.5" />
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 whitespace-nowrap">
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                 โหมดแก้ไข
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
-                <Lock className="h-3.5 w-3.5" />
+              <span className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 whitespace-nowrap">
+                <Lock className="h-3.5 w-3.5 shrink-0" />
                 โหมดอ่านอย่างเดียว
               </span>
             )}
           </div>
-        </div>
-      </div>
 
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          ข้อมูลร้าน
-        </p>
-        <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <div className="flex items-center gap-2">
-              <Store className="h-4 w-4 text-slate-600" />
-              <p className="text-sm font-semibold text-slate-900">ชื่อร้านและโลโก้</p>
+          <div className="space-y-4 px-4 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Store className="h-4 w-4 text-slate-600" />
+                <p className="text-sm font-semibold text-slate-900">ชื่อร้านและโลโก้</p>
+              </div>
+              <CardStatusBadge dirty={storeCardDirty} />
             </div>
-            <CardStatusBadge dirty={storeCardDirty} />
-          </div>
 
-          <div className="space-y-4 p-4">
             <div className="space-y-2">
               <label className="text-xs text-muted-foreground" htmlFor="store-name">
                 ชื่อร้าน
@@ -547,10 +569,7 @@ export function StoreProfileSettings({
                     รองรับ JPG, PNG, WEBP, SVG (ขนาดสูงสุดตามที่ระบบกำหนด)
                   </p>
                   {renderedLogoName ? (
-                    <p
-                      className="max-w-[220px] truncate text-xs text-slate-700"
-                      title={renderedLogoName}
-                    >
+                    <p className="max-w-[220px] truncate text-xs text-slate-700" title={renderedLogoName}>
                       {renderedLogoName}
                     </p>
                   ) : (
@@ -560,23 +579,16 @@ export function StoreProfileSettings({
               </div>
             </div>
           </div>
-        </article>
-      </div>
 
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          ที่อยู่ร้าน
-        </p>
-        <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <div className="flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-slate-600" />
-              <p className="text-sm font-semibold text-slate-900">ข้อมูลที่อยู่</p>
+          <div className="space-y-4 px-4 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-slate-600" />
+                <p className="text-sm font-semibold text-slate-900">ข้อมูลที่อยู่</p>
+              </div>
+              <CardStatusBadge dirty={addressCardDirty} />
             </div>
-            <CardStatusBadge dirty={addressCardDirty} />
-          </div>
 
-          <div className="space-y-4 p-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground" htmlFor="store-province">
@@ -655,80 +667,101 @@ export function StoreProfileSettings({
               ที่อยู่ที่จะแสดง: <span className="font-medium">{addressPreview}</span>
             </p>
           </div>
-        </article>
-      </div>
 
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          ติดต่อร้าน
-        </p>
-        <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <div className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-slate-600" />
-              <p className="text-sm font-semibold text-slate-900">ข้อมูลติดต่อ</p>
+          <div className="space-y-4 px-4 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-slate-600" />
+                <p className="text-sm font-semibold text-slate-900">ข้อมูลติดต่อ</p>
+              </div>
+              <CardStatusBadge dirty={contactCardDirty} />
             </div>
-            <CardStatusBadge dirty={contactCardDirty} />
+
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground" htmlFor="store-phone-number">
+                เบอร์โทรร้าน
+              </label>
+              <input
+                id="store-phone-number"
+                value={phoneNumber}
+                onChange={(event) => setPhoneNumber(event.target.value)}
+                disabled={!canUpdate || isSaving}
+                className={fieldClassName}
+                placeholder="เช่น +856 20 9999 9999"
+              />
+            </div>
           </div>
 
-          <div className="space-y-2 p-4">
-            <label className="text-xs text-muted-foreground" htmlFor="store-phone-number">
-              เบอร์โทรร้าน
-            </label>
-            <input
-              id="store-phone-number"
-              value={phoneNumber}
-              onChange={(event) => setPhoneNumber(event.target.value)}
-              disabled={!canUpdate || isSaving}
-              className={fieldClassName}
-              placeholder="เช่น +856 20 9999 9999"
-            />
+          <div className="space-y-3 px-4 py-4">
+            {successMessage ? (
+              <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                {successMessage}
+              </p>
+            ) : null}
+            {warningMessage ? (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                {warningMessage}
+              </p>
+            ) : null}
+            {errorMessage ? (
+              <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+                {errorMessage}
+              </p>
+            ) : null}
+
+            {canUpdate ? (
+              <div ref={saveActionRef} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-3 flex items-center justify-between gap-2 text-xs">
+                  <p className="text-muted-foreground">
+                    {hasAnyChanges ? "มีข้อมูลที่ยังไม่บันทึก" : "ข้อมูลล่าสุดถูกบันทึกแล้ว"}
+                  </p>
+                  <CardStatusBadge dirty={hasAnyChanges} />
+                </div>
+                <Button
+                  className="h-11 w-full rounded-xl"
+                  onClick={handleOpenConfirm}
+                  disabled={isSaving || !hasAnyChanges}
+                >
+                  บันทึกการเปลี่ยนแปลง
+                </Button>
+              </div>
+            ) : (
+              <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                บัญชีนี้ไม่มีสิทธิ์แก้ไขข้อมูลร้าน กรุณาติดต่อผู้ดูแลระบบร้าน
+              </p>
+            )}
           </div>
-        </article>
-      </div>
+        </div>
+      </article>
 
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          สถานะการบันทึก
-        </p>
-        {successMessage ? (
-          <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-            {successMessage}
-          </p>
-        ) : null}
-        {warningMessage ? (
-          <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-            {warningMessage}
-          </p>
-        ) : null}
-        {errorMessage ? (
-          <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
-            {errorMessage}
-          </p>
-        ) : null}
-      </div>
-
-      {canUpdate ? (
-        <article ref={saveActionRef} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between gap-2 text-xs">
-            <p className="text-muted-foreground">
-              {hasAnyChanges ? "มีข้อมูลที่ยังไม่บันทึก" : "ข้อมูลล่าสุดถูกบันทึกแล้ว"}
+      <SlideUpSheet
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+        title={t(uiLocale, "settings.store.help.profile.sheet.title")}
+        description={t(uiLocale, "settings.store.help.profile.sheet.description")}
+        panelMaxWidthClass="min-[1200px]:max-w-md"
+      >
+        <div className="space-y-3 text-sm text-slate-700">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">{t(uiLocale, "settings.store.help.profile.identity.title")}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {t(uiLocale, "settings.store.help.profile.identity.description")}
             </p>
-            <CardStatusBadge dirty={hasAnyChanges} />
           </div>
-          <Button
-            className="h-11 w-full rounded-xl"
-            onClick={handleOpenConfirm}
-            disabled={isSaving || !hasAnyChanges}
-          >
-            บันทึกการเปลี่ยนแปลง
-          </Button>
-        </article>
-      ) : (
-        <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-          บัญชีนี้ไม่มีสิทธิ์แก้ไขข้อมูลร้าน กรุณาติดต่อผู้ดูแลระบบร้าน
-        </p>
-      )}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">{t(uiLocale, "settings.store.help.profile.address.title")}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {t(uiLocale, "settings.store.help.profile.address.description")}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-medium text-slate-900">{t(uiLocale, "settings.store.help.profile.contact.title")}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {t(uiLocale, "settings.store.help.profile.contact.description")}
+            </p>
+          </div>
+        </div>
+      </SlideUpSheet>
 
       {showFloatingScrollButton ? (
         <Button

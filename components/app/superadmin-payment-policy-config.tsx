@@ -8,7 +8,6 @@ import { authFetch } from "@/lib/auth/client-token";
 type SuperadminPaymentPolicyConfigProps = {
   initialConfig: {
     maxAccountsPerStore: number;
-    requireSlipForLaoQr: boolean;
   };
 };
 
@@ -16,7 +15,6 @@ type PaymentPolicyResponse = {
   message?: string;
   policy?: {
     maxAccountsPerStore: number;
-    requireSlipForLaoQr: boolean;
   };
 };
 
@@ -26,12 +24,13 @@ export function SuperadminPaymentPolicyConfig({
   const [maxAccountsPerStore, setMaxAccountsPerStore] = useState(
     String(initialConfig.maxAccountsPerStore),
   );
-  const [requireSlipForLaoQr, setRequireSlipForLaoQr] = useState(
-    initialConfig.requireSlipForLaoQr,
+  const [savedMaxAccountsPerStore, setSavedMaxAccountsPerStore] = useState(
+    String(initialConfig.maxAccountsPerStore),
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const isDirty = maxAccountsPerStore !== savedMaxAccountsPerStore;
 
   const save = async () => {
     const parsedMaxAccounts = Number(maxAccountsPerStore);
@@ -52,7 +51,6 @@ export function SuperadminPaymentPolicyConfig({
       },
       body: JSON.stringify({
         maxAccountsPerStore: parsedMaxAccounts,
-        requireSlipForLaoQr,
       }),
     });
 
@@ -65,9 +63,7 @@ export function SuperadminPaymentPolicyConfig({
 
     const nextValue = data?.policy?.maxAccountsPerStore ?? parsedMaxAccounts;
     setMaxAccountsPerStore(String(nextValue));
-    if (data?.policy) {
-      setRequireSlipForLaoQr(data.policy.requireSlipForLaoQr);
-    }
+    setSavedMaxAccountsPerStore(String(nextValue));
     setSuccessMessage("บันทึก Payment Policy แล้ว");
     setIsSubmitting(false);
   };
@@ -91,23 +87,17 @@ export function SuperadminPaymentPolicyConfig({
           min={1}
           max={20}
           value={maxAccountsPerStore}
-          onChange={(event) => setMaxAccountsPerStore(event.target.value)}
+          onChange={(event) => {
+            setMaxAccountsPerStore(event.target.value);
+            setSuccessMessage(null);
+            setErrorMessage(null);
+          }}
           className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-900 outline-none ring-primary focus:ring-2 disabled:bg-slate-100"
           disabled={isSubmitting}
         />
       </div>
 
-      <label className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-        <span>บังคับแนบสลิปเมื่อชำระแบบ QR</span>
-        <input
-          type="checkbox"
-          checked={requireSlipForLaoQr}
-          onChange={(event) => setRequireSlipForLaoQr(event.target.checked)}
-          disabled={isSubmitting}
-        />
-      </label>
-
-      <Button className="h-10 w-full rounded-xl" onClick={save} disabled={isSubmitting}>
+      <Button className="h-10 w-full rounded-xl" onClick={save} disabled={isSubmitting || !isDirty}>
         {isSubmitting ? "กำลังบันทึก..." : "บันทึก Payment Policy"}
       </Button>
 

@@ -109,7 +109,7 @@
 | `/api/settings/notifications/inbox` | `GET` | `Permission:settings.view` | list in-app notification inbox (`filter`,`limit`) + summary counters; ถ้า schema notifications ยังไม่พร้อมจะ fallback เป็นรายการว่างพร้อม `warning` |
 | `/api/settings/notifications/inbox` | `PATCH` | `Permission:settings.view` | action inbox: `mark_read`,`mark_unread`,`resolve`,`mark_all_read` (ถ้า schema notifications ยังไม่พร้อมจะตอบ `503` พร้อมข้อความแนะนำ `db:repair`/`db:migrate`) |
 | `/api/settings/notifications/rules` | `PATCH` | `Permission:settings.update` | ตั้งค่า mute/snooze/clear ราย entity (`SNOOZE`,`MUTE`,`CLEAR`) |
-| `/api/settings/superadmin/payment-policy` | `GET,PATCH` | `Superadmin(SystemRole)` | global payment policy |
+| `/api/settings/superadmin/payment-policy` | `GET,PATCH` | `Superadmin(SystemRole)` | global payment policy (safe cleanup ล่าสุดเหลือ config จริงเฉพาะ `maxAccountsPerStore`; field `requireSlipForLaoQr` ไม่ถูก expose ใน API/UI แล้ว แม้คอลัมน์เดิมใน schema ยังอยู่) |
 
 ## Units
 

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { waitForImagesBeforePrint } from "@/lib/print/client";
 
 type ReceiptPrintActionsProps = {
   autoPrint: boolean;
@@ -19,6 +20,11 @@ export function ReceiptPrintActions({
   returnLabel = "กลับ POS",
 }: ReceiptPrintActionsProps) {
   const router = useRouter();
+  const runPrint = () => {
+    void waitForImagesBeforePrint(document).finally(() => {
+      window.print();
+    });
+  };
 
   useEffect(() => {
     if (!autoPrint) {
@@ -26,7 +32,7 @@ export function ReceiptPrintActions({
     }
 
     const timer = window.setTimeout(() => {
-      window.print();
+      runPrint();
     }, 120);
 
     return () => {
@@ -36,7 +42,7 @@ export function ReceiptPrintActions({
 
   return (
     <div className="mt-3 flex flex-wrap gap-2 print:hidden">
-      <Button type="button" variant="outline" className="h-9 px-3 text-xs" onClick={() => window.print()}>
+      <Button type="button" variant="outline" className="h-9 px-3 text-xs" onClick={runPrint}>
         {printLabel}
       </Button>
       {returnTo ? (

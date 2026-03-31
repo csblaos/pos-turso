@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import Image from "next/image";
 
 import { ReceiptPrintActions } from "@/components/app/receipt-print-actions";
 import { getSession } from "@/lib/auth/session";
@@ -47,6 +48,12 @@ export default async function PrintReceiptPage({
 
   const uiLocale = session.uiLocale ?? DEFAULT_UI_LOCALE;
   const numberLocale = uiLocaleToDateLocale(uiLocale);
+  const paymentQrImageSrc =
+    order.paymentAccountQrImageUrl
+      ? order.paymentAccountId
+        ? `/api/orders/payment-accounts/${order.paymentAccountId}/qr-image`
+        : order.paymentAccountQrImageUrl
+      : null;
   const paymentMethodLabel = (method: typeof order.paymentMethod) => {
     if (method === "LAO_QR") return t(uiLocale, "orders.paymentMethod.LAO_QR");
     if (method === "ON_CREDIT") return t(uiLocale, "orders.paymentMethod.ON_CREDIT");
@@ -145,6 +152,43 @@ export default async function PrintReceiptPage({
             <span>{paymentMethodLabel(order.paymentMethod)}</span>
           </p>
         </div>
+
+        {paymentQrImageSrc ? (
+          <>
+            <hr className="my-2 border-dashed" />
+            <div className="space-y-2 text-center text-[11px]">
+              <p className="font-semibold text-slate-900">
+                {t(uiLocale, "orders.print.receipt.qrTitle")}
+              </p>
+              <p className="text-[10px] text-slate-600">
+                {t(uiLocale, "orders.print.receipt.qrHint")}
+              </p>
+              <Image
+                src={paymentQrImageSrc}
+                alt={t(uiLocale, "orders.print.receipt.qrTitle")}
+                width={112}
+                height={112}
+                unoptimized
+                className="mx-auto h-28 w-28 object-contain"
+              />
+              <div className="space-y-0.5 text-left text-[10px]">
+                {order.paymentAccountDisplayName ? <p>{order.paymentAccountDisplayName}</p> : null}
+                {order.paymentAccountBankName ? (
+                  <p>
+                    {t(uiLocale, "orders.create.paymentAccount.details.bankPrefix")}{" "}
+                    {order.paymentAccountBankName}
+                  </p>
+                ) : null}
+                {order.paymentAccountNumber ? (
+                  <p>
+                    {t(uiLocale, "orders.create.paymentAccount.details.accountNumberLabel")}:{" "}
+                    {order.paymentAccountNumber}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </>
+        ) : null}
 
         <hr className="my-2 border-dashed" />
         <p className="text-center text-[11px]">{t(uiLocale, "orders.print.receipt.thanks")}</p>

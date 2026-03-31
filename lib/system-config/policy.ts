@@ -42,7 +42,6 @@ export type GlobalStoreLogoPolicy = {
 
 export type GlobalPaymentPolicy = {
   maxAccountsPerStore: number;
-  requireSlipForLaoQr: boolean;
 };
 
 export async function getGlobalSessionPolicy(): Promise<GlobalSessionPolicy> {
@@ -97,7 +96,6 @@ export async function getGlobalPaymentPolicy(): Promise<GlobalPaymentPolicy> {
     const [row] = await db
       .select({
         maxAccountsPerStore: systemConfig.paymentMaxAccountsPerStore,
-        requireSlipForLaoQr: systemConfig.paymentRequireSlipForLaoQr,
       })
       .from(systemConfig)
       .where(eq(systemConfig.id, GLOBAL_CONFIG_ID))
@@ -107,15 +105,10 @@ export async function getGlobalPaymentPolicy(): Promise<GlobalPaymentPolicy> {
       maxAccountsPerStore:
         toIntInRangeOrNull(row?.maxAccountsPerStore, 1, 20) ??
         DEFAULT_PAYMENT_MAX_ACCOUNTS_PER_STORE,
-      requireSlipForLaoQr:
-        typeof row?.requireSlipForLaoQr === "boolean"
-          ? row.requireSlipForLaoQr
-          : DEFAULT_PAYMENT_REQUIRE_SLIP_FOR_LAO_QR,
     };
   } catch {
     return {
       maxAccountsPerStore: DEFAULT_PAYMENT_MAX_ACCOUNTS_PER_STORE,
-      requireSlipForLaoQr: DEFAULT_PAYMENT_REQUIRE_SLIP_FOR_LAO_QR,
     };
   }
 }
@@ -179,10 +172,6 @@ export async function upsertGlobalPaymentPolicy(input: GlobalPaymentPolicy) {
   const maxAccountsPerStore =
     toIntInRangeOrNull(input.maxAccountsPerStore, 1, 20) ??
     DEFAULT_PAYMENT_MAX_ACCOUNTS_PER_STORE;
-  const requireSlipForLaoQr =
-    typeof input.requireSlipForLaoQr === "boolean"
-      ? input.requireSlipForLaoQr
-      : DEFAULT_PAYMENT_REQUIRE_SLIP_FOR_LAO_QR;
 
   await db
     .insert(systemConfig)
@@ -192,14 +181,13 @@ export async function upsertGlobalPaymentPolicy(input: GlobalPaymentPolicy) {
       defaultMaxBranchesPerStore: 1,
       defaultSessionLimit: 1,
       paymentMaxAccountsPerStore: maxAccountsPerStore,
-      paymentRequireSlipForLaoQr: requireSlipForLaoQr,
+      paymentRequireSlipForLaoQr: DEFAULT_PAYMENT_REQUIRE_SLIP_FOR_LAO_QR,
       updatedAt: sql`(CURRENT_TIMESTAMP)`,
     })
     .onConflictDoUpdate({
       target: systemConfig.id,
       set: {
         paymentMaxAccountsPerStore: maxAccountsPerStore,
-        paymentRequireSlipForLaoQr: requireSlipForLaoQr,
         updatedAt: sql`(CURRENT_TIMESTAMP)`,
       },
     });

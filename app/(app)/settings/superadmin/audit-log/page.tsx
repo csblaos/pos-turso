@@ -12,9 +12,11 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { ChevronRight, ClipboardList, Store } from "lucide-react";
+import { Search, ShieldCheck } from "lucide-react";
 import { redirect } from "next/navigation";
 
+import { AuditLogDateRangeFields } from "@/components/app/audit-log-date-range-fields";
+import { SuperadminAuditLogHelpButton } from "@/components/app/superadmin-audit-log-help-button";
 import { getSession } from "@/lib/auth/session";
 import { listActiveMemberships } from "@/lib/auth/session-db";
 import { getUserSystemRole } from "@/lib/auth/system-admin";
@@ -193,7 +195,6 @@ export default async function SettingsSuperadminAuditLogPage({
 
   const q = getParam(params, "q").trim();
   const action = getParam(params, "action").trim();
-  const actionLike = getParam(params, "actionLike").trim();
   const selectedStoreIdRaw = getParam(params, "storeId").trim();
   const selectedStoreId = visibleStoreIds.includes(selectedStoreIdRaw) ? selectedStoreIdRaw : "";
   const scope = parseScope(getParam(params, "scope"), canViewSystem);
@@ -233,10 +234,6 @@ export default async function SettingsSuperadminAuditLogPage({
 
   if (action) {
     whereClauses.push(eq(auditEvents.action, action));
-  }
-
-  if (actionLike) {
-    whereClauses.push(like(auditEvents.action, `%${actionLike}%`));
   }
 
   if (q) {
@@ -323,7 +320,6 @@ export default async function SettingsSuperadminAuditLogPage({
   const baseParams = new URLSearchParams();
   if (q) baseParams.set("q", q);
   if (action) baseParams.set("action", action);
-  if (actionLike) baseParams.set("actionLike", actionLike);
   if (scope !== "ALL") baseParams.set("scope", scope);
   if (result !== "ALL") baseParams.set("result", result);
   if (selectedStoreId) baseParams.set("storeId", selectedStoreId);
@@ -338,151 +334,135 @@ export default async function SettingsSuperadminAuditLogPage({
 
   return (
     <section className="space-y-5">
-      <header className="space-y-1 px-1">
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
-          {t(uiLocale, "superadmin.auditLog.title")}
-        </h1>
-        <p className="text-sm text-slate-500">
-          {t(uiLocale, "superadmin.auditLog.subtitle")}
-        </p>
+      <header className="flex items-start justify-between gap-3 px-1">
+        <div className="min-w-0 flex-1 space-y-2">
+          <p className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            {t(uiLocale, "superadmin.workspaceBadge")}
+          </p>
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
+            {t(uiLocale, "superadmin.auditLog.title")}
+          </h1>
+        </div>
+
+        <div className="shrink-0">
+          <SuperadminAuditLogHelpButton uiLocale={uiLocale} />
+        </div>
       </header>
 
-      <form className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" method="GET">
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-          <label className="space-y-1 text-xs text-slate-600">
-            {t(uiLocale, "settings.auditLog.filter.q.label")}
-            <input
-              type="text"
-              name="q"
-              defaultValue={q}
-              placeholder={t(uiLocale, "settings.auditLog.filter.q.placeholder")}
-              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
-            />
-          </label>
+      <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <form className="border-b border-slate-100 px-4 py-4" method="GET">
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+            <label className="space-y-1 text-xs text-slate-600">
+              {t(uiLocale, "settings.auditLog.filter.q.label")}
+              <div className="relative">
+                <Search
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                />
+                <input
+                  type="text"
+                  name="q"
+                  defaultValue={q}
+                  placeholder={t(uiLocale, "settings.auditLog.filter.q.placeholder")}
+                  className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
+                />
+              </div>
+            </label>
 
-          <label className="space-y-1 text-xs text-slate-600">
-            {t(uiLocale, "settings.auditLog.filter.action.label")}
-            <select
-              name="action"
-              defaultValue={action}
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
-            >
-              {actionFilterOptions.map((option) => (
-                <option key={option.value || "__all"} value={option.value}>
-                  {t(uiLocale, option.labelKey)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="space-y-1 text-xs text-slate-600">
-            {t(uiLocale, "settings.auditLog.filter.actionLike.label")}
-            <input
-              type="text"
-              name="actionLike"
-              defaultValue={actionLike}
-              placeholder={t(uiLocale, "settings.auditLog.filter.actionLike.placeholder")}
-              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
-            />
-          </label>
-
-          <label className="space-y-1 text-xs text-slate-600">
-            {t(uiLocale, "superadmin.auditLog.filter.scope.label")}
-            {canViewSystem ? (
+            <label className="space-y-1 text-xs text-slate-600">
+              {t(uiLocale, "settings.auditLog.filter.action.label")}
               <select
-                name="scope"
-                defaultValue={scope}
+                name="action"
+                defaultValue={action}
                 className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
               >
-                <option value="ALL">{t(uiLocale, "superadmin.auditLog.filter.scope.all")}</option>
-                <option value="STORE">{t(uiLocale, "superadmin.auditLog.filter.scope.store")}</option>
-                <option value="SYSTEM">{t(uiLocale, "superadmin.auditLog.filter.scope.system")}</option>
+                {actionFilterOptions.map((option) => (
+                  <option key={option.value || "__all"} value={option.value}>
+                    {t(uiLocale, option.labelKey)}
+                  </option>
+                ))}
               </select>
-            ) : (
-              <>
-                <input type="hidden" name="scope" value="STORE" />
-                <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700">
-                  {t(uiLocale, "superadmin.auditLog.filter.scope.storeOnly")}
-                </div>
-              </>
-            )}
-          </label>
+            </label>
 
-          <label className="space-y-1 text-xs text-slate-600">
-            {t(uiLocale, "settings.auditLog.filter.result.label")}
-            <select
-              name="result"
-              defaultValue={result}
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
-            >
-              <option value="ALL">{t(uiLocale, "common.filter.all")}</option>
-              <option value="SUCCESS">{t(uiLocale, "common.result.success")}</option>
-              <option value="FAIL">{t(uiLocale, "common.result.fail")}</option>
-            </select>
-          </label>
+            <label className="space-y-1 text-xs text-slate-600">
+              {t(uiLocale, "superadmin.auditLog.filter.scope.label")}
+              {canViewSystem ? (
+                <select
+                  name="scope"
+                  defaultValue={scope}
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
+                >
+                  <option value="ALL">{t(uiLocale, "superadmin.auditLog.filter.scope.all")}</option>
+                  <option value="STORE">{t(uiLocale, "superadmin.auditLog.filter.scope.store")}</option>
+                  <option value="SYSTEM">{t(uiLocale, "superadmin.auditLog.filter.scope.system")}</option>
+                </select>
+              ) : (
+                <>
+                  <input type="hidden" name="scope" value="STORE" />
+                  <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700">
+                    {t(uiLocale, "superadmin.auditLog.filter.scope.storeOnly")}
+                  </div>
+                </>
+              )}
+            </label>
 
-          <label className="space-y-1 text-xs text-slate-600">
-            {t(uiLocale, "superadmin.auditLog.filter.store.label")}
-            <select
-              name="storeId"
-              defaultValue={selectedStoreId}
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
-            >
-              <option value="">{t(uiLocale, "superadmin.auditLog.filter.store.all")}</option>
-              {storeOptions.map((store) => (
-                <option key={store.id} value={store.id}>
-                  {store.name}
-                </option>
-              ))}
-            </select>
-          </label>
+            <label className="space-y-1 text-xs text-slate-600">
+              {t(uiLocale, "settings.auditLog.filter.result.label")}
+              <select
+                name="result"
+                defaultValue={result}
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
+              >
+                <option value="ALL">{t(uiLocale, "common.filter.all")}</option>
+                <option value="SUCCESS">{t(uiLocale, "common.result.success")}</option>
+                <option value="FAIL">{t(uiLocale, "common.result.fail")}</option>
+              </select>
+            </label>
 
-          <label className="space-y-1 text-xs text-slate-600">
-            {t(uiLocale, "settings.auditLog.filter.fromDate.label")}
-            <input
-              type="date"
-              name="from"
-              defaultValue={fromDate}
-              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
+            <label className="space-y-1 text-xs text-slate-600 lg:col-span-2">
+              {t(uiLocale, "superadmin.auditLog.filter.store.label")}
+              <select
+                name="storeId"
+                defaultValue={selectedStoreId}
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
+              >
+                <option value="">{t(uiLocale, "superadmin.auditLog.filter.store.all")}</option>
+                {storeOptions.map((store) => (
+                  <option key={store.id} value={store.id}>
+                    {store.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <AuditLogDateRangeFields
+              uiLocale={uiLocale}
+              fromValue={fromDate}
+              toValue={toDate}
             />
-          </label>
+          </div>
 
-          <label className="space-y-1 text-xs text-slate-600">
-            {t(uiLocale, "settings.auditLog.filter.toDate.label")}
-            <input
-              type="date"
-              name="to"
-              defaultValue={toDate}
-              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-900 outline-none ring-primary focus:ring-2"
-            />
-          </label>
-        </div>
-
-        <div className="mt-3 flex items-center gap-2">
-          <button
-            type="submit"
-            className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-sm font-medium text-white"
-          >
-            {t(uiLocale, "settings.auditLog.action.search")}
-          </button>
-          <Link
-            href="/settings/superadmin/audit-log"
-            className="inline-flex h-9 items-center rounded-lg border border-slate-200 px-3 text-sm text-slate-600"
-          >
-            {t(uiLocale, "settings.auditLog.action.clearFilters")}
-          </Link>
-          <p className="ml-auto text-xs text-slate-500">
-            {t(uiLocale, "settings.auditLog.perPage.prefix")} {rows.length.toLocaleString(numberLocale)}{" "}
-            {t(uiLocale, "settings.auditLog.perPage.suffix")}
-          </p>
-        </div>
-      </form>
-
-      <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-4 py-3">
-          <p className="text-sm font-semibold text-slate-900">{t(uiLocale, "settings.auditLog.title")}</p>
-          <p className="mt-0.5 text-xs text-slate-500">{t(uiLocale, "settings.auditLog.subtitle")}</p>
-        </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="submit"
+              className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-sm font-medium text-white"
+            >
+              {t(uiLocale, "settings.auditLog.action.search")}
+            </button>
+            <Link
+              href="/settings/superadmin/audit-log"
+              className="inline-flex h-9 items-center rounded-full border border-slate-200 px-4 text-sm text-slate-600"
+            >
+              {t(uiLocale, "settings.auditLog.action.clearFilters")}
+            </Link>
+            <p className="ml-auto text-xs text-slate-500">
+              {t(uiLocale, "settings.auditLog.perPage.prefix")}{" "}
+              {rows.length.toLocaleString(numberLocale)}{" "}
+              {t(uiLocale, "settings.auditLog.perPage.suffix")}
+            </p>
+          </div>
+        </form>
 
         {rows.length === 0 ? (
           <p className="px-4 py-4 text-sm text-slate-500">{t(uiLocale, "settings.auditLog.empty")}</p>
@@ -535,12 +515,12 @@ export default async function SettingsSuperadminAuditLogPage({
           {cursorAt ? (
             <Link
               href={buildHref("/settings/superadmin/audit-log", baseParams)}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-slate-600"
+              className="rounded-full border border-slate-200 px-4 py-1.5 text-slate-600"
             >
               {t(uiLocale, "settings.auditLog.pagination.backToLatest")}
             </Link>
           ) : (
-            <span className="rounded-lg border border-slate-100 px-3 py-1.5 text-slate-300">
+            <span className="rounded-full border border-slate-100 px-4 py-1.5 text-slate-300">
               {t(uiLocale, "settings.auditLog.pagination.atLatest")}
             </span>
           )}
@@ -548,78 +528,18 @@ export default async function SettingsSuperadminAuditLogPage({
           {hasMore && nextCursor ? (
             <Link
               href={buildHref("/settings/superadmin/audit-log", nextParams)}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-slate-600"
+              className="rounded-full border border-slate-200 px-4 py-1.5 text-slate-600"
             >
               {t(uiLocale, "settings.auditLog.pagination.loadMore")}
             </Link>
           ) : (
-            <span className="rounded-lg border border-slate-100 px-3 py-1.5 text-slate-300">
+            <span className="rounded-full border border-slate-100 px-4 py-1.5 text-slate-300">
               {t(uiLocale, "settings.auditLog.pagination.noMore")}
             </span>
           )}
         </div>
       </article>
 
-      <div className="space-y-2">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {t(uiLocale, "superadmin.auditLog.nav.section")}
-        </p>
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <Link
-            href="/settings/superadmin"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <ClipboardList className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.nav.backToCenter.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.nav.backToCenter.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/superadmin/quotas"
-            className="group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Store className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.auditLog.nav.toQuotas.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.auditLog.nav.toQuotas.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-
-          <Link
-            href="/settings/stores"
-            className="group flex min-h-14 items-center gap-3 px-4 py-3 transition-colors hover:bg-slate-50"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-              <Store className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {t(uiLocale, "superadmin.auditLog.nav.exitMode.title")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
-                {t(uiLocale, "superadmin.nav.exitMode.description")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-        </div>
-      </div>
     </section>
   );
 }
