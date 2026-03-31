@@ -19,8 +19,8 @@ import {
   ExternalLink,
   Loader2,
   QrCode,
+  ScanBarcode,
   Search,
-  ScanLine,
   X,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
@@ -5310,14 +5310,17 @@ export function OrdersManagement(props: OrdersManagementProps) {
           className="sticky top-[3.8rem] z-[9] -mx-1 space-y-3 border-b border-slate-200 bg-slate-50/95 px-1 pt-4 pb-2 backdrop-blur-sm md:top-[3.8rem]"
         >
           <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
-            <input
-              type="text"
-              className="h-10 min-w-0 w-full rounded-md border bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
-              placeholder={t(uiLocale, "orders.create.products.search.placeholder")}
-              value={quickAddKeyword}
-              onChange={(event) => setQuickAddKeyword(event.target.value)}
-              disabled={loading || !hasCatalogProducts}
-            />
+            <div className="relative min-w-0">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                className="h-10 min-w-0 w-full rounded-md border bg-white pr-3 pl-9 text-sm outline-none ring-primary focus:ring-2"
+                placeholder={t(uiLocale, "orders.create.products.search.placeholder")}
+                value={quickAddKeyword}
+                onChange={(event) => setQuickAddKeyword(event.target.value)}
+                disabled={loading || !hasCatalogProducts}
+              />
+            </div>
             <Button
               type="button"
               variant="outline"
@@ -5327,7 +5330,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
               aria-label={t(uiLocale, "orders.create.products.action.scanBarcode")}
               title={t(uiLocale, "orders.create.products.action.scanBarcode")}
             >
-              <ScanLine className="h-4 w-4" />
+              <ScanBarcode className="h-4 w-4" />
               <span className="sr-only">{t(uiLocale, "orders.create.products.action.scanBarcode")}</span>
             </Button>
             <button
@@ -5404,14 +5407,17 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 {t(uiLocale, "orders.create.products.notFoundBarcode.suffix")}
               </p>
               <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="relative flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-500/70" />
                   <input
                     type="text"
-                    className="h-10 flex-1 rounded-md border border-amber-300 bg-white px-3 text-sm outline-none ring-primary focus:ring-2"
+                    className="h-10 w-full rounded-md border border-amber-300 bg-white pr-3 pl-9 text-sm outline-none ring-primary focus:ring-2"
                     placeholder={t(uiLocale, "orders.create.products.manualSearch.placeholder")}
                     value={manualSearchKeyword}
                     onChange={(event) => setManualSearchKeyword(event.target.value)}
                     disabled={loading}
                   />
+                </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -5685,7 +5691,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
               </p>
               <button
                 type="button"
-                className="inline-flex h-9 items-center rounded-md px-3 text-sm font-semibold text-blue-700 active:bg-blue-50 disabled:text-slate-400"
+                className="inline-flex h-8 items-center rounded-full border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 shadow-sm active:bg-blue-100 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
                 onClick={() => setShowCartSheet(true)}
                 disabled={watchedItems.length === 0}
               >
