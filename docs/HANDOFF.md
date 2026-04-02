@@ -11,6 +11,7 @@
   - ปุ่มสแกนข้าง search bar เปลี่ยนจาก `ScanLine` เป็น `ScanBarcode` แบบเดียวกับหน้า products
   - ฟิลด์ค้นหาในกล่อง not-found barcode เพิ่มไอคอน `search` ด้วยเพื่อให้ pattern ตรงกัน
   - ปุ่ม `ตะกร้า` ใน sticky bar mobile ถูกปรับเป็น pill (`rounded-full`) พร้อม border/background ชัดขึ้น เพื่อให้แตะง่ายขึ้นโดยไม่เปลี่ยน layout ทั้ง block
+- หน้า `/login` เพิ่มปุ่มไอคอน “ดูรหัสผ่าน” ในช่อง password แล้ว เพื่อสลับแสดง/ซ่อนรหัสผ่านได้
 
 - `npm run build` มี `prebuild` ล้าง `.next` อัตโนมัติแล้ว (`rm -rf .next`) เพื่อกัน error ของ Next/Turbopack cache ค้าง เช่น `_document.js` หรือ `/_not-found` ไปอ้าง `../chunks/ssr/[turbopack]_runtime.js` ที่ไม่มีอยู่จริงจาก artifact รอบก่อน
 

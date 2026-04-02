@@ -736,3 +736,4 @@ npm run po:audit:integrity
 - `npm run build` มี `prebuild` ล้าง `.next` อัตโนมัติแล้ว (`rm -rf .next`) เพื่อกันอาการ Next/Turbopack cache ค้างที่ทำให้ `_document.js` หรือ `/_not-found` ไปอ้าง `../chunks/ssr/[turbopack]_runtime.js` / module ที่ไม่มีอยู่จริงจาก build artifact รอบก่อน
 - หน้า create order (`/orders/new`) ปรับ search bar หลักให้ใช้ pattern เดียวกับหน้า products มากขึ้นแล้ว: เพิ่มไอคอน `search` ด้านซ้ายของช่องค้นหาสินค้า, เปลี่ยนปุ่มสแกนข้าง search bar จาก `ScanLine` เป็น `ScanBarcode`, และเพิ่มไอคอน `search` ให้ฟิลด์ manual search ในกล่อง not-found barcode ด้วย
 - sticky bottom bar บน mobile ของหน้า create order ปรับเฉพาะปุ่ม `ตะกร้า` ให้เป็น pill (`rounded-full`) พร้อม border/background โทนน้ำเงินอ่อนและพื้นที่กดมากขึ้นแล้ว โดยยังคง layout เดิมของ block สรุป/checkout ไว้
+- หน้า `/login` เพิ่มปุ่มไอคอน “ดูรหัสผ่าน” ในช่อง password แล้ว เพื่อสลับแสดง/ซ่อนรหัสผ่านได้
