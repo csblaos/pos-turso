@@ -1,14 +1,18 @@
 import { DEFAULT_UI_LOCALE } from "@/lib/i18n/locales";
 import { t } from "@/lib/i18n/messages";
+import { ShieldCheck } from "lucide-react";
 
 export default function SystemAdminDashboardLoading() {
   const uiLocale = DEFAULT_UI_LOCALE;
 
   return (
     <section className="space-y-4">
-      <header className="space-y-1">
+      <header className="space-y-2">
+        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+          <ShieldCheck className="h-3.5 w-3.5" />
+          {t(uiLocale, "systemAdmin.workspaceBadge")}
+        </div>
         <h1 className="text-xl font-semibold">{t(uiLocale, "systemAdmin.dashboard.title")}</h1>
-        <p className="text-sm text-muted-foreground">{t(uiLocale, "systemAdmin.dashboard.subtitle")}</p>
       </header>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

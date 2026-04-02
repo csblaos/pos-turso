@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { ShieldCheck } from "lucide-react";
 
 import { getSession } from "@/lib/auth/session";
 import { DEFAULT_UI_LOCALE, type UiLocale, uiLocaleToDateLocale } from "@/lib/i18n/locales";
@@ -181,11 +182,12 @@ export default async function SystemAdminDashboardPage() {
 
   return (
     <section className="space-y-4">
-      <header className="space-y-1">
+      <header className="space-y-2">
+        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+          <ShieldCheck className="h-3.5 w-3.5" />
+          {t(uiLocale, "systemAdmin.workspaceBadge")}
+        </div>
         <h1 className="text-xl font-semibold">{t(uiLocale, "systemAdmin.dashboard.title")}</h1>
-        <p className="text-sm text-muted-foreground">
-          {t(uiLocale, "systemAdmin.dashboard.subtitle")}
-        </p>
       </header>
 
       <Suspense fallback={<DashboardStatsCardsSkeleton uiLocale={uiLocale} />}>

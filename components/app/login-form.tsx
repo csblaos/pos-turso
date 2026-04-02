@@ -247,18 +247,18 @@ export function LoginForm() {
           <label htmlFor="password" className="text-sm font-medium">
             {t(uiLocale, "auth.form.password")}
           </label>
-          <div className="relative">
+          <div className="flex h-10 w-full overflow-hidden rounded-md border bg-white ring-primary focus-within:ring-2">
             <input
               id="password"
               type={isPasswordVisible ? "text" : "password"}
               autoComplete="current-password"
-              className="h-10 w-full rounded-md border bg-white px-3 pr-10 text-sm outline-none ring-primary focus:ring-2"
+              className="h-10 min-w-0 flex-1 bg-transparent px-3 text-sm outline-none disabled:opacity-50"
               disabled={isLoginBusy}
               {...form.register("password")}
             />
             <button
               type="button"
-              className="absolute right-1.5 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:pointer-events-none disabled:opacity-50"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center border-l text-slate-500 hover:bg-slate-50 hover:text-slate-700 disabled:pointer-events-none disabled:opacity-50"
               onClick={() => setIsPasswordVisible((prev) => !prev)}
               onMouseDown={(event) => event.preventDefault()}
               disabled={isLoginBusy}

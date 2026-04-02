@@ -1,3 +1,5 @@
+import { ShieldCheck } from "lucide-react";
+
 import { SuperadminManagement } from "@/components/system-admin/superadmin-management";
 import { getGlobalBranchPolicy } from "@/lib/branches/policy";
 import { getSession } from "@/lib/auth/session";
@@ -17,11 +19,12 @@ export default async function SystemAdminClientsConfigPage() {
 
   return (
     <section className="space-y-4">
-      <header className="space-y-1">
+      <header className="space-y-2">
+        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+          <ShieldCheck className="h-3.5 w-3.5" />
+          {t(uiLocale, "systemAdmin.workspaceBadge")}
+        </div>
         <h1 className="text-xl font-semibold">{t(uiLocale, "systemAdmin.clientsPage.title")}</h1>
-        <p className="text-sm text-muted-foreground">
-          {t(uiLocale, "systemAdmin.clientsPage.subtitle")}
-        </p>
       </header>
 
       <SuperadminManagement

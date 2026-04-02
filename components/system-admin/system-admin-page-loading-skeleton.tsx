@@ -17,12 +17,12 @@ export function SystemAdminPageLoadingSkeleton({
     return (
       <section className="space-y-4">
         <div className="animate-pulse space-y-2">
+          <div className="h-6 w-44 rounded-full bg-slate-200" />
           <div className="h-6 w-40 rounded bg-slate-300/80" />
-          <div className="h-4 w-72 rounded bg-slate-200" />
         </div>
 
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, index) => (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
             <div
               key={index}
               className="animate-pulse rounded-xl border bg-white p-4"
@@ -41,9 +41,9 @@ export function SystemAdminPageLoadingSkeleton({
   if (variant === "clients") {
     return (
       <section className="space-y-4">
-        <div className="space-y-2">
+        <div className="animate-pulse space-y-2">
+          <div className="h-6 w-44 rounded-full bg-slate-200" />
           <div className="h-6 w-44 rounded bg-slate-300/80" />
-          <div className="h-4 w-80 rounded bg-slate-200" />
         </div>
 
         <div className="rounded-xl border bg-white p-4">
@@ -71,9 +71,9 @@ export function SystemAdminPageLoadingSkeleton({
   if (variant === "detail") {
     return (
       <section className="space-y-4">
-        <div className="space-y-2">
+        <div className="animate-pulse space-y-2">
+          <div className="h-6 w-44 rounded-full bg-slate-200" />
           <div className="h-6 w-40 rounded bg-slate-300/80" />
-          <div className="h-4 w-72 rounded bg-slate-200" />
         </div>
         <article className="rounded-xl border bg-white p-4">
           <div className="space-y-2">

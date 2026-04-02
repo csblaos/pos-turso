@@ -1075,6 +1075,7 @@ export const messages = {
     "systemAdmin.branchPolicy.error.invalidLimit":
       "โควตาสาขาต้องเป็นตัวเลข 0-500 หรือเว้นว่างเพื่อไม่จำกัด",
     "systemAdmin.branchPolicy.error.saveFailed": "บันทึก Global Branch Policy ไม่สำเร็จ",
+    "systemAdmin.workspaceBadge": "System Admin Workspace",
     "systemAdmin.layout.eyebrow": "POS System Admin",
     "systemAdmin.layout.title": "ศูนย์จัดการระบบกลาง",
     "systemAdmin.nav.dashboard": "Dashboard",
@@ -4354,6 +4355,7 @@ export const messages = {
     "systemAdmin.branchPolicy.error.invalidLimit":
       "ໂຄວຕາສາຂາຕ້ອງເປັນຕົວເລກ 0-500 ຫຼື ປ່ອຍວ່າງເພື່ອບໍ່ຈຳກັດ",
     "systemAdmin.branchPolicy.error.saveFailed": "ບັນທຶກ Global Branch Policy ບໍ່ສຳເລັດ",
+    "systemAdmin.workspaceBadge": "System Admin Workspace",
     "systemAdmin.layout.eyebrow": "POS System Admin",
     "systemAdmin.layout.title": "ສູນຈັດການລະບົບກາງ",
     "systemAdmin.nav.dashboard": "Dashboard",
@@ -7652,6 +7654,7 @@ export const messages = {
     "systemAdmin.branchPolicy.error.invalidLimit":
       "Branch quota must be a number between 0 and 500, or left blank for unlimited",
     "systemAdmin.branchPolicy.error.saveFailed": "Failed to save global branch policy",
+    "systemAdmin.workspaceBadge": "System Admin Workspace",
     "systemAdmin.layout.eyebrow": "POS System Admin",
     "systemAdmin.layout.title": "Central system admin",
     "systemAdmin.nav.dashboard": "Dashboard",
