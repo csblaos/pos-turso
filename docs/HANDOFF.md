@@ -14,12 +14,43 @@
 - หน้า `/login` เพิ่มปุ่มไอคอน “ดูรหัสผ่าน” ในช่อง password แล้ว เพื่อสลับแสดง/ซ่อนรหัสผ่านได้
   - ช่อง password ปรับ layout เป็นแบบ `input + trailing button` (ไม่ overlay แบบ absolute) เพื่อลดเคสตัวอักษร/ตำแหน่งเพี้ยนบนบาง browser
 
+- หน้า `/orders` ปรับปุ่มเข้า `/orders/new` ให้ชัดขึ้น:
+  - เพิ่มไอคอน `ShoppingCart` หน้า label
+  - เปลี่ยน label จาก “เข้าโหมด POS” เป็น “เข้าโหมดขาย” (ถอดคำว่า POS ออก) และปรับคำอธิบาย shortcut บน dashboard ให้ไม่ใช้คำว่า POS เช่นกัน
+
+- ปุ่มยืนยัน COD ในหน้า order detail ถูกย่อให้สั้นลง:
+  - `orders.detail.action.confirmCodReceived` และ title modal `orders.detail.confirmPaid.title.cod` ปรับเป็น “ยืนยัน COD / ຢືນຢັນ COD / Confirm COD”
+
+- ปรับชื่อปุ่มยืนยันชำระ/จัดส่งให้สั้นลง:
+  - `orders.detail.action.confirmPaid`: “ยืนยันชำระ / ຢືນຢັນຊຳລະ”
+  - `orders.detail.action.markShipped.*` และ `orders.management.bulk.action.markShipped`: “จัดส่ง / ຈັດສົ່ງ”
+
+- หน้า `/orders` ถอดลิงก์ “กลับไปแดชบอร์ด” ที่ท้ายหน้าออก (ลดความซ้ำซ้อน เพราะมี tab/เมนูไป dashboard อยู่แล้ว)
+- หน้า `/orders` เพิ่มปุ่ม `รีเฟรช` ที่ header (ไอคอน `RefreshCw`) เพื่อให้กดอัปเดตรายการได้เร็ว โดยไม่ต้องสลับแท็บ/รีโหลดหน้า
+- เพิ่มไอคอน `Search` บนปุ่ม submit “ค้นหา” ในหน้า `/orders` และหน้า audit log (`/settings/audit-log`, `/settings/superadmin/audit-log`) เพื่อให้ action ชัดขึ้น
+- หน้า `/orders` ปรับ loading skeleton ให้ match layout จริงของหน้า (header placeholder + การ์ดคิวงาน + tabs/search/list) แทน `PageLoadingSkeleton` กลาง ๆ เพื่อลดอาการ UI สลับทั้งหน้า
+- หน้า `/settings/superadmin/audit-log` ปรับรายการให้ “อ่านง่าย” ขึ้น:
+  - แสดง reference จาก `productName / poNumber / orderNo / displayName` (แทน `entityType#uuid` ตรง ๆ)
+  - สรุป metadata สำคัญเป็นบรรทัดสั้น ๆ (เช่น ค่าเดิม -> ค่าใหม่, หมายเหตุ, แหล่งที่มา) เพื่อลด technical key dump
+- หน้า `/dashboard` เพิ่ม section การ์ดทางลัด (Shortcuts) ใต้ summary:
+  - การ์ดหลัก “เข้าโหมดขาย” ไป `/orders/new`
+  - การ์ด “รายงาน” ไป `/reports`
+  - การ์ด “กระแสเงินสด” ไป `/reports/cash-flow`
+  - ย้ายบล็อก “ทางลัด” ขึ้นไปไว้บนสุดของหน้าและแยกออกจาก hero/summary ชัดเจน (ทั้ง mobile/desktop) เพื่อให้เห็นก่อนและกดได้ทันที
+  - บนมือถือการ์ดทางลัดถูกปรับเป็นปุ่มแบบ compact (ซ่อน description + ลด padding) เพื่อประหยัดพื้นที่และแตะได้ง่ายขึ้น
+  - หัวข้อ “ทางลัด” เปลี่ยนเป็น badge (pill) และถอด subtitle ออกเพื่อลดพื้นที่แนวตั้ง
+  - badge “ทางลัด” ถอด tracking ออก และเพิ่มไอคอน `Zap` เพื่อสื่อว่าเป็นทางลัด/เข้าโหมดเร็ว
+  - หัวข้อ `งานวันนี้` และ `รายละเอียดการดำเนินงาน` เปลี่ยนเป็น badge + ไอคอน และถอด subtitle ออก เพื่อประหยัดพื้นที่และให้ pattern เดียวกับ section อื่น
+
 - ปรับหน้า systemadmin (`/system-admin/*`) ให้ header ไปทางเดียวกับ superadmin workspace:
   - เพิ่ม badge pill ไอคอน `ShieldCheck` + ข้อความ `systemAdmin.workspaceBadge`
   - ถอด subtitle ใต้ title ออก เพื่อประหยัดพื้นที่และลดการซ้ำ
   - ปรับ skeleton ของหน้า systemadmin ให้ตรงกับ layout จริง (เช่น config menu 4 การ์ด)
 
-- `npm run build` มี `prebuild` ล้าง `.next` อัตโนมัติแล้ว (`rm -rf .next`) เพื่อกัน error ของ Next/Turbopack cache ค้าง เช่น `_document.js` หรือ `/_not-found` ไปอ้าง `../chunks/ssr/[turbopack]_runtime.js` ที่ไม่มีอยู่จริงจาก artifact รอบก่อน
+- `npm run build` แก้ความเสถียรเพิ่มเติม:
+  - มี `prebuild` ล้าง `.next` อัตโนมัติแล้ว (`rm -rf .next`)
+  - และมี wrapper `scripts/next-build-stable.mjs` retry 1 ครั้งอัตโนมัติเมื่อเจอ error แบบสุ่มของ Next/Turbopack (เช่น `_document.js` ไปอ้าง `../chunks/ssr/[turbopack]_runtime.js` ที่ไม่มีอยู่จริง)
+  - ถ้าต้องการรัน build แบบเดิมตรง ๆ ให้ใช้ `npm run build:raw`
 
 - ใบเสร็จพิมพ์ `/orders/[orderId]/print/receipt` รองรับ QR รับชำระแล้ว:
   - ถ้าออเดอร์มี `paymentAccountQrImageUrl` ระบบจะพิมพ์ footer `QR รับชำระ` ต่อท้ายบิลทุกกรณี
@@ -173,6 +204,8 @@
   - รวมข้อมูลบัญชี, CTA `เปลี่ยนรหัสผ่าน`, CTA `โปรไฟล์บัญชี`, และคำแนะนำความปลอดภัยไว้ใน parent card เดียว
   - card header ใช้ `title + subtitle + ปุ่ม i` และเพิ่ม help sheet อธิบายการเปลี่ยนรหัสผ่านเมื่อพบความเสี่ยง, ขีดจำกัดอุปกรณ์ตาม session policy, และความสัมพันธ์ระหว่างโปรไฟล์กับ security
   - หัวข้อ `navigate` ถอด `tracking-[0.14em]` ออก
+  - รอบล่าสุดถอดฟอร์ม `แก้ไขโปรไฟล์บัญชี` ออกจากหน้า `/settings/security` (กันซ้ำกับ `/settings/profile`), หน้า security จะเน้นเรื่องความปลอดภัยและการเปลี่ยนรหัสผ่าน ส่วนแก้ชื่อ/ข้อมูลบัญชีไปทำที่ `/settings/profile`
+  - modal `เปลี่ยนรหัสผ่าน` เพิ่มปุ่มไอคอนดู/ซ่อนรหัสผ่านในทุกช่อง เพื่อให้กรอกง่ายขึ้น
 
 - ปรับหน้า `/settings/notifications` ให้ใช้แนวเดียวกับหน้า settings อื่น:
   - state ปกติของหน้าถอด page title ออก

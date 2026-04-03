@@ -29,6 +29,7 @@ type SearchParams = Record<string, string | string[] | undefined>;
 
 type ScopeFilter = "ALL" | "STORE" | "SYSTEM";
 type ResultFilter = "ALL" | "SUCCESS" | "FAIL";
+type ParsedAuditObject = Record<string, unknown> | null;
 
 const PAGE_SIZE = 30;
 
@@ -87,6 +88,238 @@ const parseJsonText = (value: string | null) => {
   } catch {
     return null;
   }
+};
+
+const localizeText = (uiLocale: UiLocale, th: string, lo: string, en: string) =>
+  uiLocale === "lo" ? lo : uiLocale === "en" ? en : th;
+
+const toSimpleString = (value: unknown, uiLocale: UiLocale): string | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === "number") {
+    return value.toLocaleString(uiLocaleToDateLocale(uiLocale));
+  }
+
+  if (typeof value === "boolean") {
+    return localizeText(
+      uiLocale,
+      value ? "ใช่" : "ไม่ใช่",
+      value ? "ແມ່ນ" : "ບໍ່ແມ່ນ",
+      value ? "Yes" : "No",
+    );
+  }
+
+  if (Array.isArray(value)) {
+    const items = value
+      .map((item) => toSimpleString(item, uiLocale))
+      .filter((item): item is string => Boolean(item));
+    return items.length > 0 ? items.join(", ") : null;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === "null" || trimmed === "undefined") {
+      return null;
+    }
+    return trimmed;
+  }
+
+  return null;
+};
+
+const getString = (record: ParsedAuditObject, key: string, uiLocale: UiLocale) =>
+  toSimpleString(record?.[key], uiLocale);
+
+const getFieldLabel = (key: string, uiLocale: UiLocale) => {
+  const labelMap: Record<string, string> = {
+    productName: localizeText(uiLocale, "สินค้า", "ສິນຄ້າ", "Product"),
+    poNumber: localizeText(uiLocale, "เลขที่เอกสาร", "ເລກທີເອກະສານ", "Document no."),
+    orderNo: localizeText(uiLocale, "เลขที่ออเดอร์", "ເລກທີອໍເດີ", "Order no."),
+    displayName: localizeText(uiLocale, "ชื่อที่แสดง", "ຊື່ສະແດງ", "Display name"),
+    bankName: localizeText(uiLocale, "ธนาคาร", "ທະນາຄານ", "Bank"),
+    accountName: localizeText(uiLocale, "ชื่อเจ้าของบัญชี", "ຊື່ເຈົ້າຂອງບັນຊີ", "Account name"),
+    accountNumberMasked: localizeText(uiLocale, "เลขบัญชี", "ເລກບັນຊີ", "Account number"),
+    currency: localizeText(uiLocale, "สกุลเงิน", "ສະກຸນເງິນ", "Currency"),
+    status: localizeText(uiLocale, "สถานะ", "ສະຖານະ", "Status"),
+    roleName: localizeText(uiLocale, "บทบาท", "ບົດບາດ", "Role"),
+    sessionLimit: localizeText(uiLocale, "Session limit", "Session limit", "Session limit"),
+    movementType: localizeText(uiLocale, "ประเภทสต็อก", "ປະເພດສະຕັອກ", "Movement type"),
+    qty: localizeText(uiLocale, "จำนวน", "ຈຳນວນ", "Quantity"),
+    source: localizeText(uiLocale, "ที่มา", "ທີ່ມາ", "Source"),
+    reason: localizeText(uiLocale, "หมายเหตุ", "ໝາຍເຫດ", "Note"),
+    note: localizeText(uiLocale, "หมายเหตุ", "ໝາຍເຫດ", "Note"),
+    updatedFields: localizeText(uiLocale, "ฟิลด์ที่แก้ไข", "ຟິວທີ່ແກ້", "Updated fields"),
+    shippingProvider: localizeText(uiLocale, "ขนส่ง", "ຂົນສົ່ງ", "Shipping provider"),
+    trackingNo: localizeText(uiLocale, "เลขติดตาม", "ເລກຕິດຕາມ", "Tracking no."),
+    paymentReference: localizeText(uiLocale, "อ้างอิงการชำระ", "ອ້າງອີງການຊຳລະ", "Payment reference"),
+    paidAt: localizeText(uiLocale, "วันที่ชำระ", "ວັນທີຊຳລະ", "Paid at"),
+  };
+
+  return labelMap[key] ?? key;
+};
+
+const formatChangeLine = (
+  label: string,
+  beforeValue: unknown,
+  afterValue: unknown,
+  uiLocale: UiLocale,
+) => {
+  const beforeText = toSimpleString(beforeValue, uiLocale);
+  const afterText = toSimpleString(afterValue, uiLocale);
+  if (!beforeText && !afterText) {
+    return null;
+  }
+
+  if (beforeText && afterText && beforeText !== afterText) {
+    return `${label}: ${beforeText} -> ${afterText}`;
+  }
+
+  return `${label}: ${afterText ?? beforeText}`;
+};
+
+const getAuditReference = (
+  entityType: string,
+  entityId: string | null,
+  metadata: ParsedAuditObject,
+  before: ParsedAuditObject,
+  after: ParsedAuditObject,
+  uiLocale: UiLocale,
+) => {
+  return (
+    getString(metadata, "productName", uiLocale) ??
+    getString(metadata, "poNumber", uiLocale) ??
+    getString(metadata, "orderNo", uiLocale) ??
+    getString(metadata, "displayName", uiLocale) ??
+    getString(after, "displayName", uiLocale) ??
+    getString(before, "displayName", uiLocale) ??
+    getString(after, "name", uiLocale) ??
+    getString(before, "name", uiLocale) ??
+    (entityId
+      ? `${localizeText(uiLocale, "รายการ", "ລາຍການ", "Record")} ${entityId.slice(0, 8)}`
+      : localizeText(uiLocale, entityType, entityType, entityType))
+  );
+};
+
+const buildAuditDetailLines = (params: {
+  action: string;
+  metadata: ParsedAuditObject;
+  before: ParsedAuditObject;
+  after: ParsedAuditObject;
+  uiLocale: UiLocale;
+}) => {
+  const { action, metadata, before, after, uiLocale } = params;
+  const lines: string[] = [];
+
+  if (action === "product.cost.manual_update" || action === "product.cost.auto_from_po") {
+    const costLine = formatChangeLine(
+      localizeText(uiLocale, "ต้นทุน", "ຕົ້ນທຶນ", "Cost"),
+      metadata?.previousCostBase ?? before?.costBase,
+      metadata?.nextCostBase ?? after?.costBase,
+      uiLocale,
+    );
+    if (costLine) lines.push(costLine);
+
+    const source = getString(metadata, "source", uiLocale);
+    if (source === "MANUAL") {
+      lines.push(
+        `${getFieldLabel("source", uiLocale)}: ${localizeText(
+          uiLocale,
+          "ปรับเอง",
+          "ແກ້ເອງ",
+          "Manual",
+        )}`,
+      );
+    } else if (source === "PURCHASE_ORDER") {
+      const poNumber = getString(metadata, "poNumber", uiLocale);
+      lines.push(
+        `${getFieldLabel("source", uiLocale)}: ${
+          poNumber
+            ? `${localizeText(uiLocale, "ใบสั่งซื้อ", "ໃບສັ່ງຊື້", "Purchase order")} ${poNumber}`
+            : localizeText(uiLocale, "ใบสั่งซื้อ", "ໃບສັ່ງຊື້", "Purchase order")
+        }`,
+      );
+    }
+
+    const note = getString(metadata, "reason", uiLocale) ?? getString(metadata, "note", uiLocale);
+    if (note) lines.push(`${localizeText(uiLocale, "หมายเหตุ", "ໝາຍເຫດ", "Note")}: ${note}`);
+    return lines;
+  }
+
+  if (action === "po.exchange_rate.lock") {
+    const rateLine = formatChangeLine(
+      localizeText(uiLocale, "เรท", "ເຣດ", "Rate"),
+      metadata?.previousRate,
+      metadata?.nextRate,
+      uiLocale,
+    );
+    if (rateLine) lines.push(rateLine);
+    const note = getString(metadata, "note", uiLocale);
+    if (note) lines.push(`${localizeText(uiLocale, "หมายเหตุ", "ໝາຍເຫດ", "Note")}: ${note}`);
+    return lines;
+  }
+
+  if (action === "po.status.change") {
+    const statusLine = formatChangeLine(
+      getFieldLabel("status", uiLocale),
+      before?.status,
+      after?.status ?? metadata?.status,
+      uiLocale,
+    );
+    if (statusLine) lines.push(statusLine);
+    return lines;
+  }
+
+  if (
+    action === "store.member.assign_role" ||
+    action === "store.member.set_status" ||
+    action === "store.member.set_session_limit"
+  ) {
+    const key =
+      action === "store.member.assign_role"
+        ? "roleName"
+        : action === "store.member.set_status"
+          ? "status"
+          : "sessionLimit";
+    const changeLine = formatChangeLine(
+      getFieldLabel(key, uiLocale),
+      before?.[key],
+      after?.[key],
+      uiLocale,
+    );
+    if (changeLine) lines.push(changeLine);
+    return lines;
+  }
+
+  if (action === "order.update_shipping") {
+    const shippingLine = formatChangeLine(
+      getFieldLabel("shippingProvider", uiLocale),
+      before?.shippingProvider,
+      after?.shippingProvider,
+      uiLocale,
+    );
+    if (shippingLine) lines.push(shippingLine);
+    const trackingLine = formatChangeLine(
+      getFieldLabel("trackingNo", uiLocale),
+      before?.trackingNo,
+      after?.trackingNo,
+      uiLocale,
+    );
+    if (trackingLine) lines.push(trackingLine);
+    return lines;
+  }
+
+  // Fallback: show a few meaningful metadata fields.
+  if (metadata) {
+    for (const [key, raw] of Object.entries(metadata).slice(0, 4)) {
+      const value = toSimpleString(raw, uiLocale);
+      if (!value) continue;
+      lines.push(`${getFieldLabel(key, uiLocale)}: ${value}`);
+    }
+  }
+
+  return lines;
 };
 
 const actionFilterOptions = [
@@ -303,6 +536,8 @@ export default async function SettingsSuperadminAuditLogPage({
         result: auditEvents.result,
         reasonCode: auditEvents.reasonCode,
         metadata: auditEvents.metadata,
+        before: auditEvents.before,
+        after: auditEvents.after,
       })
       .from(auditEvents)
       .leftJoin(stores, eq(auditEvents.storeId, stores.id))
@@ -446,8 +681,9 @@ export default async function SettingsSuperadminAuditLogPage({
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
               type="submit"
-              className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-sm font-medium text-white"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-sm font-medium text-white"
             >
+              <Search className="h-4 w-4" aria-hidden="true" />
               {t(uiLocale, "settings.auditLog.action.search")}
             </button>
             <Link
@@ -470,10 +706,12 @@ export default async function SettingsSuperadminAuditLogPage({
           <ul className="divide-y divide-slate-100">
             {rows.map((row) => {
               const metadata = parseJsonText(row.metadata);
+              const beforeState = parseJsonText(row.before);
+              const afterState = parseJsonText(row.after);
               const actorName = row.actorNameSnapshot ?? row.actorName ?? t(uiLocale, "common.actor.system");
               const title = actionLabelMap[row.action] ? t(uiLocale, actionLabelMap[row.action]) : row.action;
               const detailBits = [
-                `${row.entityType}${row.entityId ? `#${row.entityId}` : ""}`,
+                getAuditReference(row.entityType, row.entityId, metadata, beforeState, afterState, uiLocale),
                 row.reasonCode ? `${t(uiLocale, "settings.auditLog.reasonPrefix")} ${row.reasonCode}` : "",
               ].filter(Boolean);
               const scopeLabel =
@@ -482,13 +720,6 @@ export default async function SettingsSuperadminAuditLogPage({
                   : t(uiLocale, "superadmin.auditLog.scopeLabel.STORE");
               const storeLabel =
                 row.storeName ?? t(uiLocale, "superadmin.auditLog.detail.systemLabel");
-
-              const metadataText = metadata
-                ? Object.entries(metadata)
-                    .slice(0, 4)
-                    .map(([key, value]) => `${key}: ${String(value)}`)
-                    .join(" • ")
-                : null;
 
               return (
                 <li key={row.id} className="px-4 py-3">
@@ -504,7 +735,17 @@ export default async function SettingsSuperadminAuditLogPage({
                       ? t(uiLocale, "common.result.success")
                       : t(uiLocale, "common.result.fail")}
                   </p>
-                  {metadataText ? <p className="mt-1 text-xs text-slate-500">{metadataText}</p> : null}
+                  {buildAuditDetailLines({
+                    action: row.action,
+                    metadata,
+                    before: beforeState,
+                    after: afterState,
+                    uiLocale,
+                  }).map((line) => (
+                    <p key={line} className="mt-1 text-xs text-slate-500">
+                      {line}
+                    </p>
+                  ))}
                 </li>
               );
             })}

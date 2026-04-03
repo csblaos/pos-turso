@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { Bell, Maximize2, Minimize2, RefreshCw } from "lucide-react";
 
 import { StoresManagement } from "@/components/app/stores-management";
+import { StoreSolidIcon } from "@/components/icons/store-solid-icon";
 import { MenuBackButton } from "@/components/ui/menu-back-button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { authFetch } from "@/lib/auth/client-token";
@@ -84,27 +85,6 @@ type TopNavNotificationSummary = {
   activeCount: number;
   resolvedCount: number;
 };
-
-function StoreSwitchIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={className}
-    >
-      <path d="M3 10l1.2-4.2A1.5 1.5 0 0 1 5.64 4.7h12.72a1.5 1.5 0 0 1 1.44 1.08L21 10" />
-      <path d="M4 10h16v7.5A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5V10Z" />
-      <path d="M9 14h6" />
-      <path d="M17.6 6.4h2.9" />
-      <path d="m19.2 4.8 1.3 1.6-1.3 1.6" />
-    </svg>
-  );
-}
 
 function getStoreInitial(storeName: string) {
   const normalizedName = storeName.trim();
@@ -619,7 +599,7 @@ export function AppTopNav({
             onClick={() => setIsStoreSwitcherOpen(true)}
             className="inline-flex h-9 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 active:scale-[0.98] xl:px-3"
           >
-            <StoreSwitchIcon className="h-3.5 w-3.5" />
+            <StoreSolidIcon className="h-3.5 w-3.5" />
             <span className="hidden xl:inline">{t(uiLocale, "settings.link.switchStore.title")}</span>
           </button>
         ) : null}

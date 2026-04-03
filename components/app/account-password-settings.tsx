@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, ChevronRight, KeyRound, Loader2, ShieldAlert } from "lucide-react";
+import { CheckCircle2, ChevronRight, Eye, EyeOff, KeyRound, Loader2, ShieldAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 
@@ -27,6 +27,9 @@ export function AccountPasswordSettings({ mustChangePassword, embedded = false }
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [isCurrentPasswordVisible, setIsCurrentPasswordVisible] = useState(false);
+  const [isNewPasswordVisible, setIsNewPasswordVisible] = useState(false);
+  const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
@@ -38,6 +41,9 @@ export function AccountPasswordSettings({ mustChangePassword, embedded = false }
     setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
+    setIsCurrentPasswordVisible(false);
+    setIsNewPasswordVisible(false);
+    setIsConfirmPasswordVisible(false);
     setErrorMessage(null);
     setWarningMessage(null);
     // Keep success message visible briefly after close
@@ -118,8 +124,12 @@ export function AccountPasswordSettings({ mustChangePassword, embedded = false }
     }
   };
 
-  const fieldClassName =
-    "h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-900 outline-none ring-primary focus:ring-2 disabled:bg-slate-100";
+  const passwordWrapClassName =
+    "flex h-11 w-full overflow-hidden rounded-xl border border-slate-200 bg-white ring-primary focus-within:ring-2 disabled:bg-slate-100";
+  const passwordInputClassName =
+    "h-11 min-w-0 flex-1 bg-transparent px-3.5 text-sm text-slate-900 outline-none disabled:opacity-50";
+  const passwordToggleClassName =
+    "inline-flex h-11 w-11 shrink-0 items-center justify-center border-l text-slate-500 hover:bg-slate-50 hover:text-slate-700 disabled:pointer-events-none disabled:opacity-50";
 
   return (
     <>
@@ -177,45 +187,88 @@ export function AccountPasswordSettings({ mustChangePassword, embedded = false }
             <label className="text-xs text-muted-foreground" htmlFor="current-password">
               รหัสผ่านปัจจุบัน
             </label>
-            <input
-              id="current-password"
-              type="password"
-              autoComplete="current-password"
-              className={fieldClassName}
-              value={currentPassword}
-              onChange={(event) => setCurrentPassword(event.target.value)}
-              disabled={isSaving}
-            />
+            <div className={passwordWrapClassName}>
+              <input
+                id="current-password"
+                type={isCurrentPasswordVisible ? "text" : "password"}
+                autoComplete="current-password"
+                className={passwordInputClassName}
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                disabled={isSaving}
+              />
+              <button
+                type="button"
+                className={passwordToggleClassName}
+                onClick={() => setIsCurrentPasswordVisible((prev) => !prev)}
+                onMouseDown={(event) => event.preventDefault()}
+                disabled={isSaving}
+                aria-label={isCurrentPasswordVisible ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+                title={isCurrentPasswordVisible ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+              >
+                {isCurrentPasswordVisible ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </button>
+            </div>
           </div>
 
           <div className="space-y-2">
             <label className="text-xs text-muted-foreground" htmlFor="new-password">
               รหัสผ่านใหม่
             </label>
-            <input
-              id="new-password"
-              type="password"
-              autoComplete="new-password"
-              className={fieldClassName}
-              value={newPassword}
-              onChange={(event) => setNewPassword(event.target.value)}
-              disabled={isSaving}
-            />
+            <div className={passwordWrapClassName}>
+              <input
+                id="new-password"
+                type={isNewPasswordVisible ? "text" : "password"}
+                autoComplete="new-password"
+                className={passwordInputClassName}
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                disabled={isSaving}
+              />
+              <button
+                type="button"
+                className={passwordToggleClassName}
+                onClick={() => setIsNewPasswordVisible((prev) => !prev)}
+                onMouseDown={(event) => event.preventDefault()}
+                disabled={isSaving}
+                aria-label={isNewPasswordVisible ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+                title={isNewPasswordVisible ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+              >
+                {isNewPasswordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
 
           <div className="space-y-2">
             <label className="text-xs text-muted-foreground" htmlFor="confirm-password">
               ยืนยันรหัสผ่านใหม่
             </label>
-            <input
-              id="confirm-password"
-              type="password"
-              autoComplete="new-password"
-              className={fieldClassName}
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              disabled={isSaving}
-            />
+            <div className={passwordWrapClassName}>
+              <input
+                id="confirm-password"
+                type={isConfirmPasswordVisible ? "text" : "password"}
+                autoComplete="new-password"
+                className={passwordInputClassName}
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                disabled={isSaving}
+              />
+              <button
+                type="button"
+                className={passwordToggleClassName}
+                onClick={() => setIsConfirmPasswordVisible((prev) => !prev)}
+                onMouseDown={(event) => event.preventDefault()}
+                disabled={isSaving}
+                aria-label={isConfirmPasswordVisible ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+                title={isConfirmPasswordVisible ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+              >
+                {isConfirmPasswordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
 
           <p className="text-xs text-slate-500">

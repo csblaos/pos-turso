@@ -21,6 +21,7 @@ import {
   QrCode,
   ScanBarcode,
   Search,
+  ShoppingCart,
   X,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
@@ -5793,11 +5794,12 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 ) : null}
                 <Button
                   type="button"
-                  className="h-9 px-3 text-xs sm:text-sm"
+                  className="h-9 gap-1.5 px-3 text-xs sm:text-sm"
                   onClick={() => router.push("/orders/new")}
                   disabled={!canCreate || loading}
                 >
-                  {t(uiLocale, "orders.management.enterPosMode")}
+                  <ShoppingCart className="h-4 w-4" aria-hidden="true" />
+                  <span>{t(uiLocale, "orders.management.enterPosMode")}</span>
                 </Button>
               </div>
             </div>
@@ -5861,7 +5863,7 @@ export function OrdersManagement(props: OrdersManagementProps) {
               </Button>
               <Button
                 type="submit"
-                className="h-10 px-3 text-xs sm:text-sm"
+                className="h-10 gap-1.5 px-3 text-xs sm:text-sm"
                 disabled={
                   isManageSearchPending ||
                   quickActionLoadingKey !== null ||
@@ -5870,10 +5872,11 @@ export function OrdersManagement(props: OrdersManagementProps) {
                 }
               >
                 {isManageSearchPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                 ) : (
-                  t(uiLocale, "orders.management.search.submit")
+                  <Search className="h-4 w-4" aria-hidden="true" />
                 )}
+                <span>{t(uiLocale, "orders.management.search.submit")}</span>
               </Button>
             </form>
 

@@ -2,12 +2,16 @@ import Link from "next/link";
 import {
   AlertTriangle,
   ArrowRight,
+  BarChart3,
   ClipboardList,
+  Layers,
   Coffee,
   PackageSearch,
+  ShoppingCart,
   ShoppingBag,
   UtensilsCrossed,
   WalletCards,
+  Zap,
   AppWindow,
   type LucideIcon,
 } from "lucide-react";
@@ -22,6 +26,7 @@ export type StorefrontDashboardProps = {
   session: AppSession;
   dashboardDataPromise: Promise<DashboardViewData>;
   canViewOrders: boolean;
+  canCreateOrders: boolean;
   canViewInventory: boolean;
   canViewReports: boolean;
 };
@@ -206,17 +211,23 @@ function buildDashboardFocusItems(
   return items.slice(0, 4);
 }
 
-function DashboardSectionHeader({
+function DashboardBadgeHeader({
   title,
-  subtitle,
+  theme,
+  icon: Icon,
 }: {
   title: string;
-  subtitle: string;
+  theme: DashboardTheme;
+  icon: LucideIcon;
 }) {
   return (
-    <div className="space-y-1 px-1">
-      <h2 className="text-base font-semibold text-slate-950">{title}</h2>
-      <p className="text-sm text-slate-500">{subtitle}</p>
+    <div className="px-1">
+      <span
+        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${theme.badgeClassName}`}
+      >
+        <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+        {title}
+      </span>
     </div>
   );
 }
@@ -246,8 +257,8 @@ function DashboardFocusCard({
       </div>
       <div className="mt-4 flex items-end justify-between gap-3">
         <div>
-          <p className="text-3xl font-semibold tracking-tight text-slate-950">{item.value}</p>
-          <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-400">
+          <p className="text-3xl font-semibold text-slate-950">{item.value}</p>
+          <p className="text-xs font-medium uppercase text-slate-400">
             {item.valueCaption}
           </p>
         </div>
@@ -255,6 +266,69 @@ function DashboardFocusCard({
           {item.actionLabel}
           <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
         </span>
+      </div>
+    </Link>
+  );
+}
+
+type DashboardShortcutItem = {
+  key: string;
+  href: string;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  primary?: boolean;
+};
+
+function DashboardShortcutCard({
+  item,
+  theme,
+  className,
+}: {
+  item: DashboardShortcutItem;
+  theme: DashboardTheme;
+  className?: string;
+}) {
+  const Icon = item.icon;
+  const isPrimary = item.primary === true;
+  const mobileIconWrapClassName = isPrimary
+    ? `${theme.heroIconWrapClassName} shadow-none`
+    : "border border-slate-200 bg-white text-slate-700";
+
+  return (
+    <Link
+      href={item.href}
+      className={`group min-h-11 rounded-2xl border transition-all active:scale-[0.99] sm:min-h-0 sm:rounded-3xl ${theme.focusCardClassName} ${
+        isPrimary ? "px-4 py-4 sm:p-5" : "px-3.5 py-3 sm:p-4"
+      } ${className ?? ""}`}
+    >
+      {/* Mobile: compact button layout (save vertical space). */}
+      <div className="flex items-center justify-between gap-3 sm:hidden">
+        <div className="flex min-w-0 items-center gap-3">
+          <span
+            className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${mobileIconWrapClassName}`}
+          >
+            <Icon className="h-4 w-4" />
+          </span>
+          <span className="truncate text-sm font-semibold text-slate-950">{item.title}</span>
+        </div>
+        <ArrowRight className="h-4 w-4 shrink-0 text-slate-400" />
+      </div>
+
+      {/* Desktop/tablet: card layout (keep existing). */}
+      <div className="hidden sm:flex sm:items-start sm:justify-between sm:gap-3">
+        <div className="min-w-0">
+          <p className={`font-semibold text-slate-950 ${isPrimary ? "text-base" : "text-sm"}`}>
+            {item.title}
+          </p>
+          <p className="mt-1 text-sm text-slate-500">{item.description}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700">
+            <Icon className="h-4 w-4" />
+          </span>
+          <ArrowRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-0.5" />
+        </div>
       </div>
     </Link>
   );
@@ -269,7 +343,7 @@ function DashboardSummaryCard({
 }) {
   return (
     <div className="rounded-2xl border border-white/60 bg-white/72 px-3 py-3 backdrop-blur-sm">
-      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      <p className="text-[11px] font-medium uppercase text-slate-500">{label}</p>
       <p className="mt-1 text-lg font-semibold text-slate-950">{value}</p>
     </div>
   );
@@ -331,7 +405,7 @@ function DashboardLowStockCard({
               </div>
               <div className="shrink-0 text-right">
                 <p className="text-lg font-semibold text-slate-950">{fmtCount(item.available, uiLocale)}</p>
-                <p className="text-[11px] uppercase tracking-[0.14em] text-slate-400">
+                <p className="text-[11px] uppercase text-slate-400">
                   {t(uiLocale, "dashboard.lowStock.remaining")}
                 </p>
               </div>
@@ -374,7 +448,7 @@ function DashboardPurchaseApCard({
 
       <div className="mt-4 grid grid-cols-2 gap-3">
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3">
-          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-amber-800">
+          <p className="text-[11px] font-medium uppercase text-amber-800">
             {t(uiLocale, "dashboard.purchaseAp.count.overduePrefix")}
           </p>
           <p className="mt-1 text-xl font-semibold text-amber-950">
@@ -385,7 +459,7 @@ function DashboardPurchaseApCard({
           </p>
         </div>
         <div className="rounded-2xl border border-orange-200 bg-orange-50 px-3 py-3">
-          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-orange-800">
+          <p className="text-[11px] font-medium uppercase text-orange-800">
             {t(uiLocale, "dashboard.purchaseAp.count.dueSoonPrefix")}
           </p>
           <p className="mt-1 text-xl font-semibold text-orange-950">
@@ -437,6 +511,30 @@ export function DashboardWorkspaceSkeleton({
 
   return (
     <section className="space-y-5">
+      {/* Shortcuts */}
+      <div className="space-y-3">
+        <div className="px-1">
+          <div
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${theme.badgeClassName}`}
+          >
+            <div className="h-3 w-3 animate-pulse rounded bg-white/80" />
+            <div className="h-4 w-20 animate-pulse rounded bg-white/80" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <div className={`col-span-2 rounded-2xl border p-4 ${theme.focusCardClassName}`}>
+            <div className="h-4 w-32 animate-pulse rounded bg-slate-200" />
+          </div>
+          <div className={`rounded-2xl border p-4 ${theme.focusCardClassName}`}>
+            <div className="h-4 w-24 animate-pulse rounded bg-slate-200" />
+          </div>
+          <div className={`rounded-2xl border p-4 ${theme.focusCardClassName}`}>
+            <div className="h-4 w-24 animate-pulse rounded bg-slate-200" />
+          </div>
+        </div>
+      </div>
+
+      {/* Hero + summary */}
       <div className={`rounded-[1.75rem] border p-5 ${theme.heroClassName}`}>
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-2">
@@ -455,10 +553,16 @@ export function DashboardWorkspaceSkeleton({
           ))}
         </div>
       </div>
+
+      {/* Today focus */}
       <div className="space-y-3">
-        <div className="space-y-1 px-1">
-          <div className="h-5 w-28 animate-pulse rounded bg-slate-200" />
-          <div className="h-4 w-52 animate-pulse rounded bg-slate-200" />
+        <div className="px-1">
+          <div
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${theme.badgeClassName}`}
+          >
+            <div className="h-3 w-3 animate-pulse rounded bg-white/80" />
+            <div className="h-4 w-20 animate-pulse rounded bg-white/80" />
+          </div>
         </div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, index) => (
@@ -478,28 +582,30 @@ export function DashboardWorkspaceSkeleton({
           ))}
         </div>
       </div>
+
+      {/* Operational details */}
       <div className="space-y-3">
-        <div className="space-y-1 px-1">
-          <div className="h-5 w-24 animate-pulse rounded bg-slate-200" />
-          <div className="h-4 w-44 animate-pulse rounded bg-slate-200" />
-        </div>
-        <div className={`rounded-3xl border p-4 ${theme.focusCardClassName}`}>
-          <div className="h-5 w-28 animate-pulse rounded bg-slate-200" />
-          <div className="mt-2 h-4 w-36 animate-pulse rounded bg-slate-200" />
-        </div>
-      </div>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]">
-        {Array.from({ length: 2 }).map((_, index) => (
-          <div key={index} className={`rounded-3xl border p-4 ${theme.detailCardClassName}`}>
-            <div className="h-5 w-36 animate-pulse rounded bg-slate-200" />
-            <div className="mt-2 h-4 w-48 animate-pulse rounded bg-slate-200" />
-            <div className="mt-4 space-y-2">
-              {Array.from({ length: 3 }).map((__, lineIndex) => (
-                <div key={lineIndex} className="h-16 animate-pulse rounded-2xl bg-slate-100" />
-              ))}
-            </div>
+        <div className="px-1">
+          <div
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${theme.badgeClassName}`}
+          >
+            <div className="h-3 w-3 animate-pulse rounded bg-white/80" />
+            <div className="h-4 w-28 animate-pulse rounded bg-white/80" />
           </div>
-        ))}
+        </div>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]">
+          {Array.from({ length: 2 }).map((_, index) => (
+            <div key={index} className={`rounded-3xl border p-4 ${theme.detailCardClassName}`}>
+              <div className="h-5 w-36 animate-pulse rounded bg-slate-200" />
+              <div className="mt-2 h-4 w-48 animate-pulse rounded bg-slate-200" />
+              <div className="mt-4 space-y-2">
+                {Array.from({ length: 3 }).map((__, lineIndex) => (
+                  <div key={lineIndex} className="h-16 animate-pulse rounded-2xl bg-slate-100" />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -509,6 +615,7 @@ export async function ThemedStorefrontDashboard({
   session,
   dashboardDataPromise,
   canViewOrders,
+  canCreateOrders,
   canViewInventory,
   canViewReports,
   themeName,
@@ -524,20 +631,71 @@ export async function ThemedStorefrontDashboard({
     canViewOrders,
     canViewInventory,
   });
+
+  const shortcutItems: DashboardShortcutItem[] = [];
+  if (canCreateOrders) {
+    shortcutItems.push({
+      key: "sales-mode",
+      href: "/orders/new",
+      title: t(uiLocale, "dashboard.shortcuts.newOrder.title"),
+      description: t(uiLocale, "dashboard.shortcuts.newOrder.description"),
+      icon: ShoppingCart,
+      primary: true,
+    });
+  }
+  if (canViewReports) {
+    shortcutItems.push({
+      key: "reports",
+      href: "/reports",
+      title: t(uiLocale, "dashboard.shortcuts.reports.title"),
+      description: t(uiLocale, "dashboard.shortcuts.reports.description"),
+      icon: BarChart3,
+    });
+    shortcutItems.push({
+      key: "cash-flow",
+      href: "/reports/cash-flow",
+      title: t(uiLocale, "dashboard.shortcuts.cashFlow.title"),
+      description: t(uiLocale, "dashboard.shortcuts.cashFlow.description"),
+      icon: WalletCards,
+    });
+  }
   return (
     <section className="space-y-5">
+      {shortcutItems.length > 0 ? (
+        <div className="space-y-2">
+          <div className="px-1">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${theme.badgeClassName}`}
+            >
+              <Zap className="h-3.5 w-3.5" aria-hidden="true" />
+              {t(uiLocale, "dashboard.shortcuts.title")}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {shortcutItems.map((item) => (
+              <DashboardShortcutCard
+                key={item.key}
+                item={item}
+                theme={theme}
+                className={item.primary ? "col-span-2 sm:col-span-1" : undefined}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className={`rounded-[1.75rem] p-5 ${theme.heroClassName}`}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <span
-              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${theme.badgeClassName}`}
+              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ${theme.badgeClassName}`}
             >
               {t(uiLocale, theme.storeTypeTitleKey)}
             </span>
             <p className={`mt-3 text-sm font-medium ${theme.heroMutedTextClassName}`}>
               {t(uiLocale, "dashboard.hero.greeting")}
             </p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
+            <h1 className="mt-1 text-2xl font-semibold text-slate-950">
               {session.displayName}
             </h1>
             <p className={`mt-2 text-sm ${theme.heroMutedTextClassName}`}>
@@ -578,9 +736,10 @@ export async function ThemedStorefrontDashboard({
       </div>
 
       <div className="space-y-3">
-        <DashboardSectionHeader
+        <DashboardBadgeHeader
           title={t(uiLocale, "dashboard.focus.title")}
-          subtitle={t(uiLocale, "dashboard.focus.subtitle")}
+          theme={theme}
+          icon={ClipboardList}
         />
         {focusItems.length === 0 ? (
           <DashboardEmptyFocus theme={theme} uiLocale={uiLocale} />
@@ -593,23 +752,12 @@ export async function ThemedStorefrontDashboard({
         )}
       </div>
 
-      {canViewReports ? (
-        <div className="px-1">
-          <Link
-            href="/reports"
-            className={`inline-flex items-center gap-1 text-sm font-semibold ${theme.primaryActionClassName}`}
-          >
-            {t(uiLocale, "dashboard.reports.more")}
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
-      ) : null}
-
       {canViewInventory ? (
         <div className="space-y-3">
-          <DashboardSectionHeader
+          <DashboardBadgeHeader
             title={t(uiLocale, "dashboard.details.title")}
-            subtitle={t(uiLocale, "dashboard.details.subtitle")}
+            theme={theme}
+            icon={Layers}
           />
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]">
             <DashboardPurchaseApCard dashboardData={dashboardData} theme={theme} uiLocale={uiLocale} />

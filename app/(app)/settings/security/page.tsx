@@ -11,7 +11,6 @@ import {
 import { redirect } from "next/navigation";
 
 import { AccountPasswordSettings } from "@/components/app/account-password-settings";
-import { AccountProfileSettings } from "@/components/app/account-profile-settings";
 import { AccountSecurityHelpButton } from "@/components/app/account-security-help-button";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
@@ -166,9 +165,6 @@ export default async function SettingsSecurityPage() {
 
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
             <AccountPasswordSettings mustChangePassword={account.mustChangePassword} embedded />
-            <div className="border-t border-slate-100">
-              <AccountProfileSettings initialName={account.name} email={account.email} embedded />
-            </div>
           </div>
 
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">

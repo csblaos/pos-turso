@@ -2,6 +2,8 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { redirect } from "next/navigation";
 
+import { OrdersHeaderRefreshButton } from "@/components/app/orders-header-refresh-button";
+import { OrdersManagementSkeleton } from "@/components/app/orders-page-skeleton";
 import { getSession } from "@/lib/auth/session";
 import { DEFAULT_UI_LOCALE } from "@/lib/i18n/locales";
 import { t } from "@/lib/i18n/messages";
@@ -110,9 +112,7 @@ export default async function OrdersPage({
         ),
       {
         loading: () => (
-          <div className="rounded-xl border bg-white p-4 text-sm text-muted-foreground">
-            {t(uiLocale, "orders.page.loadingManagement")}
-          </div>
+          <OrdersManagementSkeleton />
         ),
       },
     );
@@ -171,14 +171,17 @@ export default async function OrdersPage({
           <div className="min-w-0">
             <h1 className="truncate text-xl font-semibold">{t(uiLocale, "orders.page.title")}</h1>
           </div>
-          {canMarkPaid ? (
-            <Link
-              href="/orders/cod-reconcile"
-              className="inline-flex h-9 shrink-0 items-center rounded-md border border-blue-200 bg-blue-50 px-3 text-xs font-medium text-blue-700"
-            >
-              {t(uiLocale, "orders.page.codReconcileCta")}
-            </Link>
-          ) : null}
+          <div className="flex shrink-0 items-center gap-2">
+            <OrdersHeaderRefreshButton />
+            {canMarkPaid ? (
+              <Link
+                href="/orders/cod-reconcile"
+                className="inline-flex h-9 shrink-0 items-center rounded-md border border-blue-200 bg-blue-50 px-3 text-xs font-medium text-blue-700"
+              >
+                {t(uiLocale, "orders.page.codReconcileCta")}
+              </Link>
+            ) : null}
+          </div>
         </header>
 
         <OrdersManagement
@@ -195,10 +198,6 @@ export default async function OrdersPage({
           canRequestCancel={canRequestCancel}
           canSelfApproveCancel={canSelfApproveCancel}
         />
-
-        <Link href="/dashboard" className="text-sm font-medium text-blue-700 hover:underline">
-          {t(uiLocale, "orders.page.backToDashboard")}
-        </Link>
       </section>
     );
   } finally {

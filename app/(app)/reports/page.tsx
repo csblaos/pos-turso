@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowRight, WalletCards } from "lucide-react";
 
+import { ReportsHelpButton } from "@/components/app/reports-help-button";
 import { ReportsFilters } from "@/components/app/reports-filters";
 import { getSession } from "@/lib/auth/session";
 import {
@@ -225,10 +226,10 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
 
   return (
     <section className="space-y-4">
-      <header className="space-y-2">
-        <div className="space-y-1">
+      <header className="space-y-3">
+        <div className="flex items-center gap-2">
           <h1 className="text-xl font-semibold">{t(uiLocale, "reports.title")}</h1>
-          <p className="text-sm text-muted-foreground">{t(uiLocale, "reports.subtitle")}</p>
+          <ReportsHelpButton uiLocale={uiLocale} />
         </div>
         <div className="flex flex-wrap gap-2">
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">

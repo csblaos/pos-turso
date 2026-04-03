@@ -733,7 +733,10 @@ npm run po:audit:integrity
 - หน้า `/settings/store` ถูกแยกใหม่แล้ว: route นี้กลับมาโฟกัสเฉพาะ `ข้อมูลร้าน` (`StoreProfileSettings`) และตัด `StoreFinancialSettings` ออก; เพิ่ม route ใหม่ `/settings/store/finance` สำหรับ `การเงินร้าน` โดยใน `/settings` มีเมนูแยก `ข้อมูลร้าน` และ `การเงินร้าน` คนละรายการแล้ว, `/settings/store` loading ถูกย่อให้เหลือ profile + navigate skeleton, และ route `/settings/store/finance` มี route-level loading ของตัวเอง
 - route-level loading ของ `/products` ปรับเพิ่มอีกครั้งแล้ว: หัวหน้าตอนโหลดไม่แสดง title จริง (`สินค้า/ສິນຄ້າ`) แล้ว แต่ใช้ skeleton bar แทน เพื่อให้ทั้ง header และ content อยู่ใน loading state แบบเดียวกันทั้งหน้า
 - `ProductsPageSkeleton` ถูกปรับให้ match list layout จริงของ `ProductsManagement` แล้ว: ส่วนรายการเปลี่ยนจาก card grid generic เป็น `divide-y list rows` ที่มี thumbnail, text stack, price/status block, และ chevron slot ใกล้เคียงกับรายการสินค้าจริง
-- `npm run build` มี `prebuild` ล้าง `.next` อัตโนมัติแล้ว (`rm -rf .next`) เพื่อกันอาการ Next/Turbopack cache ค้างที่ทำให้ `_document.js` หรือ `/_not-found` ไปอ้าง `../chunks/ssr/[turbopack]_runtime.js` / module ที่ไม่มีอยู่จริงจาก build artifact รอบก่อน
+- `npm run build` แก้ความเสถียรเพิ่มเติม:
+  - มี `prebuild` ล้าง `.next` อัตโนมัติแล้ว (`rm -rf .next`)
+  - และมี wrapper `scripts/next-build-stable.mjs` retry 1 ครั้งอัตโนมัติเมื่อเจอ error แบบสุ่มของ Next/Turbopack (เช่น `_document.js` ไปอ้าง `../chunks/ssr/[turbopack]_runtime.js` ที่ไม่มีอยู่จริง)
+  - ถ้าต้องการรัน build แบบเดิมตรง ๆ ให้ใช้ `npm run build:raw`
 - หน้า create order (`/orders/new`) ปรับ search bar หลักให้ใช้ pattern เดียวกับหน้า products มากขึ้นแล้ว: เพิ่มไอคอน `search` ด้านซ้ายของช่องค้นหาสินค้า, เปลี่ยนปุ่มสแกนข้าง search bar จาก `ScanLine` เป็น `ScanBarcode`, และเพิ่มไอคอน `search` ให้ฟิลด์ manual search ในกล่อง not-found barcode ด้วย
 - sticky bottom bar บน mobile ของหน้า create order ปรับเฉพาะปุ่ม `ตะกร้า` ให้เป็น pill (`rounded-full`) พร้อม border/background โทนน้ำเงินอ่อนและพื้นที่กดมากขึ้นแล้ว โดยยังคง layout เดิมของ block สรุป/checkout ไว้
 - หน้า `/login` เพิ่มปุ่มไอคอน “ดูรหัสผ่าน” ในช่อง password แล้ว เพื่อสลับแสดง/ซ่อนรหัสผ่านได้

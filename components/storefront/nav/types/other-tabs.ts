@@ -1,6 +1,7 @@
-import { LayoutGrid, Settings, Store } from "lucide-react";
+import { LayoutGrid, Settings } from "lucide-react";
 
 import type { StorefrontNavTab } from "@/components/storefront/nav/types";
+import { StoreSolidIcon } from "@/components/icons/store-solid-icon";
 
 export const otherStorefrontTabs: StorefrontNavTab[] = [
   {
@@ -14,7 +15,7 @@ export const otherStorefrontTabs: StorefrontNavTab[] = [
     href: "/settings/stores",
     labelKey: "tab.stores",
     compactLabelKey: "tab.stores",
-    icon: Store,
+    icon: StoreSolidIcon,
     permission: "stores.view",
   },
   {

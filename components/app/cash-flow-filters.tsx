@@ -99,7 +99,6 @@ export function CashFlowFilters({
         <h2 className="text-sm font-semibold text-slate-900">
           {t(uiLocale, "cashFlow.filters.title")}
         </h2>
-        <p className="text-xs text-slate-500">{t(uiLocale, "cashFlow.filters.description")}</p>
       </div>
 
       <div className="-mx-1 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -130,7 +129,7 @@ export function CashFlowFilters({
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-2 xl:grid-cols-5">
         <div className="space-y-1.5">
           <span className="text-xs font-medium text-slate-600">
             {t(uiLocale, "cashFlow.filters.dateFrom")}
@@ -211,7 +210,7 @@ export function CashFlowFilters({
           </select>
         </label>
 
-        <label className="space-y-1.5">
+        <label className="col-span-2 space-y-1.5 md:col-span-2 xl:col-span-1">
           <span className="text-xs font-medium text-slate-600">
             {t(uiLocale, "cashFlow.filters.account")}
           </span>

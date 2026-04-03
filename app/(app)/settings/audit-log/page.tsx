@@ -653,8 +653,9 @@ export default async function SettingsAuditLogPage({
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
               type="submit"
-              className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-sm font-medium text-white"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-sm font-medium text-white"
             >
+              <Search className="h-4 w-4" aria-hidden="true" />
               {t(uiLocale, "settings.auditLog.action.search")}
             </button>
             <Link

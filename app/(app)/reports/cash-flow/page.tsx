@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeftRight, Landmark, WalletCards } from "lucide-react";
 
+import { CashFlowHelpButton } from "@/components/app/cash-flow-help-button";
 import { CashFlowFilters } from "@/components/app/cash-flow-filters";
 import { getSession } from "@/lib/auth/session";
 import { resolveCashFlowFilterState } from "@/lib/finance/cash-flow-filters";
@@ -206,9 +207,9 @@ export default async function CashFlowPage({ searchParams }: CashFlowPageProps) 
     <section className="space-y-4">
       <header className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
+          <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold">{t(uiLocale, "cashFlow.title")}</h1>
-            <p className="text-sm text-muted-foreground">{t(uiLocale, "cashFlow.subtitle")}</p>
+            <CashFlowHelpButton uiLocale={uiLocale} />
           </div>
           <div className="flex flex-wrap gap-2">
             <Link
