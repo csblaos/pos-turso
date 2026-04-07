@@ -125,7 +125,7 @@
 | Endpoint | Methods | Access Control | Notes |
 |---|---|---|---|
 | `/api/system-admin/superadmins` | `GET,POST` | `SystemAdmin` | list/create superadmin |
-| `/api/system-admin/superadmins/[userId]` | `PATCH` | `SystemAdmin` | update superadmin quota config |
+| `/api/system-admin/superadmins/[userId]` | `PATCH` | `SystemAdmin` | update superadmin quota config / suspend-enable client |
 | `/api/system-admin/config/users/[userId]` | `PATCH` | `SystemAdmin` | update user config/system role |
 | `/api/system-admin/config/stores/[storeId]` | `PATCH` | `SystemAdmin` | update store config |
 | `/api/system-admin/config/branch-policy` | `GET,PATCH` | `SystemAdmin` | branch policy |

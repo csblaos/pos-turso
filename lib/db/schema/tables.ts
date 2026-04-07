@@ -139,6 +139,12 @@ export const users = sqliteTable(
     canCreateBranches: integer("can_create_branches", { mode: "boolean" }),
     maxBranchesPerStore: integer("max_branches_per_store"),
     sessionLimit: integer("session_limit"),
+    clientSuspended: integer("client_suspended", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    clientSuspendedAt: text("client_suspended_at"),
+    clientSuspendedReason: text("client_suspended_reason"),
+    clientSuspendedBy: text("client_suspended_by"),
     createdAt: text("created_at").notNull().default(createdAtDefault),
   },
   (table) => ({
@@ -147,12 +153,18 @@ export const users = sqliteTable(
       foreignColumns: [table.id],
       name: "users_created_by_fk",
     }).onDelete("set null"),
+    usersClientSuspendedByFk: foreignKey({
+      columns: [table.clientSuspendedBy],
+      foreignColumns: [table.id],
+      name: "users_client_suspended_by_fk",
+    }).onDelete("set null"),
     usersEmailUnique: uniqueIndex("users_email_unique").on(table.email),
     usersCreatedByIdx: index("users_created_by_idx").on(table.createdBy),
     usersMustChangePasswordIdx: index("users_must_change_password_idx").on(
       table.mustChangePassword,
     ),
     usersCreatedAtIdx: index("users_created_at_idx").on(table.createdAt),
+    usersClientSuspendedIdx: index("users_client_suspended_idx").on(table.clientSuspended),
   }),
 );
 

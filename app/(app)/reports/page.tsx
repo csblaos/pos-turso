@@ -1,9 +1,20 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, WalletCards } from "lucide-react";
+import {
+  Activity,
+  ArrowRight,
+  BarChart3,
+  HandCoins,
+  Package,
+  ReceiptText,
+  ShoppingBag,
+  TrendingUp,
+  WalletCards,
+} from "lucide-react";
 
 import { ReportsHelpButton } from "@/components/app/reports-help-button";
 import { ReportsFilters } from "@/components/app/reports-filters";
+import { ReportsSalesTrendChart } from "@/components/app/reports-sales-trend-chart";
 import { getSession } from "@/lib/auth/session";
 import {
   getUserPermissionsForCurrentSession,
@@ -54,11 +65,13 @@ function MetricCard({
   title,
   value,
   hint,
+  icon,
   tone = "default",
 }: {
   title: string;
   value: string;
   hint?: string;
+  icon?: React.ReactNode;
   tone?: "default" | "positive" | "warning";
 }) {
   const toneClass =
@@ -69,60 +82,13 @@ function MetricCard({
         : "border-slate-200 bg-white";
   return (
     <article className={`rounded-2xl border p-4 shadow-sm ${toneClass}`}>
-      <p className="text-xs font-medium text-slate-500">{title}</p>
+      <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+        {icon ? <span className="text-slate-400">{icon}</span> : null}
+        <span>{title}</span>
+      </p>
       <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{value}</p>
       {hint ? <p className="mt-1 text-xs text-slate-500">{hint}</p> : null}
     </article>
-  );
-}
-
-function SalesTrendChart({
-  points,
-  numberLocale,
-  storeCurrency,
-  emptyLabel,
-}: {
-  points: Array<{ bucketDate: string; salesTotal: number; orderCount: number }>;
-  numberLocale: string;
-  storeCurrency: string;
-  emptyLabel: string;
-}) {
-  if (points.length === 0) {
-    return <p className="text-sm text-muted-foreground">{emptyLabel}</p>;
-  }
-
-  const maxValue = Math.max(...points.map((point) => point.salesTotal), 1);
-
-  return (
-    <div className="space-y-3">
-      <div className="flex h-52 items-end gap-2 overflow-x-auto pb-2">
-        {points.map((point) => {
-          const height = Math.max(12, Math.round((point.salesTotal / maxValue) * 100));
-          return (
-            <div key={point.bucketDate} className="flex min-w-[3rem] flex-1 flex-col items-center gap-2">
-              <div className="flex h-36 w-full items-end">
-                <div
-                  className="w-full rounded-t-xl bg-gradient-to-t from-blue-600 to-cyan-400"
-                  style={{ height: `${height}%` }}
-                  title={`${point.salesTotal.toLocaleString(numberLocale)} ${storeCurrency} • ${point.orderCount.toLocaleString(numberLocale)}`}
-                />
-              </div>
-              <div className="space-y-0.5 text-center">
-                <p className="text-[11px] font-medium text-slate-700">
-                  {formatShortDate(point.bucketDate, numberLocale)}
-                </p>
-                <p className="text-[10px] text-slate-500">
-                  {point.orderCount.toLocaleString(numberLocale)}
-                </p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <p className="text-xs text-slate-500">
-        {points.length.toLocaleString(numberLocale)} days • {storeCurrency}
-      </p>
-    </div>
   );
 }
 
@@ -277,27 +243,32 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
           title={t(uiLocale, "reports.overview.salesTotal")}
           value={`${fmtNumber(salesOverview.salesTotal)} ${storeCurrency}`}
           hint={activeRangeLabel}
+          icon={<TrendingUp className="h-3.5 w-3.5" />}
           tone="positive"
         />
         <MetricCard
           title={t(uiLocale, "reports.overview.orderCount")}
           value={fmtNumber(salesOverview.orderCount)}
           hint={t(uiLocale, "reports.cod.ordersSuffix")}
+          icon={<ShoppingBag className="h-3.5 w-3.5" />}
         />
         <MetricCard
           title={t(uiLocale, "reports.overview.averageOrderValue")}
           value={`${fmtNumber(salesOverview.averageOrderValue)} ${storeCurrency}`}
+          icon={<BarChart3 className="h-3.5 w-3.5" />}
         />
         <MetricCard
           title={t(uiLocale, "reports.overview.grossProfit")}
           value={`${fmtNumber(grossProfit.grossProfit)} ${storeCurrency}`}
           hint={t(uiLocale, "reports.grossProfit.snapshotHint")}
+          icon={<HandCoins className="h-3.5 w-3.5" />}
           tone="positive"
         />
         <MetricCard
           title={t(uiLocale, "reports.overview.codPending")}
           value={`${fmtNumber(codOverview.pendingAmount)} ${storeCurrency}`}
           hint={`${fmtNumber(codOverview.pendingCount)} ${t(uiLocale, "reports.cod.ordersSuffix")}`}
+          icon={<Activity className="h-3.5 w-3.5" />}
           tone="warning"
         />
       </section>
@@ -305,22 +276,38 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <article className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold">{t(uiLocale, "reports.chart.salesTrend.title")}</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <TrendingUp className="h-4 w-4 text-slate-500" />
+              <span>{t(uiLocale, "reports.chart.salesTrend.title")}</span>
+            </h2>
             <p className="text-xs text-slate-500">
               {t(uiLocale, "reports.chart.salesTrend.description")}
             </p>
           </div>
-          <SalesTrendChart
+          <ReportsSalesTrendChart
             points={salesTrend}
             numberLocale={numberLocale}
             storeCurrency={storeCurrency}
             emptyLabel={t(uiLocale, "reports.common.noData")}
+            labels={{
+              total: t(uiLocale, "reports.chart.salesTrend.summary.total"),
+              avgPerDay: t(uiLocale, "reports.chart.salesTrend.summary.avgPerDay"),
+              max: t(uiLocale, "reports.chart.salesTrend.summary.max"),
+              ordersSuffix: t(uiLocale, "reports.cod.ordersSuffix"),
+              hintExplore: t(uiLocale, "reports.chart.salesTrend.tooltip.hintExplore"),
+              hintPinned: t(uiLocale, "reports.chart.salesTrend.tooltip.hintPinned"),
+              daysSuffix: t(uiLocale, "reports.chart.salesTrend.footer.daysSuffix"),
+              peakPrefix: t(uiLocale, "reports.chart.salesTrend.footer.peakPrefix"),
+            }}
           />
         </article>
 
         <article className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold">{t(uiLocale, "reports.overview.healthTitle")}</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <Activity className="h-4 w-4 text-slate-500" />
+              <span>{t(uiLocale, "reports.overview.healthTitle")}</span>
+            </h2>
             <p className="text-xs text-slate-500">
               {t(uiLocale, "reports.overview.healthDescription")}
             </p>
@@ -357,7 +344,10 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
       <section className="grid gap-4 xl:grid-cols-2">
         <article className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold">{t(uiLocale, "reports.salesByChannel.title")}</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <BarChart3 className="h-4 w-4 text-slate-500" />
+              <span>{t(uiLocale, "reports.salesByChannel.title")}</span>
+            </h2>
             <p className="text-xs text-slate-500">{t(uiLocale, "reports.salesByChannel.description")}</p>
           </div>
           <HorizontalBarList
@@ -375,7 +365,10 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
 
         <article className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold">{t(uiLocale, "reports.topProducts.title")}</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <Package className="h-4 w-4 text-slate-500" />
+              <span>{t(uiLocale, "reports.topProducts.title")}</span>
+            </h2>
             <p className="text-xs text-slate-500">{t(uiLocale, "reports.topProducts.description")}</p>
           </div>
           <HorizontalBarList
@@ -397,7 +390,10 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
       <section className="grid gap-4 xl:grid-cols-2">
         <article className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold">{t(uiLocale, "reports.cod.title")}</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <ReceiptText className="h-4 w-4 text-slate-500" />
+              <span>{t(uiLocale, "reports.cod.title")}</span>
+            </h2>
             <p className="text-xs text-slate-500">{t(uiLocale, "reports.cod.snapshotHint")}</p>
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
@@ -447,7 +443,10 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
 
         <article className="space-y-4 rounded-2xl border bg-white p-4 shadow-sm">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold">{t(uiLocale, "reports.purchase.sectionTitle")}</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <WalletCards className="h-4 w-4 text-slate-500" />
+              <span>{t(uiLocale, "reports.purchase.sectionTitle")}</span>
+            </h2>
             <p className="text-xs text-slate-500">
               {t(uiLocale, "reports.purchase.snapshotHint")}
             </p>
@@ -516,9 +515,6 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
         </article>
       </section>
 
-      <Link href="/dashboard" className="text-sm font-medium text-blue-700 hover:underline">
-        {t(uiLocale, "reports.backToDashboard")}
-      </Link>
     </section>
   );
 }

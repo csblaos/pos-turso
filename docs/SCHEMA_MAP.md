@@ -4,9 +4,14 @@
 
 ## Migration Status
 
-- journal entries: `43`
-- latest migration tag: `0043_payment_account_currency`
+- journal entries: `44`
+- latest migration tag: `0044_superb_the_phantom`
 - latest focus:
+  - เพิ่มสถานะระงับ Client (SUPERADMIN) เพื่อปิดใช้งานทั้ง client ชั่วคราว:
+    - `users.client_suspended`
+    - `users.client_suspended_at`
+    - `users.client_suspended_reason`
+    - `users.client_suspended_by`
   - เพิ่ม `store_payment_accounts.currency` สำหรับระบุว่าสกุลเงินจริงของบัญชีรับเงินนั้นคืออะไร
   - เพิ่ม operational cash flow foundation:
     - ตาราง `financial_accounts`

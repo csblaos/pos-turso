@@ -14,6 +14,45 @@
 - หน้า `/login` เพิ่มปุ่มไอคอน “ดูรหัสผ่าน” ในช่อง password แล้ว เพื่อสลับแสดง/ซ่อนรหัสผ่านได้
   - ช่อง password ปรับ layout เป็นแบบ `input + trailing button` (ไม่ overlay แบบ absolute) เพื่อลดเคสตัวอักษร/ตำแหน่งเพี้ยนบนบาง browser
 
+- ปรับ UX logout ของผู้ใช้ฝั่งร้าน:
+  - เพิ่มปุ่ม logout (ไอคอน) ใน top nav (`components/app/app-top-nav.tsx`) เพื่อให้ role ที่ไม่มี permission `settings.view` (เมนู settings ถูกซ่อน) ยังออกจากระบบได้เสมอ
+  - ปุ่มเป็น confirm modal แบบเดียวกับ system-admin
+
+- หน้า `/system-admin/config/system` ปรับเป็น accordion list: แต่ละ policy เป็นรายการแบบกดขยาย/ยุบ (เปิดได้ทีละรายการ) เพื่อ save area และลดความยาวฟอร์มบนมือถือ (ไม่ใช้ modal)
+  - ปุ่ม `บันทึก` ของ policy (session/branch/store-logo) ใช้ inline feedback แบบเดียวกับหน้า stores-users: ระหว่างบันทึกเป็น spinner และหลังสำเร็จ/ล้มเหลวเป็นติ๊ก/กากบาทแบบ draw animation
+
+- หน้า `/system-admin/config/clients` เพิ่มช่องค้นหา SUPERADMIN แบบ client-side (ค้นหาชื่อ/อีเมล + ปุ่ม X ล้าง) เพื่อให้หาบัญชีได้เร็วโดยไม่ทำให้หน้ารีโหลด
+
+- หน้า `/system-admin/config/stores-users` ปรับ UX ให้จัดการง่ายขึ้น:
+  - เพิ่มช่องค้นหาแยกฝั่งร้าน/ผู้ใช้ (พร้อมปุ่ม X ล้าง)
+  - เปลี่ยนเป็นรายการแบบกดขยายเพื่อแก้ไขทีละรายการ (ลดความยาวหน้าและกันโหลดหนัก)
+  - เพิ่มแท็บ `ร้านค้า/ผู้ใช้` (ผูกกับ query `?tab=users`) เพื่อสลับดูได้ทันทีโดยไม่ต้องเลื่อนข้าม section
+  - ย้ายคำอธิบายไปไว้ในปุ่ม `i` (เปิดเป็น sheet) เพื่อประหยัดพื้นที่บนมือถือ
+  - ปุ่มบันทึกในแต่ละการ์ดใช้ inline feedback แล้ว: กดแล้วขึ้น spinner, สำเร็จแสดงติ๊กเขียวแบบ draw animation, ล้มเหลวแสดง X สีแดงแบบ animation (ไม่ใช้ modal/toast สำหรับ success)
+
+- หน้า `/system-admin/config/security` ปรับเป็น Security Snapshot:
+  - แสดงการ์ด 3 ใบ (Auth/JWT, Sessions/Redis, Access/Audit) พร้อม status pill (OK/Review/Issue)
+  - มีปุ่ม `i` เปิด sheet อธิบายความหมาย/แนวทางแก้ของแต่ละการ์ด
+  - เน้นดูเร็ว: secret configured/missing, โหมดตรวจ session ผ่าน redis, ค่า default session limit, จำนวน client ถูก suspend, ผู้ใช้ที่ต้องเปลี่ยนรหัส, และ audit ล่าสุด
+
+- เพิ่มหน้า `/system-admin/config/monitoring` (System Health) แล้ว:
+  - snapshot การ์ด 4 ใบ (Database/Cache/Messaging/Storage-R2) พร้อมปุ่ม `i` อธิบาย
+  - Database probe แบบ lightweight (`select 1`) เพื่อโชว์ READY/DOWN
+  - Messaging สรุปจำนวนร้านที่เชื่อม Facebook/WhatsApp และสถานะ ERROR จากฐานข้อมูล
+  - ค่า endpoint/URL (Turso/Upstash/R2) ถูก mask ให้เห็นเฉพาะ provider + origin (ไม่โชว์ subdomain เฉพาะ, ไม่โชว์ path/query)
+
+- หน้า `/system-admin` เพิ่มการ์ด “สัญญาณความปลอดภัย” บน dashboard:
+  - สรุปตัวเลข `Suspended clients`, `Must change password`, และ `Audit (24h)`
+  - มีปุ่มไปหน้า `/system-admin/config/security` เพื่อดูรายละเอียดต่อ
+
+- หน้า `/system-admin/config/clients` เพิ่มการ Disable/Enable client (ระดับ SUPERADMIN) แล้ว:
+  - แสดงสถานะ `ACTIVE/SUSPENDED` บนการ์ดแต่ละบัญชี
+  - กดปิด/เปิดผ่านแผงแก้ไขและมี confirm พิมพ์อีเมลก่อนทำรายการ
+  - ตอน disable จะพยายาม revoke session ของผู้ใช้ทั้งหมดใต้ client และบล็อก login ด้วยสถานะ `CLIENT_SUSPENDED`
+  - หน้า `/account-status` รองรับสถานะ `CLIENT_SUSPENDED` แล้ว
+  - `npm run db:repair` เติมคอลัมน์ `users.client_suspended*` ให้ฐานเก่าที่ขาด migration ได้ (compat)
+  - แก้ปัญหา `drizzle-kit generate` ที่ error snapshot collision โดยแก้ `drizzle/meta/0040_snapshot.json.prevId` ให้ chain ต่อจาก 0039 ถูกต้อง
+
 - หน้า `/orders` ปรับปุ่มเข้า `/orders/new` ให้ชัดขึ้น:
   - เพิ่มไอคอน `ShoppingCart` หน้า label
   - เปลี่ยน label จาก “เข้าโหมด POS” เป็น “เข้าโหมดขาย” (ถอดคำว่า POS ออก) และปรับคำอธิบาย shortcut บน dashboard ให้ไม่ใช้คำว่า POS เช่นกัน

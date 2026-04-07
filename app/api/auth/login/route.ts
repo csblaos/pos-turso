@@ -1,12 +1,13 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { alias } from "drizzle-orm/sqlite-core";
 
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { buildSessionForUser, getUserMembershipFlags } from "@/lib/auth/session-db";
 import { createSessionCookie, SessionStoreUnavailableError } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
-import { users } from "@/lib/db/schema";
+import { roles, storeMembers, users } from "@/lib/db/schema";
 import { UI_LOCALE_COOKIE_NAME, uiLocaleCookieOptions } from "@/lib/i18n/ui-locale-cookie";
 import { getUserPermissions } from "@/lib/rbac/access";
 import { getStorefrontEntryRoute } from "@/lib/storefront/routing";
@@ -17,7 +18,7 @@ const loginSchema = z.object({
   newPassword: z.string().min(8).max(128).optional(),
 });
 
-type BlockedAccountStatus = "INVITED" | "SUSPENDED" | "NO_ACTIVE_STORE";
+type BlockedAccountStatus = "INVITED" | "SUSPENDED" | "NO_ACTIVE_STORE" | "CLIENT_SUSPENDED";
 
 const toAccountStatusRoute = (status: BlockedAccountStatus) =>
   `/account-status?status=${status}`;
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
       passwordHash: users.passwordHash,
       mustChangePassword: users.mustChangePassword,
       systemRole: users.systemRole,
+      clientSuspended: users.clientSuspended,
     })
     .from(users)
     .where(eq(users.email, payload.data.email.toLowerCase()))
@@ -58,6 +60,59 @@ export async function POST(request: Request) {
   const isValid = await verifyPassword(payload.data.password, user.passwordHash);
   if (!isValid) {
     return NextResponse.json({ message: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" }, { status: 401 });
+  }
+
+  const canAccessOnboarding = user.systemRole === "SUPERADMIN";
+  const canAccessSystemAdmin = user.systemRole === "SYSTEM_ADMIN";
+
+  // Client suspension: blocks SUPERADMIN itself and all users in stores owned by suspended SUPERADMIN.
+  if (!canAccessSystemAdmin) {
+    const isSuperadminSuspended = user.systemRole === "SUPERADMIN" && user.clientSuspended === true;
+    let isClientSuspended = isSuperadminSuspended;
+
+    if (!isClientSuspended && user.systemRole !== "SUPERADMIN") {
+      const memberRows = await db
+        .select({ storeId: storeMembers.storeId })
+        .from(storeMembers)
+        .where(eq(storeMembers.userId, user.id));
+
+      const storeIds = [...new Set(memberRows.map((row) => row.storeId))];
+      if (storeIds.length > 0) {
+        const ownerMembers = alias(storeMembers, "owner_members");
+        const ownerRoles = alias(roles, "owner_roles");
+        const ownerUsers = alias(users, "owner_users");
+
+        const rows = await db
+          .select({ ownerId: ownerUsers.id })
+          .from(ownerMembers)
+          .innerJoin(
+            ownerRoles,
+            and(
+              eq(ownerMembers.roleId, ownerRoles.id),
+              eq(ownerMembers.storeId, ownerRoles.storeId),
+            ),
+          )
+          .innerJoin(ownerUsers, eq(ownerMembers.userId, ownerUsers.id))
+          .where(
+            and(
+              inArray(ownerMembers.storeId, storeIds),
+              eq(ownerRoles.name, "Owner"),
+              eq(ownerUsers.systemRole, "SUPERADMIN"),
+              eq(ownerUsers.clientSuspended, true),
+            ),
+          )
+          .limit(1);
+
+        isClientSuspended = rows.length > 0;
+      }
+    }
+
+    if (isClientSuspended) {
+      return blockedLoginResponse(
+        "CLIENT_SUSPENDED",
+        "บัญชีของคุณถูกระงับโดยผู้ดูแลระบบกลาง กรุณาติดต่อทีมงานผู้ดูแลระบบ",
+      );
+    }
   }
 
   if (user.mustChangePassword) {
@@ -99,8 +154,6 @@ export async function POST(request: Request) {
       uiLocale: user.uiLocale,
     }),
   ]);
-  const canAccessOnboarding = user.systemRole === "SUPERADMIN";
-  const canAccessSystemAdmin = user.systemRole === "SYSTEM_ADMIN";
 
   if (membershipFlags.hasSuspendedMembership && !membershipFlags.hasActiveMembership) {
     return blockedLoginResponse(

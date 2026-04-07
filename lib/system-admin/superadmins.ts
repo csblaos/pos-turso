@@ -13,6 +13,9 @@ export type SuperadminItem = {
   maxStores: number | null;
   canCreateBranches: boolean | null;
   maxBranchesPerStore: number | null;
+  clientSuspended: boolean;
+  clientSuspendedAt: string | null;
+  clientSuspendedReason: string | null;
   activeOwnerStoreCount: number;
   createdAt: string;
 };
@@ -27,6 +30,9 @@ export async function listSuperadmins(): Promise<SuperadminItem[]> {
       maxStores: users.maxStores,
       canCreateBranches: users.canCreateBranches,
       maxBranchesPerStore: users.maxBranchesPerStore,
+      clientSuspended: users.clientSuspended,
+      clientSuspendedAt: users.clientSuspendedAt,
+      clientSuspendedReason: users.clientSuspendedReason,
       createdAt: users.createdAt,
       activeOwnerStoreCount: sql<number>`
         coalesce(sum(case
@@ -66,6 +72,9 @@ export async function listSuperadmins(): Promise<SuperadminItem[]> {
       typeof row.maxBranchesPerStore === "number" && row.maxBranchesPerStore >= 0
         ? row.maxBranchesPerStore
         : null,
+    clientSuspended: row.clientSuspended === true,
+    clientSuspendedAt: row.clientSuspendedAt ?? null,
+    clientSuspendedReason: row.clientSuspendedReason ?? null,
     activeOwnerStoreCount: Number(row.activeOwnerStoreCount ?? 0),
     createdAt: row.createdAt,
   }));

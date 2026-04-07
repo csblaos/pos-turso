@@ -1,7 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeftRight, Landmark, WalletCards } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  ArrowDownCircle,
+  ArrowLeftRight,
+  ArrowUpCircle,
+  Landmark,
+  WalletCards,
+} from "lucide-react";
 
+import { CashFlowTrendChart } from "@/components/app/cash-flow-trend-chart";
 import { CashFlowHelpButton } from "@/components/app/cash-flow-help-button";
 import { CashFlowFilters } from "@/components/app/cash-flow-filters";
 import { getSession } from "@/lib/auth/session";
@@ -69,11 +78,13 @@ function MetricCard({
   title,
   value,
   hint,
+  icon,
   tone = "default",
 }: {
   title: string;
   value: string;
   hint?: string;
+  icon?: React.ReactNode;
   tone?: "default" | "positive" | "warning";
 }) {
   const toneClass =
@@ -85,77 +96,13 @@ function MetricCard({
 
   return (
     <article className={`rounded-2xl border p-4 shadow-sm ${toneClass}`}>
-      <p className="text-xs font-medium text-slate-500">{title}</p>
+      <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+        {icon ? <span className="text-slate-400">{icon}</span> : null}
+        <span>{title}</span>
+      </p>
       <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{value}</p>
       {hint ? <p className="mt-1 text-xs text-slate-500">{hint}</p> : null}
     </article>
-  );
-}
-
-function CashFlowTrendChart({
-  points,
-  numberLocale,
-  currency,
-  uiLocale,
-}: {
-  points: Array<{ bucketDate: string; totalIn: number; totalOut: number; net: number }>;
-  numberLocale: string;
-  currency: string;
-  uiLocale: UiLocale;
-}) {
-  if (points.length === 0) {
-    return <p className="text-sm text-muted-foreground">{t(uiLocale, "cashFlow.common.noData")}</p>;
-  }
-
-  const maxValue = Math.max(
-    ...points.map((point) => Math.max(point.totalIn, point.totalOut)),
-    1,
-  );
-
-  return (
-    <div className="space-y-3">
-      <div className="flex h-56 items-end gap-3 overflow-x-auto pb-2">
-        {points.map((point) => {
-          const inHeight = Math.max(10, Math.round((point.totalIn / maxValue) * 100));
-          const outHeight = Math.max(10, Math.round((point.totalOut / maxValue) * 100));
-          return (
-            <div key={point.bucketDate} className="flex min-w-[4.5rem] flex-1 flex-col items-center gap-2">
-              <div className="flex h-36 w-full items-end justify-center gap-1">
-                <div
-                  className="w-4 rounded-t-lg bg-emerald-500"
-                  style={{ height: `${inHeight}%` }}
-                  title={`${t(uiLocale, "cashFlow.summary.totalIn")}: ${point.totalIn.toLocaleString(numberLocale)} ${currency}`}
-                />
-                <div
-                  className="w-4 rounded-t-lg bg-rose-500"
-                  style={{ height: `${outHeight}%` }}
-                  title={`${t(uiLocale, "cashFlow.summary.totalOut")}: ${point.totalOut.toLocaleString(numberLocale)} ${currency}`}
-                />
-              </div>
-              <div className="space-y-0.5 text-center">
-                <p className="text-[11px] font-medium text-slate-700">
-                  {formatShortDate(point.bucketDate, numberLocale)}
-                </p>
-                <p className="text-[10px] text-slate-500">
-                  {point.net >= 0 ? "+" : "-"}
-                  {Math.abs(point.net).toLocaleString(numberLocale)}
-                </p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <div className="flex flex-wrap gap-3 text-xs text-slate-500">
-        <span className="inline-flex items-center gap-1">
-          <span className="h-2 w-2 rounded-full bg-emerald-500" />
-          {t(uiLocale, "cashFlow.summary.totalIn")}
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <span className="h-2 w-2 rounded-full bg-rose-500" />
-          {t(uiLocale, "cashFlow.summary.totalOut")}
-        </span>
-      </div>
-    </div>
   );
 }
 
@@ -247,34 +194,42 @@ export default async function CashFlowPage({ searchParams }: CashFlowPageProps) 
           title={t(uiLocale, "cashFlow.summary.totalIn")}
           value={fmtMoney(data.summary.totalIn)}
           hint={`${data.summary.entryCount.toLocaleString(numberLocale)} ${t(uiLocale, "cashFlow.summary.entriesSuffix")}`}
+          icon={<ArrowDownCircle className="h-3.5 w-3.5" />}
           tone="positive"
         />
         <MetricCard
           title={t(uiLocale, "cashFlow.summary.totalOut")}
           value={fmtMoney(data.summary.totalOut)}
+          icon={<ArrowUpCircle className="h-3.5 w-3.5" />}
         />
         <MetricCard
           title={t(uiLocale, "cashFlow.summary.net")}
           value={fmtSignedMoney(data.summary.net)}
+          icon={<Activity className="h-3.5 w-3.5" />}
           tone={data.summary.net >= 0 ? "positive" : "warning"}
         />
         <MetricCard
           title={t(uiLocale, "cashFlow.summary.unassignedAmount")}
           value={fmtMoney(data.summary.unassignedAmount)}
           hint={`${data.summary.unassignedCount.toLocaleString(numberLocale)} ${t(uiLocale, "cashFlow.summary.entriesSuffix")}`}
+          icon={<AlertTriangle className="h-3.5 w-3.5" />}
           tone="warning"
         />
         <MetricCard
           title={t(uiLocale, "cashFlow.summary.accountCount")}
           value={data.accountOptions.length.toLocaleString(numberLocale)}
           hint={t(uiLocale, "cashFlow.summary.accountCountHint")}
+          icon={<WalletCards className="h-3.5 w-3.5" />}
         />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
         <article className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold">{t(uiLocale, "cashFlow.chart.title")}</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <ArrowLeftRight className="h-4 w-4 text-slate-500" />
+              <span>{t(uiLocale, "cashFlow.chart.title")}</span>
+            </h2>
             <p className="text-xs text-slate-500">{t(uiLocale, "cashFlow.chart.description")}</p>
           </div>
           <CashFlowTrendChart
@@ -287,7 +242,10 @@ export default async function CashFlowPage({ searchParams }: CashFlowPageProps) 
 
         <article className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold">{t(uiLocale, "cashFlow.health.title")}</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <Activity className="h-4 w-4 text-slate-500" />
+              <span>{t(uiLocale, "cashFlow.health.title")}</span>
+            </h2>
             <p className="text-xs text-slate-500">{t(uiLocale, "cashFlow.health.description")}</p>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">

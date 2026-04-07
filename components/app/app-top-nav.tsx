@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { Bell, Maximize2, Minimize2, RefreshCw } from "lucide-react";
 
 import { StoresManagement } from "@/components/app/stores-management";
+import { AppLogoutIconButton } from "@/components/app/app-logout-icon-button";
 import { StoreSolidIcon } from "@/components/icons/store-solid-icon";
 import { MenuBackButton } from "@/components/ui/menu-back-button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
@@ -652,6 +653,7 @@ export function AppTopNav({
             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
         ) : null}
+        <AppLogoutIconButton uiLocale={uiLocale} />
       </div>
       <SlideUpSheet
         isOpen={isStoreSwitcherOpen}

@@ -63,26 +63,51 @@ export function SystemAdminBottomNav() {
   };
 
   return (
-    <nav className="fixed bottom-0 left-1/2 z-20 w-full -translate-x-1/2 px-2 pb-[calc(env(safe-area-inset-bottom)+0.4rem)] pt-2 min-[1200px]:max-w-[var(--app-shell-max-width-desktop)] min-[1200px]:px-4">
-      <div className="border-t bg-white/95 backdrop-blur min-[1200px]:rounded-2xl min-[1200px]:border min-[1200px]:shadow-sm">
-        <ul className="mx-auto grid w-full grid-cols-2 gap-1 p-1 min-[1200px]:gap-2 min-[1200px]:p-2">
+    <nav
+      aria-label={t(uiLocale, "nav.mainMenu")}
+      className="pointer-events-none fixed bottom-0 left-0 right-0 z-20 w-full bg-white min-[1200px]:left-1/2 min-[1200px]:right-auto min-[1200px]:max-w-[var(--app-shell-max-width-desktop)] min-[1200px]:-translate-x-1/2"
+      style={{
+        paddingBottom: "env(safe-area-inset-bottom)",
+      }}
+    >
+      <div className="pointer-events-auto mx-auto w-full overflow-hidden border-x-0 border-t border-slate-200 bg-white shadow-[0_-1px_0_rgba(148,163,184,0.28),0_-10px_24px_rgba(15,23,42,0.08)]">
+        <ul className="mx-auto grid w-full grid-cols-2 gap-1.5 px-1.5 py-1.5">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = isTabActive(currentPath, tab.href);
 
             return (
-              <li key={tab.href}>
+              <li key={tab.href} className="min-w-0">
                 <button
                   type="button"
                   onClick={() => navigateToTab(tab.href)}
-                  className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] min-[1200px]:min-h-14 min-[1200px]:text-xs ${
+                  aria-current={isActive ? "page" : undefined}
+                  className={`group relative flex min-h-[58px] w-full min-w-0 touch-manipulation flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2 text-[11px] transition-all duration-200 ease-out active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 focus-visible:ring-offset-1 ${
                     isActive
-                      ? "bg-blue-50 font-semibold text-blue-700"
-                      : "text-slate-500"
-                  } w-full`}
+                      ? "text-slate-900"
+                      : "text-slate-500 hover:bg-slate-50/80 hover:text-slate-800"
+                  }`}
                 >
-                  <Icon className="h-4 w-4 min-[1200px]:h-5 min-[1200px]:w-5" />
-                  <span>{t(uiLocale, tab.labelKey)}</span>
+                  <span
+                    className={`flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${
+                      isActive
+                        ? "bg-blue-600 text-white shadow-[0_8px_16px_rgba(37,99,235,0.34)]"
+                        : "text-slate-500 group-hover:text-slate-700"
+                    }`}
+                  >
+                    <Icon
+                      className={`h-5 w-5 transition-transform duration-200 ${
+                        isActive ? "scale-105" : "scale-100"
+                      }`}
+                    />
+                  </span>
+                  <span
+                    className={`max-w-full truncate leading-none ${
+                      isActive ? "font-semibold text-slate-900" : "font-medium text-slate-500"
+                    }`}
+                  >
+                    {t(uiLocale, tab.labelKey)}
+                  </span>
                 </button>
               </li>
             );

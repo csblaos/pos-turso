@@ -49,7 +49,6 @@ export default async function SystemAdminStoresUsersConfigPage() {
           <ShieldCheck className="h-3.5 w-3.5" />
           {t(uiLocale, "systemAdmin.workspaceBadge")}
         </div>
-        <h1 className="text-xl font-semibold">{t(uiLocale, "systemAdmin.storesUsersPage.title")}</h1>
       </header>
 
       <SystemStoreUserConfig stores={storeRows} users={userRows} />

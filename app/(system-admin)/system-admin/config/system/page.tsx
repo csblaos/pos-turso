@@ -1,8 +1,6 @@
-import { ShieldCheck } from "lucide-react";
+import { Settings, ShieldCheck } from "lucide-react";
 
-import { SystemBranchPolicyConfig } from "@/components/system-admin/system-branch-policy-config";
-import { SystemSessionPolicyConfig } from "@/components/system-admin/system-session-policy-config";
-import { SystemStoreLogoPolicyConfig } from "@/components/system-admin/system-store-logo-policy-config";
+import { SystemConfigAccordion } from "@/components/system-admin/system-config-accordion";
 import { getGlobalBranchPolicy } from "@/lib/branches/policy";
 import { getSession } from "@/lib/auth/session";
 import { DEFAULT_UI_LOCALE } from "@/lib/i18n/locales";
@@ -21,16 +19,23 @@ export default async function SystemAdminSystemConfigPage() {
   return (
     <section className="space-y-4">
       <header className="space-y-2">
-        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
-          <ShieldCheck className="h-3.5 w-3.5" />
-          {t(uiLocale, "systemAdmin.workspaceBadge")}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            {t(uiLocale, "systemAdmin.workspaceBadge")}
+          </div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-700">
+            <Settings className="h-3.5 w-3.5" />
+            {t(uiLocale, "systemAdmin.systemPage.title")}
+          </div>
         </div>
-        <h1 className="text-xl font-semibold">{t(uiLocale, "systemAdmin.systemPage.title")}</h1>
       </header>
 
-      <SystemBranchPolicyConfig initialConfig={branchPolicy} />
-      <SystemSessionPolicyConfig initialConfig={sessionPolicy} />
-      <SystemStoreLogoPolicyConfig initialConfig={storeLogoPolicy} />
+      <SystemConfigAccordion
+        initialBranchPolicy={branchPolicy}
+        initialSessionPolicy={sessionPolicy}
+        initialStoreLogoPolicy={storeLogoPolicy}
+      />
     </section>
   );
 }

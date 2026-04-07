@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "27b6d7b0-c648-4c1f-9c85-1d8b571c1e5a",
-  "prevId": "dfd8a328-379f-44dc-aaa7-57a8cecb8a1f",
+  "id": "9005a773-e5f5-4066-aa1b-9fb2fa6b34af",
+  "prevId": "7f9b5a2d-0e39-4a35-85ba-8e88c225de66",
   "tables": {
     "audit_events": {
       "name": "audit_events",
@@ -2919,6 +2919,21 @@
           "notNull": true,
           "autoincrement": false
         },
+        "unit_id": {
+          "name": "unit_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "multiplier_to_base": {
+          "name": "multiplier_to_base",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
         "qty_ordered": {
           "name": "qty_ordered",
           "type": "integer",
@@ -2928,6 +2943,22 @@
         },
         "qty_received": {
           "name": "qty_received",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "qty_base_ordered": {
+          "name": "qty_base_ordered",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "qty_base_received": {
+          "name": "qty_base_received",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -2995,6 +3026,19 @@
           "tableTo": "products",
           "columnsFrom": [
             "product_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "purchase_order_items_unit_id_units_id_fk": {
+          "name": "purchase_order_items_unit_id_units_id_fk",
+          "tableFrom": "purchase_order_items",
+          "tableTo": "units",
+          "columnsFrom": [
+            "unit_id"
           ],
           "columnsTo": [
             "id"
@@ -3299,6 +3343,22 @@
           "notNull": false,
           "autoincrement": false
         },
+        "shipping_cost_original": {
+          "name": "shipping_cost_original",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "shipping_cost_currency": {
+          "name": "shipping_cost_currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'LAK'"
+        },
         "shipping_cost": {
           "name": "shipping_cost",
           "type": "integer",
@@ -3306,6 +3366,22 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
+        },
+        "other_cost_original": {
+          "name": "other_cost_original",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "other_cost_currency": {
+          "name": "other_cost_currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'LAK'"
         },
         "other_cost": {
           "name": "other_cost",
@@ -4271,6 +4347,14 @@
           "notNull": false,
           "autoincrement": false
         },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'LAK'"
+        },
         "promptpay_id": {
           "name": "promptpay_id",
           "type": "text",
@@ -4896,6 +4980,35 @@
           "notNull": false,
           "autoincrement": false
         },
+        "client_suspended": {
+          "name": "client_suspended",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "client_suspended_at": {
+          "name": "client_suspended_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "client_suspended_reason": {
+          "name": "client_suspended_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "client_suspended_by": {
+          "name": "client_suspended_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -4933,6 +5046,13 @@
             "created_at"
           ],
           "isUnique": false
+        },
+        "users_client_suspended_idx": {
+          "name": "users_client_suspended_idx",
+          "columns": [
+            "client_suspended"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -4942,6 +5062,19 @@
           "tableTo": "users",
           "columnsFrom": [
             "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "users_client_suspended_by_fk": {
+          "name": "users_client_suspended_by_fk",
+          "tableFrom": "users",
+          "tableTo": "users",
+          "columnsFrom": [
+            "client_suspended_by"
           ],
           "columnsTo": [
             "id"

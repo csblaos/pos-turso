@@ -91,8 +91,13 @@
 
 | Page | Main Component | API Calls |
 |---|---|---|
+| `/system-admin` | `app/(system-admin)/system-admin/page.tsx` | ไม่มี browser call ตรงไป `/api`; ใช้ server query `getSystemAdminDashboardStats` และ `listSuperadmins` เพื่อแสดงภาพรวม + security signals และมีปุ่ม refresh (`router.refresh`) |
+| `/system-admin/config` | `app/(system-admin)/system-admin/config/page.tsx` | ไม่มี browser call ตรงไป `/api`; เป็นเมนูนำทางไป config ต่าง ๆ |
 | `/system-admin/config/clients` | `components/system-admin/superadmin-management.tsx` | `GET/POST /api/system-admin/superadmins`, `PATCH /api/system-admin/superadmins/[userId]` |
 | `/system-admin/config/system` | `components/system-admin/system-branch-policy-config.tsx`, `components/system-admin/system-session-policy-config.tsx`, `components/system-admin/system-store-logo-policy-config.tsx` | `GET/PATCH /api/system-admin/config/branch-policy`, `GET/PATCH /api/system-admin/config/session-policy`, `GET/PATCH /api/system-admin/config/store-logo-policy` |
+| `/system-admin/config/stores-users` | `components/system-admin/system-store-user-config.tsx` | `PATCH /api/system-admin/config/stores/[storeId]`, `PATCH /api/system-admin/config/users/[userId]` (โหลด list แรกเป็น server query ตรง) |
+| `/system-admin/config/security` | `app/(system-admin)/system-admin/config/security/page.tsx`, `components/system-admin/system-security-snapshot.tsx` | ไม่มี browser call ตรงไป `/api`; query DB ตรงเพื่อสรุป JWT/Redis/session + audit signals |
+| `/system-admin/config/monitoring` | `app/(system-admin)/system-admin/config/monitoring/page.tsx`, `components/system-admin/system-monitoring-snapshot.tsx` | ไม่มี browser call ตรงไป `/api`; query DB ตรงเพื่อสรุป Database/Cache/FB-WA health |
 
 ## Quick Debug Playbook
 

@@ -43,6 +43,33 @@ async function ensureSchemaCompatForLatestAuthChanges() {
     );
   }
 
+  // System admin: client suspension flags (compat for older DBs that skipped migrations).
+  if (!(await columnExists("users", "client_suspended"))) {
+    await client.execute(
+      "alter table `users` add `client_suspended` integer not null default 0",
+    );
+    console.info("[db:repair] added column users.client_suspended");
+  }
+  if (!(await columnExists("users", "client_suspended_at"))) {
+    await client.execute("alter table `users` add `client_suspended_at` text");
+    console.info("[db:repair] added column users.client_suspended_at");
+  }
+  if (!(await columnExists("users", "client_suspended_reason"))) {
+    await client.execute("alter table `users` add `client_suspended_reason` text");
+    console.info("[db:repair] added column users.client_suspended_reason");
+  }
+  if (!(await columnExists("users", "client_suspended_by"))) {
+    await client.execute("alter table `users` add `client_suspended_by` text");
+    console.info("[db:repair] added column users.client_suspended_by");
+  }
+  try {
+    await client.execute(
+      "create index if not exists `users_client_suspended_idx` on `users` (`client_suspended`)",
+    );
+  } catch {
+    // Index creation is best-effort (older sqlite/libsql edge cases).
+  }
+
   if (!(await columnExists("orders", "shipping_carrier"))) {
     await client.execute("alter table `orders` add `shipping_carrier` text");
     console.info("[db:repair] added column orders.shipping_carrier");

@@ -1,9 +1,9 @@
 import "server-only";
 
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { storeMembers, stores, users } from "@/lib/db/schema";
+import { auditEvents, storeMembers, stores, users } from "@/lib/db/schema";
 
 export type SystemAdminDashboardStats = {
   totalClients: number;
@@ -13,9 +13,13 @@ export type SystemAdminDashboardStats = {
   totalSuspendedMembers: number;
   totalClientsCanCreateStores: number;
   totalUnlimitedClients: number;
+  totalSuspendedClients: number;
+  totalMustChangePasswordUsers: number;
+  totalAuditEvents24h: number;
 };
 
 export async function getSystemAdminDashboardStats(): Promise<SystemAdminDashboardStats> {
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const [
     clientRow,
     storeRow,
@@ -24,6 +28,9 @@ export async function getSystemAdminDashboardStats(): Promise<SystemAdminDashboa
     suspendedMemberRow,
     clientCanCreateRow,
     unlimitedClientRow,
+    suspendedClientRow,
+    mustChangePasswordRow,
+    audit24hRow,
   ] = await Promise.all([
     db
       .select({ count: sql<number>`count(*)` })
@@ -55,6 +62,18 @@ export async function getSystemAdminDashboardStats(): Promise<SystemAdminDashboa
           isNull(users.maxStores),
         ),
       ),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(users)
+      .where(and(eq(users.systemRole, "SUPERADMIN"), eq(users.clientSuspended, true))),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(users)
+      .where(eq(users.mustChangePassword, true)),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(auditEvents)
+      .where(gte(auditEvents.occurredAt, since24h)),
   ]);
 
   return {
@@ -65,5 +84,8 @@ export async function getSystemAdminDashboardStats(): Promise<SystemAdminDashboa
     totalSuspendedMembers: Number(suspendedMemberRow[0]?.count ?? 0),
     totalClientsCanCreateStores: Number(clientCanCreateRow[0]?.count ?? 0),
     totalUnlimitedClients: Number(unlimitedClientRow[0]?.count ?? 0),
+    totalSuspendedClients: Number(suspendedClientRow[0]?.count ?? 0),
+    totalMustChangePasswordUsers: Number(mustChangePasswordRow[0]?.count ?? 0),
+    totalAuditEvents24h: Number(audit24hRow[0]?.count ?? 0),
   };
 }

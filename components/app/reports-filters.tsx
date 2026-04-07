@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DatePickerField } from "@/components/ui/date-picker-field";
@@ -181,8 +182,17 @@ export function ReportsFilters({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" className="h-9 px-3 text-xs" disabled={isPending} onClick={applyFilters}>
-          {t(uiLocale, "reports.filters.apply")}
+        <Button
+          type="button"
+          className="h-9 px-3 text-xs"
+          disabled={isPending}
+          aria-busy={isPending}
+          onClick={applyFilters}
+        >
+          <span className="inline-flex items-center gap-2">
+            {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            {t(uiLocale, "reports.filters.apply")}
+          </span>
         </Button>
         <Button
           type="button"

@@ -53,7 +53,15 @@ npm run po:audit:integrity
   - key กลุ่ม `onboarding.*` ใช้กับหน้า onboarding (`/onboarding`) สำหรับ stepper, form, channel setup และ cancel flow
   - key กลุ่ม `systemAdmin.storeUserConfig.*` และ `systemAdmin.superadminManagement.*` ใช้กับหน้า config ใต้ `/system-admin/config/*`
   - key กลุ่ม `systemAdmin.storeLogoPolicy.*`, `systemAdmin.branchPolicy.*`, `systemAdmin.workspaceBadge`, `systemAdmin.layout.*`, `systemAdmin.nav.*`, `systemAdmin.configCenter.*`, และ `systemAdmin.dashboard.*` ใช้กับ shell/page/config ฝั่ง `/system-admin`
-  - key กลุ่ม `systemAdmin.clientsPage.*`, `systemAdmin.systemPage.*`, `systemAdmin.storesUsersPage.*`, และ `systemAdmin.securityPage.*` ใช้กับ header/summary ของหน้าใต้ `/system-admin/config/*`
+  - key กลุ่ม `systemAdmin.clientsPage.*`, `systemAdmin.systemPage.*`, `systemAdmin.storesUsersPage.*`, `systemAdmin.securityPage.*`, และ `systemAdmin.monitoringPage.*` ใช้กับ header/summary ของหน้าใต้ `/system-admin/config/*`
+  - หน้า `/system-admin/config/system` ปรับเป็น accordion list แล้ว: กดเพื่อขยาย/ยุบฟอร์ม (เปิดได้ทีละรายการ) เพื่อให้อ่านง่ายและ save area บนมือถือ
+  - ปุ่มบันทึกใน system-admin config ใช้ inline feedback มาตรฐานผ่าน `components/system-admin/system-admin-save-feedback.tsx` (spinner + ติ๊ก/กากบาทแบบ draw)
+  - หน้า `/system-admin/config/clients` เพิ่ม search แบบ client-side (ชื่อ/อีเมล) เพื่อให้หาบัญชี SUPERADMIN ได้เร็วขึ้น โดยไม่ยิง API เพิ่ม
+  - ระบบรองรับการระงับ Client (SUPERADMIN) แล้ว:
+    - เพิ่มคอลัมน์ `users.client_suspended*`
+    - ถ้าฐานเก่าขาดคอลัมน์นี้ ให้รัน `npm run db:repair` (script จะเติมคอลัมน์ + index แบบ best-effort)
+    - system-admin สามารถ disable/enable client จากหน้า `/system-admin/config/clients`
+    - ตอน disable จะพยายาม revoke session ผู้ใช้ทั้งหมดใต้ client และบล็อก login ด้วยสถานะ `CLIENT_SUSPENDED`
   - key กลุ่ม `superadmin.globalConfig.*`, `superadmin.auditLog.*`, `superadmin.integrations.*`, `superadmin.quotas.*`, `superadmin.security.*`, `superadmin.nav.*`, `superadmin.storeConfig.*`, `superadmin.branchConfig.*`, `superadmin.usersPage.*`, `superadmin.overview.*`, และ `superadmin.workspaceBadge` ใช้กับหน้าในพื้นที่ `/settings/superadmin/*`; รอบล่าสุดเพิ่ม `superadmin.globalConfig.help.*` สำหรับปุ่ม `i` ของหน้า `/settings/superadmin/global-config`
   - safe cleanup ล่าสุดของ `global payment policy` ถอดการแสดง/แก้ค่า `requireSlipForLaoQr` ออกจากหน้า `/settings/superadmin/global-config`, dashboard `/settings/superadmin`, และ order catalog ของ `/orders`; ตอนนี้ UI/API ฝั่ง superadmin เหลือ config จริงเฉพาะ `maxAccountsPerStore` แม้ schema/คอลัมน์เดิมใน `system_config` ยังไม่ได้ลบ
   - ปุ่ม `บันทึก Payment Policy` ใน `components/app/superadmin-payment-policy-config.tsx` จะ disable ไว้จนกว่าค่า `จำนวนบัญชีรับเงินสูงสุดต่อร้าน` จะเปลี่ยนจริง และหลังบันทึกสำเร็จจะ reset baseline ให้ปุ่มกลับไป disabled อีกครั้ง
