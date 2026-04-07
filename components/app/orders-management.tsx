@@ -4706,23 +4706,29 @@ export function OrdersManagement(props: OrdersManagementProps) {
           </div>
           <p className="text-xs text-red-600">{form.formState.errors.items?.message}</p>
 
-          {showStickyCartButton ? (
-            <button
-              type="button"
-              className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-30 flex items-center justify-between rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-700 shadow-sm sm:hidden"
-              onClick={() => setShowCartSheet(true)}
-              disabled={watchedItems.length === 0}
-            >
-              <span>
-                {t(uiLocale, "orders.create.cart.viewCartPrefix")}{" "}
-                {watchedItems.length.toLocaleString(numberLocale)} {t(uiLocale, "orders.unit.items")} /{" "}
-                {cartQtyTotal.toLocaleString(numberLocale)} {t(uiLocale, "orders.unit.pcs")}
-              </span>
-              <span>
-                {totals.total.toLocaleString(numberLocale)} {catalog.storeCurrency}
-              </span>
-            </button>
-          ) : null}
+	          {showStickyCartButton ? (
+	            <button
+	              type="button"
+	              className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-30 flex items-center justify-between rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-700 shadow-sm sm:hidden"
+	              onClick={() => setShowCartSheet(true)}
+	              disabled={watchedItems.length === 0}
+                aria-label={`${t(uiLocale, "orders.create.cart.viewCartPrefix")} ${watchedItems.length.toLocaleString(numberLocale)} ${t(uiLocale, "orders.unit.items")} / ${cartQtyTotal.toLocaleString(numberLocale)} ${t(uiLocale, "orders.unit.pcs")}`}
+	            >
+	              <span className="inline-flex min-w-0 items-center gap-2">
+                  <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-700">
+                    <ShoppingCart className="h-4 w-4" aria-hidden="true" />
+                  </span>
+	                <span className="truncate">
+	                  {watchedItems.length.toLocaleString(numberLocale)} {t(uiLocale, "orders.unit.items")} /{" "}
+	                  {cartQtyTotal.toLocaleString(numberLocale)} {t(uiLocale, "orders.unit.pcs")}
+	                </span>
+                  <span className="sr-only">{t(uiLocale, "orders.create.cart.viewCartPrefix")}</span>
+	              </span>
+	              <span>
+	                {totals.total.toLocaleString(numberLocale)} {catalog.storeCurrency}
+	              </span>
+	            </button>
+	          ) : null}
           </div>
         ) : isCreateOnlyMode ? (
           <div className="space-y-2 rounded-lg border p-3">
@@ -5692,11 +5698,13 @@ export function OrdersManagement(props: OrdersManagementProps) {
               </p>
               <button
                 type="button"
-                className="inline-flex h-8 items-center rounded-full border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 shadow-sm active:bg-blue-100 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                className="inline-flex h-8 w-11 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-sm font-semibold text-blue-700 shadow-sm active:bg-blue-100 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
                 onClick={() => setShowCartSheet(true)}
                 disabled={watchedItems.length === 0}
+                aria-label={`${t(uiLocale, "orders.create.cart.viewCartPrefix")} ${watchedItems.length.toLocaleString(numberLocale)} ${t(uiLocale, "orders.unit.items")}`}
               >
-                {t(uiLocale, "orders.create.cart.title")}
+                <ShoppingCart className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">{t(uiLocale, "orders.create.cart.title")}</span>
               </button>
             </div>
             <button
