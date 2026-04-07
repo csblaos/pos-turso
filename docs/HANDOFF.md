@@ -17,6 +17,7 @@
 - ปรับ UX logout ของผู้ใช้ฝั่งร้าน:
   - เพิ่มปุ่ม logout (ไอคอน) ใน top nav (`components/app/app-top-nav.tsx`) เพื่อให้ role ที่ไม่มี permission `settings.view` (เมนู settings ถูกซ่อน) ยังออกจากระบบได้เสมอ
   - ปุ่มเป็น confirm modal แบบเดียวกับ system-admin
+  - บนมือถือ (หน้าจอเล็ก) ลดจำนวนไอคอนฝั่งขวาด้วยเมนู `...` (More menu): ย้าย `เข้า/ออกโหมดเต็มจอ` และ `ออกจากระบบ` ไปไว้ในเมนูนี้ (คงปุ่มสำคัญไว้บนแถบหลัก)
 
 - หน้า `/system-admin/config/system` ปรับเป็น accordion list: แต่ละ policy เป็นรายการแบบกดขยาย/ยุบ (เปิดได้ทีละรายการ) เพื่อ save area และลดความยาวฟอร์มบนมือถือ (ไม่ใช้ modal)
   - ปุ่ม `บันทึก` ของ policy (session/branch/store-logo) ใช้ inline feedback แบบเดียวกับหน้า stores-users: ระหว่างบันทึกเป็น spinner และหลังสำเร็จ/ล้มเหลวเป็นติ๊ก/กากบาทแบบ draw animation
@@ -33,7 +34,8 @@
 - หน้า `/system-admin/config/security` ปรับเป็น Security Snapshot:
   - แสดงการ์ด 3 ใบ (Auth/JWT, Sessions/Redis, Access/Audit) พร้อม status pill (OK/Review/Issue)
   - มีปุ่ม `i` เปิด sheet อธิบายความหมาย/แนวทางแก้ของแต่ละการ์ด
-  - เน้นดูเร็ว: secret configured/missing, โหมดตรวจ session ผ่าน redis, ค่า default session limit, จำนวน client ถูก suspend, ผู้ใช้ที่ต้องเปลี่ยนรหัส, และ audit ล่าสุด
+  - เน้นดูเร็ว: secret configured/missing, สถานะ `บังคับเซสชัน` (เปิด/ปิด), ค่า default session limit, จำนวน client ถูก suspend, ผู้ใช้ที่ต้องเปลี่ยนรหัส, และ audit ล่าสุด
+  - รายละเอียด Redis driver/target ย้ายไปหน้า `/system-admin/config/monitoring` เพื่อลดข้อมูลซ้ำและทำให้หน้า security อ่านง่ายขึ้น
 
 - เพิ่มหน้า `/system-admin/config/monitoring` (System Health) แล้ว:
   - snapshot การ์ด 4 ใบ (Database/Cache/Messaging/Storage-R2) พร้อมปุ่ม `i` อธิบาย

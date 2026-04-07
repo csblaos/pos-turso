@@ -10,7 +10,6 @@ import { auditEvents, users } from "@/lib/db/schema";
 import { DEFAULT_UI_LOCALE, uiLocaleToDateLocale } from "@/lib/i18n/locales";
 import { t } from "@/lib/i18n/messages";
 import { getGlobalSessionPolicy } from "@/lib/system-config/policy";
-import { toSafeEndpointLabel } from "@/lib/system-admin/safe-display";
 
 type Tone = "ok" | "warn" | "bad" | "neutral";
 
@@ -53,13 +52,6 @@ export default async function SystemAdminSecurityPage() {
 
   const redisCheckEnabled = isRedisSessionCheckEnabled();
   const redisDriver = getRedisDriverFromEnv();
-  const redisTarget =
-    redisDriver === "upstash"
-      ? process.env.UPSTASH_REDIS_REST_URL?.trim() || "fromEnv"
-      : redisDriver === "local"
-        ? process.env.REDIS_URL ?? "redis://127.0.0.1:6379"
-        : "-";
-  const safeRedisTarget = toSafeEndpointLabel(redisTarget);
 
   const globalSessionPolicy = await getGlobalSessionPolicy();
 
@@ -130,23 +122,18 @@ export default async function SystemAdminSecurityPage() {
       {
         labelKey: "systemAdmin.securityPage.field.redisCheck",
         value: redisCheckEnabled
-          ? t(uiLocale, "systemAdmin.securityPage.redisCheck.on")
-          : t(uiLocale, "systemAdmin.securityPage.redisCheck.off"),
-        tone: redisCheckEnabled ? sessionsTone : "ok",
-      },
-      {
-        labelKey: "systemAdmin.securityPage.field.redisDriver",
-        value: redisDriver,
-        tone: redisDriver === "none" ? "bad" : redisCheckEnabled ? "warn" : "neutral",
-      },
-      {
-        labelKey: "systemAdmin.securityPage.field.redisTarget",
-        value: safeRedisTarget,
-        tone: redisDriver === "none" ? "bad" : "neutral",
+          ? redisDriver === "none"
+            ? t(uiLocale, "systemAdmin.securityPage.sessionEnforcement.onNotReady")
+            : t(uiLocale, "systemAdmin.securityPage.sessionEnforcement.on")
+          : t(uiLocale, "systemAdmin.securityPage.sessionEnforcement.off"),
+        tone: sessionsTone,
       },
       {
         labelKey: "systemAdmin.securityPage.field.defaultSessionLimit",
-        value: String(globalSessionPolicy.defaultSessionLimit),
+        value: `${String(globalSessionPolicy.defaultSessionLimit)} ${t(
+          uiLocale,
+          "systemAdmin.securityPage.sessionLimitSuffix",
+        )}`,
         tone: "neutral" as const,
       },
     ],

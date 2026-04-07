@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
-import { Bell, Maximize2, Minimize2, RefreshCw } from "lucide-react";
+import { Bell, Maximize2, Minimize2, MoreVertical, RefreshCw } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { StoresManagement } from "@/components/app/stores-management";
-import { AppLogoutIconButton } from "@/components/app/app-logout-icon-button";
+import { AppLogoutButton } from "@/components/app/app-logout-icon-button";
 import { StoreSolidIcon } from "@/components/icons/store-solid-icon";
 import { MenuBackButton } from "@/components/ui/menu-back-button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
@@ -134,6 +135,7 @@ export function AppTopNav({
   const [isSmallViewport, setIsSmallViewport] = useState(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [notifications, setNotifications] = useState<TopNavNotificationItem[]>([]);
   const [notificationSummary, setNotificationSummary] =
     useState<TopNavNotificationSummary>(emptyNotificationSummary);
@@ -248,6 +250,7 @@ export function AppTopNav({
 
   const showFullscreenButton =
     canUseFullscreen && (isDesktopViewport || (allowFullscreenOnTouch && isTouchDevice));
+  const useOverflowMenu = isSmallViewport;
 
   const loadNotifications = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -642,19 +645,76 @@ export function AppTopNav({
             ) : null}
           </div>
         ) : null}
-        {showFullscreenButton ? (
+        {!useOverflowMenu && showFullscreenButton ? (
           <button
             type="button"
             onClick={toggleFullscreen}
-            title={isFullscreen ? "ออกจากโหมดเต็มจอ" : "เข้าโหมดเต็มจอ"}
-            aria-label={isFullscreen ? "ออกจากโหมดเต็มจอ" : "เข้าโหมดเต็มจอ"}
+            title={
+              isFullscreen
+                ? t(uiLocale, "nav.fullscreen.exit")
+                : t(uiLocale, "nav.fullscreen.enter")
+            }
+            aria-label={
+              isFullscreen
+                ? t(uiLocale, "nav.fullscreen.exit")
+                : t(uiLocale, "nav.fullscreen.enter")
+            }
             className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition-colors hover:bg-slate-50 active:scale-[0.98] md:h-9 md:w-9"
           >
             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
         ) : null}
-        <AppLogoutIconButton uiLocale={uiLocale} />
+        {useOverflowMenu ? (
+          <button
+            type="button"
+            onClick={() => setIsMoreOpen(true)}
+            title={t(uiLocale, "nav.more")}
+            aria-label={t(uiLocale, "nav.more")}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition-colors hover:bg-slate-50 active:scale-[0.98] md:h-9 md:w-9"
+          >
+            <MoreVertical className="h-4 w-4" aria-hidden="true" />
+          </button>
+        ) : (
+          <AppLogoutButton uiLocale={uiLocale} />
+        )}
       </div>
+      <SlideUpSheet
+        isOpen={isMoreOpen}
+        onClose={() => setIsMoreOpen(false)}
+        title={t(uiLocale, "nav.more")}
+        disabled={false}
+      >
+        <div className="space-y-1">
+          {showFullscreenButton ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-11 w-full justify-start gap-3 rounded-xl px-3 text-sm font-semibold text-slate-800"
+              onClick={() => {
+                setIsMoreOpen(false);
+                void toggleFullscreen();
+              }}
+            >
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                {isFullscreen ? (
+                  <Minimize2 className="h-5 w-5" aria-hidden="true" />
+                ) : (
+                  <Maximize2 className="h-5 w-5" aria-hidden="true" />
+                )}
+              </span>
+              <span className="flex-1 text-left">
+                {isFullscreen ? t(uiLocale, "nav.fullscreen.exit") : t(uiLocale, "nav.fullscreen.enter")}
+              </span>
+            </Button>
+          ) : null}
+
+          <AppLogoutButton
+            uiLocale={uiLocale}
+            variant="menuItem"
+            onBeforeOpen={() => setIsMoreOpen(false)}
+          />
+        </div>
+      </SlideUpSheet>
       <SlideUpSheet
         isOpen={isStoreSwitcherOpen}
         onClose={() => setIsStoreSwitcherOpen(false)}

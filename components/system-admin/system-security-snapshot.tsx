@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
-import { Info, KeyRound, ShieldCheck, ShieldAlert, Waypoints } from "lucide-react";
+import { ArrowUpRight, Info, KeyRound, ShieldCheck, ShieldAlert, Waypoints } from "lucide-react";
 
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { OverflowTitle } from "@/components/ui/overflow-title";
@@ -49,11 +50,13 @@ function SnapshotCard({
   icon,
   onOpenHelp,
   disabled,
+  footer,
 }: {
   card: SecuritySnapshotCard;
   icon: React.ComponentType<{ className?: string }>;
   onOpenHelp: () => void;
   disabled: boolean;
+  footer?: React.ReactNode;
 }) {
   const uiLocale = useUiLocale();
   const Icon = icon;
@@ -111,6 +114,8 @@ function SnapshotCard({
           </div>
         ))}
       </div>
+
+      {footer ? <div className="mt-3">{footer}</div> : null}
     </article>
   );
 }
@@ -142,6 +147,15 @@ export function SystemSecuritySnapshot({ authCard, sessionsCard, accessCard }: S
           icon={Waypoints}
           onOpenHelp={() => setHelpTarget("sessions")}
           disabled={false}
+          footer={
+            <Link
+              href="/system-admin/config/monitoring"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              {t(uiLocale, "systemAdmin.securityPage.action.viewSystemHealth")}
+              <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          }
         />
         <SnapshotCard
           card={accessCard}

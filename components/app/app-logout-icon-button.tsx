@@ -12,7 +12,17 @@ import { t } from "@/lib/i18n/messages";
 import { clearNewOrderDraftState } from "@/lib/orders/new-order-draft";
 import { clearPurchaseLocalStorage } from "@/lib/purchases/client-storage";
 
-export function AppLogoutIconButton({ uiLocale }: { uiLocale: UiLocale }) {
+type AppLogoutButtonVariant = "icon" | "menuItem";
+
+export function AppLogoutButton({
+  uiLocale,
+  variant = "icon",
+  onBeforeOpen,
+}: {
+  uiLocale: UiLocale;
+  variant?: AppLogoutButtonVariant;
+  onBeforeOpen?: () => void;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
@@ -47,17 +57,37 @@ export function AppLogoutIconButton({ uiLocale }: { uiLocale: UiLocale }) {
 
   return (
     <>
-      <Button
-        type="button"
-        variant="outline"
-        className="h-8 w-8 rounded-full p-0 text-slate-700 shadow-sm transition-colors hover:bg-slate-50 active:scale-[0.98] md:h-9 md:w-9"
-        onClick={() => setOpen(true)}
-        aria-label={t(uiLocale, "common.logout")}
-        title={t(uiLocale, "common.logout")}
-      >
-        <LogOut className="h-4 w-4" aria-hidden="true" />
-        <span className="sr-only">{t(uiLocale, "common.logout")}</span>
-      </Button>
+      {variant === "icon" ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 w-8 rounded-full p-0 text-slate-700 shadow-sm transition-colors hover:bg-slate-50 active:scale-[0.98] md:h-9 md:w-9"
+          onClick={() => {
+            onBeforeOpen?.();
+            setOpen(true);
+          }}
+          aria-label={t(uiLocale, "common.logout")}
+          title={t(uiLocale, "common.logout")}
+        >
+          <LogOut className="h-4 w-4" aria-hidden="true" />
+          <span className="sr-only">{t(uiLocale, "common.logout")}</span>
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-11 w-full justify-start gap-3 rounded-xl px-3 text-sm font-semibold text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+          onClick={() => {
+            onBeforeOpen?.();
+            setOpen(true);
+          }}
+        >
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-rose-50 text-rose-700">
+            <LogOut className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <span className="flex-1 text-left">{t(uiLocale, "common.logout")}</span>
+        </Button>
+      )}
 
       {isClient && open
         ? createPortal(
@@ -109,3 +139,4 @@ export function AppLogoutIconButton({ uiLocale }: { uiLocale: UiLocale }) {
   );
 }
 
+export const AppLogoutIconButton = AppLogoutButton;
