@@ -77,3 +77,4 @@ const getClient = () => {
 export const db = drizzle(getClient(), { schema });
 
 export const getDb = () => db;
+export const getLibsqlClient = () => getClient();

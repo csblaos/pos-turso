@@ -30,6 +30,7 @@ import {
   getOrderItemsForOrder,
 } from "@/lib/orders/queries";
 import { updateOrderSchema } from "@/lib/orders/validation";
+import { applyInventoryBalanceMovements } from "@/lib/inventory/balances";
 import { getInventoryBalancesByStore } from "@/lib/inventory/queries";
 import { buildAuditEventValues, safeLogAuditEvent } from "@/server/services/audit.service";
 import { invalidateDashboardSummaryCache } from "@/server/services/dashboard.service";
@@ -564,18 +565,18 @@ export async function PATCH(
 
       await db.transaction(async (tx) => {
         if (orderItems.length > 0) {
-          await tx.insert(inventoryMovements).values(
-            orderItems.map((item) => ({
-              storeId,
-              productId: item.productId,
-              type: "RESERVE" as const,
-              qtyBase: item.qtyBase,
-              refType: "ORDER" as const,
-              refId: order.id,
-              note: `จองสต็อกสำหรับออเดอร์ ${order.orderNo}`,
-              createdBy: session.userId,
-            })),
-          );
+          const reserveMovements = orderItems.map((item) => ({
+            storeId,
+            productId: item.productId,
+            type: "RESERVE" as const,
+            qtyBase: item.qtyBase,
+            refType: "ORDER" as const,
+            refId: order.id,
+            note: `จองสต็อกสำหรับออเดอร์ ${order.orderNo}`,
+            createdBy: session.userId,
+          }));
+          await tx.insert(inventoryMovements).values(reserveMovements);
+          await applyInventoryBalanceMovements(reserveMovements, tx);
         }
 
         await tx
@@ -892,34 +893,34 @@ export async function PATCH(
           });
         } else {
           if (orderItems.length > 0) {
-            await tx.insert(inventoryMovements).values(
-              orderItems.flatMap((item) => [
-                {
-                  storeId,
-                  productId: item.productId,
-                  type: "RELEASE" as const,
-                  qtyBase: item.qtyBase,
-                  refType: "ORDER" as const,
-                  refId: order.id,
-                  note: isPickupCompleteAfterPrepaid
-                    ? `ปล่อยจองสต็อกเมื่อรับสินค้าหน้าร้าน ${order.orderNo}`
-                    : `ปล่อยจองสต็อกเมื่อชำระเงิน ${order.orderNo}`,
-                  createdBy: session.userId,
-                },
-                {
-                  storeId,
-                  productId: item.productId,
-                  type: "OUT" as const,
-                  qtyBase: item.qtyBase,
-                  refType: "ORDER" as const,
-                  refId: order.id,
-                  note: isPickupCompleteAfterPrepaid
-                    ? `ตัดสต็อกเมื่อรับสินค้าหน้าร้าน ${order.orderNo}`
-                    : `ตัดสต็อกเมื่อชำระเงิน ${order.orderNo}`,
-                  createdBy: session.userId,
-                },
-              ]),
-            );
+            const stockMovements = orderItems.flatMap((item) => [
+              {
+                storeId,
+                productId: item.productId,
+                type: "RELEASE" as const,
+                qtyBase: item.qtyBase,
+                refType: "ORDER" as const,
+                refId: order.id,
+                note: isPickupCompleteAfterPrepaid
+                  ? `ปล่อยจองสต็อกเมื่อรับสินค้าหน้าร้าน ${order.orderNo}`
+                  : `ปล่อยจองสต็อกเมื่อชำระเงิน ${order.orderNo}`,
+                createdBy: session.userId,
+              },
+              {
+                storeId,
+                productId: item.productId,
+                type: "OUT" as const,
+                qtyBase: item.qtyBase,
+                refType: "ORDER" as const,
+                refId: order.id,
+                note: isPickupCompleteAfterPrepaid
+                  ? `ตัดสต็อกเมื่อรับสินค้าหน้าร้าน ${order.orderNo}`
+                  : `ตัดสต็อกเมื่อชำระเงิน ${order.orderNo}`,
+                createdBy: session.userId,
+              },
+            ]);
+            await tx.insert(inventoryMovements).values(stockMovements);
+            await applyInventoryBalanceMovements(stockMovements, tx);
           }
 
           const effectivePaidAt = order.paidAt ?? nowIso();
@@ -1025,30 +1026,30 @@ export async function PATCH(
 
       await db.transaction(async (tx) => {
         if (orderItems.length > 0) {
-          await tx.insert(inventoryMovements).values(
-            orderItems.flatMap((item) => [
-              {
-                storeId,
-                productId: item.productId,
-                type: "RELEASE" as const,
-                qtyBase: item.qtyBase,
-                refType: "ORDER" as const,
-                refId: order.id,
-                note: `ปล่อยจองสต็อกเมื่อรับสินค้าแบบค้างจ่าย ${order.orderNo}`,
-                createdBy: session.userId,
-              },
-              {
-                storeId,
-                productId: item.productId,
-                type: "OUT" as const,
-                qtyBase: item.qtyBase,
-                refType: "ORDER" as const,
-                refId: order.id,
-                note: `ตัดสต็อกเมื่อรับสินค้าแบบค้างจ่าย ${order.orderNo}`,
-                createdBy: session.userId,
-              },
-            ]),
-          );
+          const stockMovements = orderItems.flatMap((item) => [
+            {
+              storeId,
+              productId: item.productId,
+              type: "RELEASE" as const,
+              qtyBase: item.qtyBase,
+              refType: "ORDER" as const,
+              refId: order.id,
+              note: `ปล่อยจองสต็อกเมื่อรับสินค้าแบบค้างจ่าย ${order.orderNo}`,
+              createdBy: session.userId,
+            },
+            {
+              storeId,
+              productId: item.productId,
+              type: "OUT" as const,
+              qtyBase: item.qtyBase,
+              refType: "ORDER" as const,
+              refId: order.id,
+              note: `ตัดสต็อกเมื่อรับสินค้าแบบค้างจ่าย ${order.orderNo}`,
+              createdBy: session.userId,
+            },
+          ]);
+          await tx.insert(inventoryMovements).values(stockMovements);
+          await applyInventoryBalanceMovements(stockMovements, tx);
         }
 
         await tx
@@ -1108,30 +1109,30 @@ export async function PATCH(
 
       await db.transaction(async (tx) => {
         if (canPackCodFromPending && orderItems.length > 0) {
-          await tx.insert(inventoryMovements).values(
-            orderItems.flatMap((item) => [
-              {
-                storeId,
-                productId: item.productId,
-                type: "RELEASE" as const,
-                qtyBase: item.qtyBase,
-                refType: "ORDER" as const,
-                refId: order.id,
-                note: `ปล่อยจองสต็อกเมื่อแพ็ก COD ${order.orderNo}`,
-                createdBy: session.userId,
-              },
-              {
-                storeId,
-                productId: item.productId,
-                type: "OUT" as const,
-                qtyBase: item.qtyBase,
-                refType: "ORDER" as const,
-                refId: order.id,
-                note: `ตัดสต็อกเมื่อแพ็ก COD ${order.orderNo}`,
-                createdBy: session.userId,
-              },
-            ]),
-          );
+          const stockMovements = orderItems.flatMap((item) => [
+            {
+              storeId,
+              productId: item.productId,
+              type: "RELEASE" as const,
+              qtyBase: item.qtyBase,
+              refType: "ORDER" as const,
+              refId: order.id,
+              note: `ปล่อยจองสต็อกเมื่อแพ็ก COD ${order.orderNo}`,
+              createdBy: session.userId,
+            },
+            {
+              storeId,
+              productId: item.productId,
+              type: "OUT" as const,
+              qtyBase: item.qtyBase,
+              refType: "ORDER" as const,
+              refId: order.id,
+              note: `ตัดสต็อกเมื่อแพ็ก COD ${order.orderNo}`,
+              createdBy: session.userId,
+            },
+          ]);
+          await tx.insert(inventoryMovements).values(stockMovements);
+          await applyInventoryBalanceMovements(stockMovements, tx);
         }
 
         await tx
@@ -1246,18 +1247,18 @@ export async function PATCH(
         const normalizedCodReturnNote = codReturnPayload.codReturnNote?.trim() || null;
 
         if (orderItems.length > 0) {
-          await tx.insert(inventoryMovements).values(
-            orderItems.map((item) => ({
-              storeId,
-              productId: item.productId,
-              type: "RETURN" as const,
-              qtyBase: item.qtyBase,
-              refType: "RETURN" as const,
-              refId: order.id,
-              note: `รับสินค้าตีกลับ COD ${order.orderNo}`,
-              createdBy: session.userId,
-            })),
-          );
+          const returnMovements = orderItems.map((item) => ({
+            storeId,
+            productId: item.productId,
+            type: "RETURN" as const,
+            qtyBase: item.qtyBase,
+            refType: "RETURN" as const,
+            refId: order.id,
+            note: `รับสินค้าตีกลับ COD ${order.orderNo}`,
+            createdBy: session.userId,
+          }));
+          await tx.insert(inventoryMovements).values(returnMovements);
+          await applyInventoryBalanceMovements(returnMovements, tx);
         }
 
         await tx
@@ -1395,33 +1396,33 @@ export async function PATCH(
 
     await db.transaction(async (tx) => {
       if (shouldReleaseReservedOnCancel && orderItems.length > 0) {
-        await tx.insert(inventoryMovements).values(
-          orderItems.map((item) => ({
-            storeId,
-            productId: item.productId,
-            type: "RELEASE" as const,
-            qtyBase: item.qtyBase,
-            refType: "ORDER" as const,
-            refId: order.id,
-            note: `ปล่อยจองสต็อกจากการยกเลิก ${order.orderNo}`,
-            createdBy: session.userId,
-          })),
-        );
+        const releaseMovements = orderItems.map((item) => ({
+          storeId,
+          productId: item.productId,
+          type: "RELEASE" as const,
+          qtyBase: item.qtyBase,
+          refType: "ORDER" as const,
+          refId: order.id,
+          note: `ปล่อยจองสต็อกจากการยกเลิก ${order.orderNo}`,
+          createdBy: session.userId,
+        }));
+        await tx.insert(inventoryMovements).values(releaseMovements);
+        await applyInventoryBalanceMovements(releaseMovements, tx);
       }
 
       if (shouldReturnStockOnCancel && orderItems.length > 0) {
-        await tx.insert(inventoryMovements).values(
-          orderItems.map((item) => ({
-            storeId,
-            productId: item.productId,
-            type: "RETURN" as const,
-            qtyBase: item.qtyBase,
-            refType: "RETURN" as const,
-            refId: order.id,
-            note: `คืนสต็อกจากการยกเลิก ${order.orderNo}`,
-            createdBy: session.userId,
-          })),
-        );
+        const returnMovements = orderItems.map((item) => ({
+          storeId,
+          productId: item.productId,
+          type: "RETURN" as const,
+          qtyBase: item.qtyBase,
+          refType: "RETURN" as const,
+          refId: order.id,
+          note: `คืนสต็อกจากการยกเลิก ${order.orderNo}`,
+          createdBy: session.userId,
+        }));
+        await tx.insert(inventoryMovements).values(returnMovements);
+        await applyInventoryBalanceMovements(returnMovements, tx);
       }
 
       await tx

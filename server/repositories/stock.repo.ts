@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db } from "@/server/db/client";
 import { timeDb } from "@/server/perf/perf";
@@ -14,6 +14,10 @@ import {
   type InventoryMovementPage,
   type StockProductOption,
 } from "@/lib/inventory/queries";
+import {
+  applyInventoryBalanceMovements,
+  getInventoryBalanceSnapshot,
+} from "@/lib/inventory/balances";
 import { inventoryMovements, productUnits, products } from "@/lib/db/schema";
 type StockRepoTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type StockRepoExecutor = typeof db | StockRepoTx;
@@ -38,9 +42,13 @@ export async function listStockProductsByStorePage(
   offset: number,
   categoryId?: string | null,
   query?: string | null,
+  options?: {
+    includeUnitOptions?: boolean;
+    productId?: string | null;
+  },
 ): Promise<StockProductOption[]> {
   return timeDb("stock.repo.listProductsPage", async () =>
-    getStockProductsForStorePage(storeId, limit, offset, categoryId, query),
+    getStockProductsForStorePage(storeId, limit, offset, categoryId, query, options),
   );
 }
 
@@ -143,6 +151,18 @@ export async function createInventoryMovementRecord(input: {
     ? await insert()
     : await timeDb("stock.repo.insertMovement", async () => insert());
 
+  await applyInventoryBalanceMovements(
+    [
+      {
+        storeId: input.storeId,
+        productId: input.productId,
+        type: input.type,
+        qtyBase: input.qtyBase,
+      },
+    ],
+    input.tx,
+  );
+
   return inserted?.id ?? null;
 }
 
@@ -151,42 +171,13 @@ export async function getStockBalanceByProduct(
   productId: string,
   tx?: StockRepoTx,
 ) {
-  const executor: StockRepoExecutor = tx ?? db;
   const load = async () => {
-    const [row] = await executor
-      .select({
-        onHand: sql<number>`
-          coalesce(sum(case
-            when ${inventoryMovements.type} = 'IN' then ${inventoryMovements.qtyBase}
-            when ${inventoryMovements.type} = 'RETURN' then ${inventoryMovements.qtyBase}
-            when ${inventoryMovements.type} = 'OUT' then -${inventoryMovements.qtyBase}
-            when ${inventoryMovements.type} = 'ADJUST' then ${inventoryMovements.qtyBase}
-            else 0
-          end), 0)
-        `,
-        reserved: sql<number>`
-          coalesce(sum(case
-            when ${inventoryMovements.type} = 'RESERVE' then ${inventoryMovements.qtyBase}
-            when ${inventoryMovements.type} = 'RELEASE' then -${inventoryMovements.qtyBase}
-            else 0
-          end), 0)
-        `,
-      })
-      .from(inventoryMovements)
-      .where(
-        and(
-          eq(inventoryMovements.storeId, storeId),
-          eq(inventoryMovements.productId, productId),
-        ),
-      );
-
-    const onHand = Number(row?.onHand ?? 0);
-    const reserved = Number(row?.reserved ?? 0);
+    const row = await getInventoryBalanceSnapshot(storeId, productId, tx);
     return {
       productId,
-      onHand,
-      reserved,
-      available: onHand - reserved,
+      onHand: row.onHand,
+      reserved: row.reserved,
+      available: row.available,
     };
   };
 

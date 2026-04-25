@@ -40,6 +40,9 @@ type StockRecordingFormProps = {
 
 type MovementType = "IN" | "ADJUST" | "RETURN";
 type AdjustMode = "INCREASE" | "DECREASE";
+type SearchResultProduct = ProductListItem & {
+  stock?: { onHand: number; available: number; reserved: number };
+};
 const RECORDING_MOVEMENT_QUERY_KEY = "recordingType";
 const RECORDING_PRODUCT_QUERY_KEY = "recordingProductId";
 
@@ -134,44 +137,67 @@ export function StockRecordingForm({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<
-    Array<ProductListItem & { stock?: { onHand: number; available: number; reserved: number } }>
-  >([]);
+  const [searchResults, setSearchResults] = useState<SearchResultProduct[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [productPickerQuery, setProductPickerQuery] = useState("");
-  const [currentStock, setCurrentStock] = useState<{
-    onHand: number;
-    available: number;
-    reserved: number;
-  } | null>(null);
-  const [loadingStock, setLoadingStock] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showScannerPermission, setShowScannerPermission] = useState(false);
   const [hasSeenScannerPermission, setHasSeenScannerPermission] = useState(false);
   const [isUsageGuideOpen, setIsUsageGuideOpen] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const productItemsRef = useRef(productItems);
+  const loadedUnitOptionProductIdsRef = useRef<Set<string>>(
+    new Set(
+      initialProducts
+        .filter((product) => product.unitOptions.length > 1)
+        .map((product) => product.productId),
+    ),
+  );
+  const loadingUnitOptionProductIdsRef = useRef<Set<string>>(new Set());
   const isInitialRecordingLoading = isRefreshingData && productItems.length === 0;
 
-  useEffect(() => {
-    productItemsRef.current = productItems;
-  }, [productItems]);
+  const fetchProductUnitOptions = useCallback(async (prodId: string) => {
+    if (!prodId) {
+      return;
+    }
+    if (loadedUnitOptionProductIdsRef.current.has(prodId)) {
+      return;
+    }
+    if (loadingUnitOptionProductIdsRef.current.has(prodId)) {
+      return;
+    }
 
-  const fetchCurrentStock = useCallback(async (prodId: string) => {
-    setLoadingStock(true);
+    loadingUnitOptionProductIdsRef.current.add(prodId);
     try {
-      const res = await authFetch(`/api/stock/current?productId=${prodId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setCurrentStock(data.stock || null);
+      const res = await authFetch(
+        `/api/stock/products?productId=${encodeURIComponent(prodId)}&includeUnitOptions=true&page=1&pageSize=1`,
+        { cache: "no-store" },
+      );
+      const data = (await res.json().catch(() => null)) as
+        | {
+            ok?: boolean;
+            products?: StockProductOption[];
+          }
+        | null;
+
+      if (!res.ok || !data?.ok || !Array.isArray(data.products) || data.products.length === 0) {
+        return;
       }
-    } catch {
-      setCurrentStock(null);
+
+      const nextProduct = data.products[0]!;
+      loadedUnitOptionProductIdsRef.current.add(prodId);
+      setProductItems((prev) => {
+        const existingIndex = prev.findIndex((item) => item.productId === prodId);
+        if (existingIndex === -1) {
+          return [nextProduct, ...prev];
+        }
+
+        return prev.map((item) => (item.productId === prodId ? nextProduct : item));
+      });
     } finally {
-      setLoadingStock(false);
+      loadingUnitOptionProductIdsRef.current.delete(prodId);
     }
   }, []);
 
@@ -194,6 +220,9 @@ export function StockRecordingForm({
 
     const matchedProduct = productItems.find((item) => item.productId === productId);
     if (!matchedProduct) {
+      if (productId) {
+        return;
+      }
       setProductId(productItems[0].productId);
       setUnitId(productItems[0].unitOptions[0]?.unitId ?? "");
       return;
@@ -236,10 +265,6 @@ export function StockRecordingForm({
       return;
     }
 
-    if (!productItemsRef.current.some((item) => item.productId === nextProductId)) {
-      return;
-    }
-
     setProductId((current) => (current === nextProductId ? current : nextProductId));
   }, [
     movementTypeOptions,
@@ -252,11 +277,10 @@ export function StockRecordingForm({
       return;
     }
     if (!productId) {
-      setCurrentStock(null);
       return;
     }
-    void fetchCurrentStock(productId);
-  }, [fetchCurrentStock, isRecordingTabActive, productId]);
+    void fetchProductUnitOptions(productId);
+  }, [fetchProductUnitOptions, isRecordingTabActive, productId]);
 
   useEffect(() => {
     if (!isRecordingTabActive) {
@@ -308,6 +332,17 @@ export function StockRecordingForm({
   const selectedProduct = useMemo(
     () => productItems.find((item) => item.productId === productId),
     [productId, productItems],
+  );
+  const currentStock = useMemo(
+    () =>
+      selectedProduct
+        ? {
+            onHand: selectedProduct.onHand,
+            reserved: selectedProduct.reserved,
+            available: selectedProduct.available,
+          }
+        : null,
+    [selectedProduct],
   );
 
   const selectedUnit = selectedProduct?.unitOptions.find((unit) => unit.unitId === unitId);
@@ -416,6 +451,9 @@ export function StockRecordingForm({
       }
 
       setProductItems(data.products);
+      loadedUnitOptionProductIdsRef.current = new Set(
+        data.products.map((product) => product.productId),
+      );
       setDataError(null);
       setLastUpdatedAt(new Date().toISOString());
     } catch {
@@ -504,7 +542,7 @@ export function StockRecordingForm({
     [focusQtyInput],
   );
 
-  const selectProductFromSearch = (product: ProductListItem) => {
+  const selectProductFromSearch = (product: SearchResultProduct) => {
     const exists = productItems.find((item) => item.productId === product.id);
     if (!exists) {
       const unitOptions = product.conversions.map((conv) => ({
@@ -524,13 +562,14 @@ export function StockRecordingForm({
         baseUnitNameTh: product.baseUnitNameTh || product.baseUnitCode,
         unitOptions,
         active: product.active,
-        onHand: 0,
-        reserved: 0,
-        available: 0,
+        onHand: product.stock?.onHand ?? 0,
+        reserved: product.stock?.reserved ?? 0,
+        available: product.stock?.available ?? 0,
         outStockThreshold: product.outStockThreshold ?? null,
         lowStockThreshold: product.lowStockThreshold ?? null,
       };
       setProductItems((prev) => [nextProduct, ...prev]);
+      loadedUnitOptionProductIdsRef.current.add(product.id);
     }
     applySelectedProduct(product.id, product.baseUnitId);
   };
@@ -669,13 +708,17 @@ export function StockRecordingForm({
       ]);
 
       // อัปเดตสต็อกปัจจุบันหลังบันทึก
-      if (currentStock) {
-        setCurrentStock({
-          onHand: currentStock.onHand + qtyBasePreview,
-          reserved: currentStock.reserved,
-          available: currentStock.available + qtyBasePreview,
-        });
-      }
+      setProductItems((prev) =>
+        prev.map((item) =>
+          item.productId === selectedProduct.productId
+            ? {
+                ...item,
+                onHand: item.onHand + qtyBasePreview,
+                available: item.available + qtyBasePreview,
+              }
+            : item,
+        ),
+      );
     }
 
     setSuccessMessage(t(uiLocale, "stock.recording.success.saved"));
@@ -957,9 +1000,6 @@ export function StockRecordingForm({
             </div>
           )}
 
-          {loadingStock && (
-            <p className="text-xs text-slate-500">{t(uiLocale, "stock.recording.loading.currentStock")}</p>
-          )}
         </div>
 
         <div className="grid grid-cols-2 gap-2">

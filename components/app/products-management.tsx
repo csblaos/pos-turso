@@ -72,7 +72,10 @@ type ProductsManagementProps = {
   canArchive: boolean;
   canViewCost: boolean;
   canUpdateCost: boolean;
+  initialQuery: string;
+  initialCategoryId: string | null;
   initialStatusFilter: StatusFilter;
+  initialSortOption: SortOption;
 };
 
 type StatusFilter = "all" | "active" | "inactive";
@@ -265,7 +268,10 @@ export function ProductsManagement({
   canArchive,
   canViewCost,
   canUpdateCost,
+  initialQuery,
+  initialCategoryId,
   initialStatusFilter,
+  initialSortOption,
 }: ProductsManagementProps) {
   const router = useRouter();
   const pathname = usePathname() ?? "/";
@@ -291,17 +297,18 @@ export function ProductsManagement({
   const productListAbortRef = useRef<AbortController | null>(null);
   const productPageCacheRef = useRef<Map<string, ProductListCacheEntry>>(new Map());
   const hasInitializedListEffectRef = useRef(false);
+  const seededInitialListKeyRef = useRef<string | null>(null);
   const submitIntentRef = useRef<"save" | "save-and-next">("save");
 
   /* ── Filter / search ── */
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const deferredQuery = useDeferredValue(query);
   const searchStickyBarRef = useRef<HTMLDivElement | null>(null);
   const productResultsRef = useRef<HTMLDivElement | null>(null);
   const [isSearchBarStuck, setIsSearchBarStuck] = useState(false);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(initialCategoryId);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialStatusFilter);
-  const [sortOption, setSortOption] = useState<SortOption>("newest");
+  const [sortOption, setSortOption] = useState<SortOption>(initialSortOption);
   const [productPage, setProductPage] = useState(1);
   const hasActiveSearchQuery = query.trim().length > 0;
   const isCompactSearchMode = hasActiveSearchQuery && isSearchBarStuck;
@@ -431,6 +438,17 @@ export function ProductsManagement({
     productPageCacheRef.current.clear();
   }, []);
 
+  const currentProductListCacheKey = useMemo(
+    () =>
+      buildProductListCacheKey({
+        keyword: deferredQuery.trim(),
+        categoryId: selectedCategoryId,
+        status: statusFilter,
+        sort: sortOption,
+      }),
+    [buildProductListCacheKey, deferredQuery, selectedCategoryId, sortOption, statusFilter],
+  );
+
   const syncStatusFilterToUrl = useCallback(
     (nextStatus: StatusFilter) => {
       const params = new URLSearchParams(searchParams.toString());
@@ -457,11 +475,12 @@ export function ProductsManagement({
 
   useEffect(() => {
     const initialKey = buildProductListCacheKey({
-      keyword: "",
-      categoryId: null,
+      keyword: initialQuery.trim(),
+      categoryId: initialCategoryId,
       status: initialStatusFilter,
-      sort: "newest",
+      sort: initialSortOption,
     });
+    seededInitialListKeyRef.current = initialKey;
     productPageCacheRef.current.set(initialKey, {
       items: initialProducts,
       total: initialTotalCount,
@@ -469,9 +488,12 @@ export function ProductsManagement({
     });
   }, [
     buildProductListCacheKey,
+    initialCategoryId,
+    initialQuery,
     initialStatusFilter,
     initialProducts,
     initialSummaryCounts,
+    initialSortOption,
     initialTotalCount,
   ]);
 
@@ -482,11 +504,26 @@ export function ProductsManagement({
 
   const queryFromUrl = searchParams.get("q")?.trim() ?? "";
   useEffect(() => {
-    if (!queryFromUrl) {
-      return;
-    }
     setQuery((prev) => (prev === queryFromUrl ? prev : queryFromUrl));
   }, [queryFromUrl]);
+
+  const categoryIdFromUrl = searchParams.get("categoryId")?.trim() ?? "";
+  useEffect(() => {
+    const nextCategoryId = categoryIdFromUrl || null;
+    setSelectedCategoryId((prev) => (prev === nextCategoryId ? prev : nextCategoryId));
+  }, [categoryIdFromUrl]);
+
+  const sortFromUrl = searchParams.get("sort");
+  useEffect(() => {
+    const nextSort =
+      sortFromUrl === "name-asc" ||
+      sortFromUrl === "name-desc" ||
+      sortFromUrl === "price-asc" ||
+      sortFromUrl === "price-desc"
+        ? sortFromUrl
+        : "newest";
+    setSortOption((prev) => (prev === nextSort ? prev : nextSort));
+  }, [sortFromUrl]);
 
   useLayoutEffect(() => {
     if (!detailContentRef.current) return;
@@ -1276,8 +1313,13 @@ export function ProductsManagement({
       return;
     }
 
+    if (seededInitialListKeyRef.current === currentProductListCacheKey) {
+      seededInitialListKeyRef.current = null;
+      return;
+    }
+
     void fetchProductsPage({ page: 1, append: false });
-  }, [fetchProductsPage]);
+  }, [currentProductListCacheKey, fetchProductsPage]);
 
   useEffect(() => {
     return () => {

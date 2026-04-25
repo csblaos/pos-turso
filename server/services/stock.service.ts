@@ -145,6 +145,8 @@ export async function getStockProductsPage(params: {
   offset: number;
   categoryId?: string | null;
   query?: string | null;
+  includeUnitOptions?: boolean;
+  productId?: string | null;
 }): Promise<StockProductOption[]> {
   return listStockProductsByStorePage(
     params.storeId,
@@ -152,6 +154,10 @@ export async function getStockProductsPage(params: {
     params.offset,
     params.categoryId,
     params.query,
+    {
+      includeUnitOptions: params.includeUnitOptions,
+      productId: params.productId,
+    },
   );
 }
 

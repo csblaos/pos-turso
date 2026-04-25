@@ -27,6 +27,11 @@ import { uiLocaleToDateLocale } from "@/lib/i18n/locales";
 import { t } from "@/lib/i18n/messages";
 import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 import type { StockProductOption } from "@/lib/inventory/queries";
+import {
+  logClientCommit,
+  logClientPerf,
+  logServerTimingBreakdown,
+} from "@/lib/perf/client";
 import type { CategoryItem, ProductListItem } from "@/lib/products/service";
 
 type StockInventoryViewProps = {
@@ -386,7 +391,12 @@ export function StockInventoryView({
         params.set("q", query.trim());
       }
 
+      const fetchStartedAt = performance.now();
       const res = await authFetch(`/api/stock/products?${params.toString()}`);
+      logClientPerf("stock.inventory.fetch.network", performance.now() - fetchStartedAt, "network");
+      logServerTimingBreakdown("stock.inventory.fetch", res.headers.get("Server-Timing"));
+
+      const parseStartedAt = performance.now();
       const data = (await res.json().catch(() => null)) as
         | {
             products?: StockProductOption[];
@@ -395,6 +405,7 @@ export function StockInventoryView({
             page?: number;
           }
         | null;
+      logClientPerf("stock.inventory.fetch.parseJson", performance.now() - parseStartedAt, "logic");
 
       if (!res.ok) {
         throw new Error(data?.message ?? t(uiLocale, "stock.inventory.error.loadFailed"));
@@ -428,12 +439,14 @@ export function StockInventoryView({
       if (requestId !== inventoryQueryRequestIdRef.current) {
         return;
       }
+      const commitStartedAt = performance.now();
       setProductItems(next.products);
       setProductPage(next.page);
       setHasMoreProducts(next.hasMore);
       setDataError(null);
       lastFetchedInventoryKeyRef.current = currentFetchKey;
       setLastUpdatedAt(new Date().toISOString());
+      logClientCommit("stock.inventory.refresh.commit", commitStartedAt);
     } catch (error) {
       if (requestId !== inventoryQueryRequestIdRef.current) {
         return;
@@ -475,12 +488,14 @@ export function StockInventoryView({
         if (isCancelled || requestId !== inventoryQueryRequestIdRef.current) {
           return;
         }
+        const commitStartedAt = performance.now();
         setProductItems(next.products);
         setProductPage(next.page);
         setHasMoreProducts(next.hasMore);
         setDataError(null);
         lastFetchedInventoryKeyRef.current = nextFetchKey;
         setLastUpdatedAt(new Date().toISOString());
+        logClientCommit("stock.inventory.search.commit", commitStartedAt);
       } catch (error) {
         if (isCancelled || requestId !== inventoryQueryRequestIdRef.current) {
           return;
@@ -611,10 +626,12 @@ export function StockInventoryView({
         if (currentFetchKey !== lastFetchedInventoryKeyRef.current) {
           return false;
         }
+        const commitStartedAt = performance.now();
         setProductItems((prev) => mergeUniqueProducts(prev, next.products));
         setProductPage(next.page);
         setHasMoreProducts(next.hasMore);
         setLastUpdatedAt(new Date().toISOString());
+        logClientCommit("stock.inventory.loadMore.commit", commitStartedAt);
         return true;
       } catch (error) {
         if (!options?.silent) {
@@ -642,14 +659,26 @@ export function StockInventoryView({
   );
 
   const resolveProductFromBarcode = useCallback(async (barcode: string) => {
+    const fetchStartedAt = performance.now();
     const res = await authFetch(
       `/api/products/search?q=${encodeURIComponent(barcode)}&includeStock=true`,
     );
+    logClientPerf("stock.inventory.barcodeResolver.network", performance.now() - fetchStartedAt, "network");
+    logServerTimingBreakdown(
+      "stock.inventory.barcodeResolver",
+      res.headers.get("Server-Timing"),
+    );
+    const parseStartedAt = performance.now();
     const data = (await res.json().catch(() => null)) as
       | {
           products?: ProductListItem[];
         }
       | null;
+    logClientPerf(
+      "stock.inventory.barcodeResolver.parseJson",
+      performance.now() - parseStartedAt,
+      "logic",
+    );
 
     if (!res.ok || !Array.isArray(data?.products)) {
       return null;

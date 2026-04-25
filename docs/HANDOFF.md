@@ -6,6 +6,57 @@
 
 ## Changed (ล่าสุด)
 
+- เริ่ม optimize read path ที่ sensitive ต่อ latency แบบ incremental แล้ว:
+  - `lib/db/client.ts` export `getLibsqlClient()` เพิ่ม เพื่อให้ hot read route ใช้ raw `execute(...)` โดยยัง reuse singleton Turso client เดิม
+  - เพิ่ม summary table `inventory_balances` แล้วสำหรับ stock read model:
+    - schema/migration อยู่ที่ [lib/db/schema/tables.ts](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/lib/db/schema/tables.ts) และ [drizzle/0046_black_korg.sql](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/drizzle/0046_black_korg.sql)
+    - migration จะ backfill จาก `inventory_movements` ทันที
+    - `scripts/repair-migrations.mjs` รองรับ create/rebuild `inventory_balances` จาก `inventory_movements` แบบ compat แล้ว
+    - helper กลาง [lib/inventory/balances.ts](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/lib/inventory/balances.ts) ใช้ทั้ง read snapshot และ apply delta เวลาเขียน movement
+  - `GET /api/stock/current` เปลี่ยนเป็น fast path: ใช้ raw SQL ตรงกับ `inventory_balances`, ใส่ `runtime=nodejs`, `dynamic=force-dynamic`, `preferredRegion=["hnd1","sin1"]`, ส่ง `Cache-Control: no-store`, `Server-Timing`, และ `latency`; รอบล่าสุด auth path ของ route นี้ใช้ current-session permission path ก่อนในเคส active store เดียวกันเพื่อตัด membership lookup บน interaction path
+  - `GET /api/stock/products` เปลี่ยน query page หลักไปใช้ raw SQL + `inventory_balances` แทน aggregate `inventory_movements`; inventory path merge `products + balances` ให้เหลือ query phase เดียวและไม่โหลด `unitOptions` แล้ว
+  - read helpers ที่เคย aggregate movement (`getInventoryBalancesByStore*`, `getStockBalanceByProduct`, current stock ใน purchase) ตอนนี้อ่านจาก `inventory_balances`
+  - write paths ที่ insert `inventory_movements` ใน stock/order/purchase flow จะ sync `inventory_balances` ใน transaction เดียวกันแล้ว เพื่อไม่ให้ read model stale หลังมี movement ใหม่
+  - `GET /api/products/search?q&includeStock=true` ตัด N+1 เดิมออก โดยไม่เรียก `getInventoryBalanceForProduct()` ซ้ำทีละสินค้าอีกแล้ว แต่ map `stockOnHand/stockReserved/stockAvailable` ที่ query layer โหลดมาอยู่แล้วเป็น field `stock`
+  - `GET /api/products` รอบล่าสุดใช้ current-session permission path แล้ว และส่ง `Cache-Control: no-store`, `Server-Timing`, `latency`, `count` เพื่อ trace products list ได้แบบเดียวกับ stock routes
+  - หน้า `/products` รอบล่าสุดให้ SSR อ่าน `q/categoryId/status/sort` จาก URL แล้ว และ client จะไม่ยิง `/api/products` ซ้ำทันทีหลัง hydrate ถ้า filter ปัจจุบันยังตรงกับ SSR seed เดิม
+  - `GET /api/stock/movements` (ทั้ง overview และ `view=history`) ส่ง `Cache-Control: no-store`, `Server-Timing`, และ `latency` แล้ว เพื่อให้ trace history tab ได้ละเอียดเหมือน stock/products
+  - ลด work ซ้ำตอนสลับแท็บของหน้า `/stock` เพิ่ม:
+    - `StockMovementHistory` จะไม่ background refetch ทันทีถ้ามี SSR/cached result สำหรับ key ปัจจุบันอยู่แล้ว
+    - `PurchaseOrderList` จะไม่ `reloadFirstPage()` ทันทีหลัง mount อีกแล้วถ้ามี SSR initial list อยู่
+    - `pending-rate` queue ของ purchase tab จะ auto-load เฉพาะตอน workspace เป็น `MONTH_END` และ dedupe key ซ้ำจาก effect
+  - เพิ่ม migration [0045_thankful_zuras.sql](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/drizzle/0045_thankful_zuras.sql) สำหรับ index latency batch แรก:
+    - `inventory_movements(store_id, product_id)`
+    - `products(store_id, name)`
+    - `products(store_id, category_id, name)`
+  - เพิ่ม migration [0046_black_korg.sql](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/drizzle/0046_black_korg.sql) สำหรับ `inventory_balances` พร้อม index:
+    - `inventory_balances(product_id)`
+    - `inventory_balances(store_id, available_base, product_id)`
+    - `inventory_balances(store_id, on_hand_base, product_id)`
+  - `scripts/repair-migrations.mjs` รองรับ ensure index ชุด 0045 ข้างต้นแล้วด้วย เพื่อให้ฐานที่ต้องใช้ `npm run db:repair` ยังได้ index ชุด latency นี้แม้ตก migration
+  - เพิ่ม perf instrumentation แบบ phase-based:
+    - server/page/API จะ log แยก `auth`, `db`, `logic`, `ui`
+    - `lib/inventory/queries.ts` แยก step ภายใน stock products/movements query ให้เห็นว่าเวลาหายที่ `products`, `balances`, `count`, หรือ `assemble`
+    - client ฝั่ง `StockInventoryView` และ `StockMovementHistory` จะ log `network`, `parseJson`, `commit` และ parse `Server-Timing` จาก response เพื่อเทียบ server-vs-client cost ได้ตรงขึ้น
+    - auth/RBAC path ถูกแยกเพิ่มแล้ว: `lib/auth/session.ts` จะ log `token.authorizationHeader`, `token.cookieStore`, `token.verify`, `redis.tokenState`, `redis.tokenVersion`; `lib/rbac/access.ts` จะ log `db.membership`, `db.ownerPermissionCatalog`, `db.rolePermissionKeys`, และ `cache.rolePermissionKeys` เพื่อไล่ bottleneck ใน `sessionAndPermissions.parallel` ได้ตรงจุด
+  - รอบล่าสุดตัด `users.ui_locale` DB lookup ออกจาก `getSession()` แล้ว และใช้ `uiLocale` จาก session claim โดยตรง; flow `PATCH /api/settings/account` (`update_locale`) ยัง refresh session cookie ใหม่เหมือนเดิม จึงไม่ต้อง sync locale จาก DB ทุก request
+  - `getUserPermissionsForCurrentSession()` ของ SSR/UI ใช้ `activeRoleId/activeRoleName` จาก session claim ก่อนเพื่อตัด membership query ใน current session; ฝั่ง API `enforcePermission()`/`hasPermission()` ยังใช้ DB membership path เดิมสำหรับ authorization จริง
+  - เพิ่ม Redis cache แบบ short TTL สำหรับ metadata ของหน้า `/stock`:
+    - `categories`
+    - `storeThresholds`
+  - invalidate cache ข้างต้นเมื่อ:
+    - `PATCH /api/settings/store`
+    - `POST/PATCH/DELETE /api/products/categories`
+  - role permission cache ของ current-session UI จะถูก invalidate ตอน `PATCH /api/settings/roles/[roleId]`
+  - split stock page data path ให้ตรง use case มากขึ้น:
+    - inventory path ใช้รายการสินค้าที่ไม่มี `unitOptions`
+    - recording path ลด SSR payload แล้ว: initial list จะมีแค่ base unit และค่อย lazy-load `unitOptions` พร้อม stock snapshot ของสินค้าที่ถูกเลือกผ่าน `GET /api/stock/products?productId=...&includeUnitOptions=true`
+- หน้า `/stock` ลด SSR critical path เพิ่มแล้ว:
+  - เดิม server render preload พร้อมกันทั้ง `inventory + purchase + recording + history`
+  - ตอนนี้ preload เฉพาะ active tab ตาม query `tab` เท่านั้น
+  - แท็บอื่นยังคง pattern keep-mounted ฝั่ง client ไว้ แต่ระหว่างเปลี่ยนแท็บจะโชว์ skeleton รอ response ของ tab ใหม่แทนการแบก query ข้ามแท็บตั้งแต่แรก
+  - หน้า `/stock` ใส่ route config `runtime=nodejs`, `dynamic=force-dynamic`, `preferredRegion=["hnd1","sin1"]` แล้ว เพื่อ align กับ fast Turso read strategy
+
 - หน้า create order (`/orders/new`) ปรับ search UI ให้ตรงกับหน้า products มากขึ้นแล้ว:
   - ช่องค้นหาสินค้าหลักเพิ่มไอคอน `search` ด้านซ้าย
   - ปุ่มสแกนข้าง search bar เปลี่ยนจาก `ScanLine` เป็น `ScanBarcode` แบบเดียวกับหน้า products

@@ -5,6 +5,10 @@ import { alias } from "drizzle-orm/sqlite-core";
 
 import { db } from "@/lib/db/client";
 import {
+  applyInventoryBalanceMovements,
+  getInventoryBalanceSnapshot,
+} from "@/lib/inventory/balances";
+import {
   inventoryMovements,
   products,
   purchaseOrderItems,
@@ -727,6 +731,15 @@ export async function insertInventoryMovementsForPO(
   const executor: PurchaseRepoExecutor = tx ?? db;
   if (movements.length === 0) return;
   await executor.insert(inventoryMovements).values(movements);
+  await applyInventoryBalanceMovements(
+    movements.map((movement) => ({
+      storeId: movement.storeId,
+      productId: movement.productId,
+      type: movement.type,
+      qtyBase: movement.qtyBase,
+    })),
+    tx,
+  );
 }
 
 export async function updateProductCostBase(
@@ -746,26 +759,8 @@ export async function getProductCurrentStock(
   productId: string,
   tx?: PurchaseRepoTx,
 ): Promise<number> {
-  const executor: PurchaseRepoExecutor = tx ?? db;
-  const [row] = await executor
-    .select({
-      onHand: sql<number>`coalesce(sum(case
-        when ${inventoryMovements.type} = 'IN' then ${inventoryMovements.qtyBase}
-        when ${inventoryMovements.type} = 'RETURN' then ${inventoryMovements.qtyBase}
-        when ${inventoryMovements.type} = 'OUT' then -${inventoryMovements.qtyBase}
-        when ${inventoryMovements.type} = 'ADJUST' then ${inventoryMovements.qtyBase}
-        else 0
-      end), 0)`,
-    })
-    .from(inventoryMovements)
-    .where(
-      and(
-        eq(inventoryMovements.storeId, storeId),
-        eq(inventoryMovements.productId, productId),
-      ),
-    );
-
-  return Number(row?.onHand ?? 0);
+  const row = await getInventoryBalanceSnapshot(storeId, productId, tx);
+  return row.onHand;
 }
 
 export async function getProductCostBase(

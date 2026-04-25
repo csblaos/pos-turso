@@ -47,6 +47,9 @@ npm run po:audit:integrity
 - `app/api/` API endpoints
 - `components/` React UI components
 - `lib/` shared logic และ query helper
+- `lib/db/client.ts`
+  - export ทั้ง Drizzle client (`db`) และ raw libsql client (`getLibsqlClient()`)
+  - read path ที่ sensitive ต่อ latency สามารถใช้ `getLibsqlClient().execute(...)` ตรงได้ โดยยัง reuse singleton Turso client ตัวเดียวกันทั้งโปรเจกต์
 - `lib/i18n/` โครง i18n/ข้อความ UI (ไทย/ລາວ/English) และ helper locale
   - key กลุ่ม `tab.*` ใช้กับ bottom tabs ของ storefront
   - key กลุ่ม `localeName.*` ใช้แสดงชื่อภาษาในหน้า `/settings/language` โดย fix เป็น native labels `ไทย / ລາວ / English` ไม่แปลตาม locale ปัจจุบัน
@@ -360,6 +363,8 @@ npm run po:audit:integrity
 - Products:
   - หน้า `/products` มีปุ่ม `รีเฟรช` แบบ manual ที่ header (ไม่มี auto-refresh)
   - หน้า `/products` ใช้ server-side pagination สำหรับรายการสินค้า (รองรับ `q/category/status/sort/page/pageSize`) และปุ่ม `โหลดเพิ่มเติม` จะดึงหน้าถัดไปจาก API จริง
+  - server render ของหน้า `/products` อ่าน filter หลักจาก URL แล้ว (`q`, `categoryId`, `status`, `sort`) เพื่อ seed initial list ให้ตรงกับ deep link และไม่ต้องรีเฟรช `/api/products` ซ้ำทันทีหลัง hydrate เมื่อ filter ยังตรงกับ SSR payload
+  - `GET /api/products` ใช้ current-session permission path แล้ว, ส่ง `Cache-Control: no-store`, `Server-Timing`, และ `latency` เพื่อ trace read path ของ products list ได้ละเอียดขึ้น
   - เพิ่มโครงสร้างฐานข้อมูล Variant แบบ Phase 1 แล้ว (`product_models`, `product_model_attributes`, `product_model_attribute_values` + คอลัมน์เชื่อมใน `products`) โดยยังไม่บังคับเปลี่ยน UX เดิมทันที
   - ฟอร์ม `เพิ่ม/แก้ไขสินค้า` ใน `/products` รองรับโหมด Variant แล้ว (กำหนด `model`, `variant label`, `sort order`, และ option key/value) โดย backend จะผูก `products.model_id` และเติม dictionary ใน `product_model_attributes`/`product_model_attribute_values` ให้อัตโนมัติ
   - ฟอร์ม `เพิ่มสินค้า` ช่อง `ราคาขาย` ปรับเป็นค่าว่างเริ่มต้น + `placeholder: 0`; หากผู้ใช้ไม่กรอก ระบบยังตีความค่าเป็น `0` ตอน submit (ลดการต้องลบ `0` ก่อนพิมพ์)
@@ -508,10 +513,33 @@ npm run po:audit:integrity
     - PO payment / reversal จะลง cash flow ด้วย แต่ `accountId` ยังเป็น `null` และ metadata ระบุ `accountResolution=UNASSIGNED` ไปก่อนจนกว่าจะมี UI เลือกบัญชีต้นทางจริง
   - แท็บ `สั่งซื้อ (PO)` ใช้ cache รายละเอียด PO ต่อ `poId` แบบ on-demand (ยกเลิก intent-driven prefetch hover/focus/touch) และยัง invalidate cache เมื่อมีการแก้ไข/เปลี่ยนสถานะ
   - หน้า `/stock` ใช้ `StockTabs` แบบ keep-mounted (mount ครั้งแรกตามแท็บที่เข้าแล้วคง state เดิมไว้) ลดการรีเซ็ตฟอร์ม/รายการเมื่อสลับแท็บ
+  - server render ของหน้า `/stock` ถูก optimize แล้ว: จะ preload เฉพาะข้อมูลของ active tab ตาม query `tab` เท่านั้น (`inventory` / `purchase` / `recording` / `history`); แท็บอื่นแสดง skeleton ระหว่างรอ navigation fetch แทนการ preload ข้ามแท็บใน critical path
   - ทั้ง 4 แท็บหลัก (`ดูสต็อก`, `สั่งซื้อ`, `บันทึกสต็อก`, `ประวัติ`) มี toolbar มาตรฐาน: `รีเฟรชแท็บนี้` + เวลา `อัปเดตล่าสุด HH:mm`
   - แท็บ `ดูสต็อก` ใช้ `GET /api/stock/products?page&pageSize&categoryId&q` แบบแบ่งหน้า (เริ่มจากชุดแรก + ปุ่ม `โหลดเพิ่ม`) และมี `รีเฟรชแท็บนี้` เพื่อดึงสถานะล่าสุดของรายการสินค้า; `inventoryQ` เป็น server-backed search แล้ว ไม่ได้กรองเฉพาะรายการที่โหลดค้างอยู่บน client
   - แท็บ `ดูสต็อก` เพิ่ม filter หมวดหมู่สินค้า (`inventoryCategoryId`) และ sync state ลง URL แล้ว (`inventoryQ`, `inventoryFilter`, `inventorySort`, `inventoryCategoryId`) โดย sync เฉพาะตอน active tab เป็น `inventory` เพื่อลด race condition เขียน query ข้ามแท็บ; server render ของหน้า `/stock` จะอ่าน `inventoryQ/inventoryCategoryId` มาตั้งต้นให้ list แรกตรงกับ deep link ทันที
   - สแกนบาร์โค้ดในแท็บ `ดูสต็อก` จะเติมค่า barcode ลง search input ทันที, แสดง loading ระหว่างรอ fetch รายการสต็อกจาก `GET /api/stock/products?...&q=...`, และยังใช้ `GET /api/products/search?q&includeStock=true` เป็น exact-barcode resolver สำหรับ toast/guard กรณีเจอสินค้าแต่ติด filter หมวดหมู่; scanner modal จะเริ่มกล้องเฉพาะตอนเปิดจริงเพื่อลดความเสี่ยงเปิดกล้องค้างตอนปิดแผ่นสแกน
+  - รอบล่าสุด read path ที่กระทบ latency โดยตรงถูกเริ่ม optimize แบบ incremental แล้ว:
+    - `GET /api/stock/current`, `GET /api/stock/products`, `GET /api/products/search`, และ `GET /api/stock/movements` ใส่ `runtime=nodejs`, `dynamic=force-dynamic`, `preferredRegion=["hnd1","sin1"]` หรือส่ง header live-read ที่สอดคล้องกับ path นี้
+    - route สำคัญข้างต้นส่ง `Cache-Control: no-store`, `Server-Timing`, และ field `latency` ใน JSON response
+    - `GET /api/stock/current` ใช้ raw SQL ผ่าน shared libsql client โดยตรง และรอบล่าสุด auth path ของ route นี้ใช้ current-session role/permission cache แทน membership lookup เต็มในเคส active store เดียวกัน
+    - เพิ่ม read model `inventory_balances` แล้ว:
+      - schema อยู่ใน `lib/db/schema/tables.ts`
+      - migration/backfill อยู่ใน `drizzle/0046_black_korg.sql`
+      - `npm run db:repair` จะสร้าง/rebuild ตารางนี้จาก `inventory_movements` ให้ด้วย
+      - hot read paths (`/stock`, `/api/stock/current`, order stock validation, purchase current stock) อ่านจาก summary table นี้แทน aggregate movement ตรง
+      - write paths ที่ insert `inventory_movements` ใน stock/order/purchase flow จะ sync `inventory_balances` ใน transaction เดียวกันผ่าน helper `lib/inventory/balances.ts`
+    - `GET /api/stock/products` เปลี่ยน page query หลักไปใช้ raw SQL + `inventory_balances` และ inventory path merge `products + balances` ให้เหลือ query phase เดียว
+    - inventory path ของหน้า `/stock` ไม่โหลด `unitOptions` แล้ว
+    - recording path ของหน้า `/stock` ก็ลด SSR payload ลงแล้ว: initial list โหลดแค่ base unit ก่อน และจะ lazy-load `unitOptions` พร้อม stock snapshot ของสินค้าที่ถูกเลือกผ่าน `GET /api/stock/products?productId=...&includeUnitOptions=true`
+    - `GET /api/products/search?q&includeStock=true` ตัด N+1 เดิมออก โดย reuse stock fields ที่ query layer โหลดมาอยู่แล้วแทนการยิง balance ซ้ำทีละสินค้า
+    - perf logging ถูกแยก phase มากขึ้นแล้ว: server/API จะ log `auth`, `db`, `logic`, `ui`; client ฝั่ง stock tabs จะ log `network`, `parseJson`, และ `commit` พร้อมอ่าน `Server-Timing` กลับมาแสดงเป็น breakdown
+    - auth/RBAC path แยก timing ละเอียดยิ่งขึ้นแล้ว: `getSession()` จะ log `token.authorizationHeader`, `token.cookieStore`, `token.verify`, `redis.tokenState`, `redis.tokenVersion`; ส่วน `getUserPermissionsForCurrentSession()` จะ log `db.membership`, `db.ownerPermissionCatalog`, `db.rolePermissionKeys` หรือ `cache.rolePermissionKeys` ตาม path ที่ใช้
+    - รอบล่าสุด `getSession()` เลิก sync `users.ui_locale` จาก DB ทุก request แล้ว และใช้ `uiLocale` จาก session claim โดยตรง; หน้าเปลี่ยนภาษายังคง refresh session cookie ใหม่ตอน `PATCH /api/settings/account` (`update_locale`)
+    - `getUserPermissionsForCurrentSession()` ของ SSR/UI ใช้ `activeRoleId/activeRoleName` จาก session claim ก่อน เพื่อตัด membership query บน current session; สำหรับ non-owner จะ cache role permission keys แบบ short TTL เพิ่ม
+    - หน้า `/stock` cache metadata ที่เปลี่ยนไม่บ่อยแล้ว (`categories`, `storeThresholds`) แบบ short TTL ผ่าน Redis; invalidate ตอนแก้หมวดสินค้าและตอนอัปเดต store settings
+    - แท็บ `history` ของหน้า `/stock` ใช้ SSR payload/cached state เป็นแหล่งหลักตอนเปิดแท็บแล้ว และจะไม่ background refetch ทันทีถ้ามี cache ของ key ปัจจุบันอยู่ เพื่อลด API ซ้ำตอนสลับแท็บ
+    - แท็บ `purchase` ของหน้า `/stock` จะไม่ `reloadFirstPage()` ทันทีหลัง mount อีกแล้วถ้ามี SSR initial list อยู่; queue `pending-rate` จะ auto-load เฉพาะตอน workspace ปัจจุบันเป็น `MONTH_END` และมี dedupe key กัน effect ซ้ำใน dev/strict mode
+    - `npm run db:repair` รองรับ ensure index ชุด latency batch แรกแล้วด้วย (`inventory_movements_store_product_idx`, `products_store_name_idx`, `products_store_category_name_idx`) สำหรับฐานที่ตก migration แต่ยังต้องการ compat หลัง deploy
   - URL sync ของแท็บ `ดูสต็อก` (`inventoryQ/inventoryFilter/inventorySort/inventoryCategoryId`) ใช้ `window.history.replaceState(...)` แล้ว ไม่ใช้ `router.replace(...)` สำหรับการค้นหา/กรองในแท็บ จึงไม่กระตุ้นให้หน้า `/stock` rerender ทั้งหน้า; loading ระหว่างค้นหาจึงเกิดเฉพาะ section รายการสินค้า ไม่ใช่ skeleton ทั้งแท็บ และไม่มี loading helper text ใต้ search input แล้ว
   - ปุ่ม `X` ล้างคำค้นของแท็บ `ดูสต็อก` จะ clear query แบบ immediate แล้ว และถ้าต้อง fetch ใหม่จาก state ว่างจะใช้ list-only skeleton แทน full-tab loading เพื่อคง toolbar/search/filter ของแท็บไว้
   - ไอคอนด้านขวาใน search input ของแท็บ `ดูสต็อก` (`spinner`/`X`) ใช้ right-slot container เดียวกันแล้ว และเปลี่ยน spinner เป็น `Loader2` เพื่อให้ภาพหมุนนิ่งขึ้น ลดอาการดูเหมือน icon ไหลลงระหว่าง animate

@@ -18,6 +18,7 @@ import {
   hashRequestBody,
   safeMarkIdempotencyFailed,
 } from "@/server/services/idempotency.service";
+import { createPerfScope } from "@/server/perf/perf";
 
 const HISTORY_TYPE_VALUES = new Set([
   "IN",
@@ -65,8 +66,13 @@ const getForbiddenStockMovementFields = (payload: unknown): string[] => {
 };
 
 export async function GET(request: Request) {
+  const perf = createPerfScope("api.stock.movements");
   try {
-    const { storeId } = await enforcePermission("inventory.view");
+    const { storeId } = await perf.step(
+      "auth.permission",
+      () => enforcePermission("inventory.view"),
+      { kind: "auth", serverTimingName: "auth" },
+    );
     const { searchParams } = new URL(request.url);
     const view = searchParams.get("view");
 
@@ -105,38 +111,92 @@ export async function GET(request: Request) {
           ? (typeParam as "IN" | "OUT" | "RESERVE" | "RELEASE" | "ADJUST" | "RETURN")
           : undefined;
 
-      const { movements, total } = await getStockMovementsPage({
-        storeId,
-        page,
-        pageSize,
-        filters: {
-          type: normalizedType,
-          productId: productId || undefined,
-          query: q || undefined,
-          dateFrom: dateFromRaw || undefined,
-          dateTo: dateToRaw || undefined,
-        },
-      });
+      const { movements, total } = await perf.step(
+        "db.historyPage",
+        () =>
+          getStockMovementsPage({
+            storeId,
+            page,
+            pageSize,
+            filters: {
+              type: normalizedType,
+              productId: productId || undefined,
+              query: q || undefined,
+              dateFrom: dateFromRaw || undefined,
+              dateTo: dateToRaw || undefined,
+            },
+          }),
+        { kind: "db", serverTimingName: "db" },
+      );
+      const hasMore = await perf.step(
+        "logic.hasMore",
+        () => page * pageSize < total,
+        { kind: "logic", serverTimingName: "logic" },
+      );
+      const latency = perf.elapsedMs();
+      const response = await perf.step(
+        "response.json",
+        () =>
+          NextResponse.json(
+            {
+              ok: true,
+              movements,
+              page,
+              pageSize,
+              total,
+              hasMore,
+              latency,
+            },
+            {
+              headers: {
+                "Cache-Control": "no-store",
+              },
+            },
+          ),
+        { kind: "logic", serverTimingName: "response" },
+      );
+      response.headers.set(
+        "Server-Timing",
+        perf.serverTiming({ includeTotal: true, totalName: "app" }),
+      );
 
-      return NextResponse.json({
-        ok: true,
-        movements,
-        page,
-        pageSize,
-        total,
-        hasMore: page * pageSize < total,
-      });
+      return response;
     }
 
-    const { products, movements } = await getStockOverview({
-      storeId,
-      movementLimit: 30,
-      useCache: false,
-    });
+    const { products, movements } = await perf.step(
+      "db.overview",
+      () =>
+        getStockOverview({
+          storeId,
+          movementLimit: 30,
+          useCache: false,
+        }),
+      { kind: "db", serverTimingName: "db" },
+    );
+    const latency = perf.elapsedMs();
+    const response = await perf.step(
+      "response.json",
+      () =>
+        NextResponse.json(
+          { ok: true, products, movements, latency },
+          {
+            headers: {
+              "Cache-Control": "no-store",
+            },
+          },
+        ),
+      { kind: "logic", serverTimingName: "response" },
+    );
+    response.headers.set(
+      "Server-Timing",
+      perf.serverTiming({ includeTotal: true, totalName: "app" }),
+    );
 
-    return NextResponse.json({ ok: true, products, movements });
+    return response;
   } catch (error) {
     return toRBACErrorResponse(error);
+  } finally {
+    perf.end();
   }
 }
 

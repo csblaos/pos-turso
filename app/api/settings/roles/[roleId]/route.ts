@@ -6,7 +6,11 @@ import { invalidateUserSessions } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { permissions, rolePermissions, roles, storeMembers } from "@/lib/db/schema";
 import { timeDbQuery } from "@/lib/perf/server";
-import { enforcePermission, toRBACErrorResponse } from "@/lib/rbac/access";
+import {
+  enforcePermission,
+  invalidateRolePermissionKeysCache,
+  toRBACErrorResponse,
+} from "@/lib/rbac/access";
 import { getPermissionCatalog } from "@/lib/rbac/queries";
 import { safeLogAuditEvent } from "@/server/services/audit.service";
 
@@ -225,6 +229,7 @@ export async function PATCH(
         .where(and(eq(storeMembers.storeId, storeId), eq(storeMembers.roleId, roleId)));
 
       const userIds = [...new Set(roleMemberRows.map((row) => row.userId))];
+      await invalidateRolePermissionKeysCache(roleId);
       await Promise.all(userIds.map((userId) => invalidateUserSessions(userId)));
     }
 

@@ -15,6 +15,7 @@ import {
 import { formatLaosAddress, getDistrictById, getProvinceById } from "@/lib/location/laos-address";
 import { RBACError, enforcePermission, hasPermission, toRBACErrorResponse } from "@/lib/rbac/access";
 import { getStoreFinancialConfig } from "@/lib/stores/financial";
+import { invalidateStockPageMetadataCache } from "@/lib/stock/page-cache";
 import { deleteStoreLogoFromR2, isR2Configured, uploadStoreLogoToR2 } from "@/lib/storage/r2";
 import { getGlobalStoreLogoPolicy } from "@/lib/system-config/policy";
 import { safeLogAuditEvent } from "@/server/services/audit.service";
@@ -350,6 +351,7 @@ async function patchByMultipartForm(
     request,
   });
 
+  await invalidateStockPageMetadataCache(storeId);
   return NextResponse.json({
     ok: true,
     warning: warningMessage,
@@ -580,6 +582,7 @@ async function patchByJsonBody(
     request,
   });
 
+  await invalidateStockPageMetadataCache(storeId);
   return NextResponse.json({
     ok: true,
     store: nextStore,

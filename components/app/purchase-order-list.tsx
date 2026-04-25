@@ -969,6 +969,8 @@ export function PurchaseOrderList({
   const [apPanelPreset, setApPanelPreset] = useState<PurchaseApPanelPreset | null>(null);
   const [savedPresets, setSavedPresets] = useState<SavedPurchasePreset[]>([]);
   const hasLoadedFreshPurchaseListRef = useRef(false);
+  const skippedInitialPurchaseRefreshRef = useRef(false);
+  const lastAutoPendingQueueKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     setPoList(initialList);
@@ -1815,6 +1817,16 @@ export function PurchaseOrderList({
     }
   }, [pendingQueueQuery, pendingReceivedFrom, pendingReceivedTo, uiLocale]);
 
+  const pendingQueueRequestKey = useMemo(
+    () =>
+      [
+        pendingQueueQuery.trim().toLowerCase(),
+        pendingReceivedFrom,
+        pendingReceivedTo,
+      ].join("|"),
+    [pendingQueueQuery, pendingReceivedFrom, pendingReceivedTo],
+  );
+
   const reloadFirstPage = useCallback(async () => {
     setIsRefreshingList(true);
     try {
@@ -1862,15 +1874,23 @@ export function PurchaseOrderList({
       return;
     }
     hasLoadedFreshPurchaseListRef.current = true;
+    if (!skippedInitialPurchaseRefreshRef.current) {
+      skippedInitialPurchaseRefreshRef.current = true;
+      return;
+    }
     void reloadFirstPage();
   }, [isPurchaseTabActive, reloadFirstPage]);
 
   useEffect(() => {
-    if (!isPurchaseTabActive) {
+    if (!isPurchaseTabActive || workspaceTab !== "MONTH_END") {
       return;
     }
+    if (lastAutoPendingQueueKeyRef.current === pendingQueueRequestKey) {
+      return;
+    }
+    lastAutoPendingQueueKeyRef.current = pendingQueueRequestKey;
     void loadPendingQueue();
-  }, [isPurchaseTabActive, loadPendingQueue]);
+  }, [isPurchaseTabActive, loadPendingQueue, pendingQueueRequestKey, workspaceTab]);
 
   useEffect(() => {
     if (typeof window === "undefined") {

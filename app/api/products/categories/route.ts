@@ -8,6 +8,7 @@ import { db } from "@/lib/db/client";
 import { productCategories } from "@/lib/db/schema";
 import { enforcePermission, toRBACErrorResponse } from "@/lib/rbac/access";
 import { listCategories } from "@/lib/products/service";
+import { invalidateStockPageMetadataCache } from "@/lib/stock/page-cache";
 
 const createCategorySchema = z.object({
   name: z.string().trim().min(1, "กรุณากรอกชื่อหมวดหมู่").max(120),
@@ -75,6 +76,7 @@ export async function POST(request: Request) {
       sortOrder: parsed.data.sortOrder,
     });
 
+    await invalidateStockPageMetadataCache(storeId);
     const categories = await listCategories(storeId);
     return NextResponse.json({ ok: true, categories }, { status: 201 });
   } catch (error) {
@@ -151,6 +153,7 @@ export async function PATCH(request: Request) {
         );
     }
 
+    await invalidateStockPageMetadataCache(storeId);
     const categories = await listCategories(storeId);
     return NextResponse.json({ ok: true, categories });
   } catch (error) {
@@ -179,6 +182,7 @@ export async function DELETE(request: Request) {
         ),
       );
 
+    await invalidateStockPageMetadataCache(storeId);
     const categories = await listCategories(storeId);
     return NextResponse.json({ ok: true, categories });
   } catch (error) {

@@ -28,6 +28,11 @@ import { uiLocaleToDateLocale } from "@/lib/i18n/locales";
 import { t, type MessageKey } from "@/lib/i18n/messages";
 import { useUiLocale } from "@/lib/i18n/use-ui-locale";
 import type { InventoryMovementView } from "@/lib/inventory/queries";
+import {
+  logClientCommit,
+  logClientPerf,
+  logServerTimingBreakdown,
+} from "@/lib/perf/client";
 
 type StockMovementHistoryProps = {
   movements: InventoryMovementView[];
@@ -418,6 +423,7 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
   const historyCacheRef = useRef<
     Map<string, { movements: InventoryMovementView[]; total: number; fetchedAt: string }>
   >(new Map());
+  const hasConsumedInitialHistoryRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -557,9 +563,17 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
           params.set("dateTo", appliedDateTo);
         }
 
+        const fetchStartedAt = performance.now();
         const res = await authFetch(`/api/stock/movements?${params.toString()}`, {
           signal: options?.signal,
         });
+        logClientPerf(
+          "stock.history.fetch.network",
+          performance.now() - fetchStartedAt,
+          "network",
+        );
+        logServerTimingBreakdown("stock.history.fetch", res.headers.get("Server-Timing"));
+        const parseStartedAt = performance.now();
         const data = (await res.json().catch(() => null)) as
           | {
               ok?: boolean;
@@ -568,6 +582,11 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
               message?: string;
             }
           | null;
+        logClientPerf(
+          "stock.history.fetch.parseJson",
+          performance.now() - parseStartedAt,
+          "logic",
+        );
 
         if (options?.signal?.aborted) {
           return;
@@ -585,6 +604,7 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
 
         const nextTotal = Number(data.total ?? data.movements.length);
         const fetchedAt = new Date().toISOString();
+        const commitStartedAt = performance.now();
         setMovementItems(data.movements);
         setTotalItems(nextTotal);
         setErrorMessage(null);
@@ -600,6 +620,7 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
             historyCacheRef.current.delete(oldestKey);
           }
         }
+        logClientCommit("stock.history.commit", commitStartedAt);
       } catch {
         if (options?.signal?.aborted) {
           return;
@@ -639,12 +660,15 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
       setTotalItems(cached.total);
       setErrorMessage(null);
       setLastUpdatedAt(cached.fetchedAt);
-      void fetchHistory({ signal: controller.signal, background: true });
-    } else {
-      void fetchHistory({ signal: controller.signal });
+      if (currentCacheKey === initialHistoryCacheKey && !hasConsumedInitialHistoryRef.current) {
+        hasConsumedInitialHistoryRef.current = true;
+      }
+      return () => controller.abort();
     }
+
+    void fetchHistory({ signal: controller.signal });
     return () => controller.abort();
-  }, [currentCacheKey, fetchHistory, isHistoryTabActive]);
+  }, [currentCacheKey, fetchHistory, initialHistoryCacheKey, isHistoryTabActive]);
 
   const totalPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE));
   const currentPage = Math.min(page, totalPages);

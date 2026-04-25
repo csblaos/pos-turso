@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { auditEvents, inventoryMovements, orderItems, orders } from "@/lib/db/schema";
 import { parseStoreCurrency } from "@/lib/finance/store-financial";
+import { applyInventoryBalanceMovements } from "@/lib/inventory/balances";
 import { getInventoryBalancesByStore } from "@/lib/inventory/queries";
 import { computeOrderTotals } from "@/lib/orders/totals";
 import { enforcePermission, toRBACErrorResponse } from "@/lib/rbac/access";
@@ -644,33 +645,33 @@ export async function POST(request: Request) {
         const reserveNotePrefix = isPickupLater
           ? "จองสต็อกสำหรับรับที่ร้าน"
           : "จองสต็อกสำหรับออเดอร์ค้างจ่าย";
-        await tx.insert(inventoryMovements).values(
-          normalizedItems.map((item) => ({
-            storeId,
-            productId: item.productId,
-            type: "RESERVE" as const,
-            qtyBase: item.qtyBase,
-            refType: "ORDER" as const,
-            refId: orderId,
-            note: `${reserveNotePrefix} ${orderNo}`,
-            createdBy: session.userId,
-          })),
-        );
+        const reserveMovements = normalizedItems.map((item) => ({
+          storeId,
+          productId: item.productId,
+          type: "RESERVE" as const,
+          qtyBase: item.qtyBase,
+          refType: "ORDER" as const,
+          refId: orderId,
+          note: `${reserveNotePrefix} ${orderNo}`,
+          createdBy: session.userId,
+        }));
+        await tx.insert(inventoryMovements).values(reserveMovements);
+        await applyInventoryBalanceMovements(reserveMovements, tx);
       }
 
       if (shouldStockOutOnCreate && normalizedItems.length > 0) {
-        await tx.insert(inventoryMovements).values(
-          normalizedItems.map((item) => ({
-            storeId,
-            productId: item.productId,
-            type: "OUT" as const,
-            qtyBase: item.qtyBase,
-            refType: "ORDER" as const,
-            refId: orderId,
-            note: `ตัดสต็อกทันทีจากการขายหน้าร้าน ${orderNo}`,
-            createdBy: session.userId,
-          })),
-        );
+        const stockOutMovements = normalizedItems.map((item) => ({
+          storeId,
+          productId: item.productId,
+          type: "OUT" as const,
+          qtyBase: item.qtyBase,
+          refType: "ORDER" as const,
+          refId: orderId,
+          note: `ตัดสต็อกทันทีจากการขายหน้าร้าน ${orderNo}`,
+          createdBy: session.userId,
+        }));
+        await tx.insert(inventoryMovements).values(stockOutMovements);
+        await applyInventoryBalanceMovements(stockOutMovements, tx);
       }
 
       if (isPrepaidAtCreate) {

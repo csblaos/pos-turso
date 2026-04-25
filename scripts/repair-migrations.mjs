@@ -965,6 +965,88 @@ async function ensureSchemaCompatForLatestAuthChanges() {
     "create index if not exists `products_category_id_idx` on `products` (`category_id`)",
   );
   console.info("[db:repair] ensured products.category_id index");
+  await client.execute(
+    "create index if not exists `products_store_name_idx` on `products` (`store_id`, `name`)",
+  );
+  await client.execute(
+    "create index if not exists `products_store_category_name_idx` on `products` (`store_id`, `category_id`, `name`)",
+  );
+  console.info("[db:repair] ensured products latency indexes");
+
+  if (await tableExists("inventory_movements")) {
+    await client.execute(
+      "create index if not exists `inventory_movements_store_product_idx` on `inventory_movements` (`store_id`, `product_id`)",
+    );
+    console.info("[db:repair] ensured inventory_movements latency index");
+  }
+
+  if ((await tableExists("stores")) && (await tableExists("products"))) {
+    await client.execute(`
+      create table if not exists \`inventory_balances\` (
+        \`store_id\` text not null references \`stores\`(\`id\`) on delete cascade,
+        \`product_id\` text not null references \`products\`(\`id\`) on delete restrict,
+        \`on_hand_base\` integer not null default 0,
+        \`reserved_base\` integer not null default 0,
+        \`available_base\` integer not null default 0,
+        \`updated_at\` text not null default (CURRENT_TIMESTAMP),
+        primary key (\`store_id\`, \`product_id\`)
+      )
+    `);
+    await client.execute(
+      "create index if not exists `inventory_balances_product_id_idx` on `inventory_balances` (`product_id`)",
+    );
+    await client.execute(
+      "create index if not exists `inventory_balances_store_available_idx` on `inventory_balances` (`store_id`, `available_base`, `product_id`)",
+    );
+    await client.execute(
+      "create index if not exists `inventory_balances_store_on_hand_idx` on `inventory_balances` (`store_id`, `on_hand_base`, `product_id`)",
+    );
+    console.info("[db:repair] ensured inventory_balances table and indexes");
+  }
+
+  if ((await tableExists("inventory_balances")) && (await tableExists("inventory_movements"))) {
+    await client.execute("delete from `inventory_balances`");
+    await client.execute(`
+      insert into \`inventory_balances\` (
+        \`store_id\`,
+        \`product_id\`,
+        \`on_hand_base\`,
+        \`reserved_base\`,
+        \`available_base\`,
+        \`updated_at\`
+      )
+      select
+        \`store_id\`,
+        \`product_id\`,
+        coalesce(sum(case
+          when \`type\` = 'IN' then \`qty_base\`
+          when \`type\` = 'RETURN' then \`qty_base\`
+          when \`type\` = 'OUT' then -\`qty_base\`
+          when \`type\` = 'ADJUST' then \`qty_base\`
+          else 0
+        end), 0) as \`on_hand_base\`,
+        coalesce(sum(case
+          when \`type\` = 'RESERVE' then \`qty_base\`
+          when \`type\` = 'RELEASE' then -\`qty_base\`
+          else 0
+        end), 0) as \`reserved_base\`,
+        coalesce(sum(case
+          when \`type\` = 'IN' then \`qty_base\`
+          when \`type\` = 'RETURN' then \`qty_base\`
+          when \`type\` = 'OUT' then -\`qty_base\`
+          when \`type\` = 'ADJUST' then \`qty_base\`
+          else 0
+        end), 0) - coalesce(sum(case
+          when \`type\` = 'RESERVE' then \`qty_base\`
+          when \`type\` = 'RELEASE' then -\`qty_base\`
+          else 0
+        end), 0) as \`available_base\`,
+        CURRENT_TIMESTAMP
+      from \`inventory_movements\`
+      group by \`store_id\`, \`product_id\`
+    `);
+    console.info("[db:repair] rebuilt inventory_balances from inventory_movements");
+  }
 
   // ── product variants phase 1 (migration 0028) ──
 

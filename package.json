@@ -19,7 +19,9 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "node scripts/seed.mjs",
     "smoke:idempotency-tx": "node scripts/smoke-idempotency-tx.mjs",
-    "idempotency:cleanup": "node scripts/cleanup-idempotency.mjs"
+    "idempotency:cleanup": "node scripts/cleanup-idempotency.mjs",
+    "perf:local": "npm run build && NODE_ENV=production next start -p 3000",
+    "perf:local:clean": "rm -rf .next && npm run build && NODE_ENV=production next start -p 3000"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.967.0",

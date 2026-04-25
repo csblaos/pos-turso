@@ -18,7 +18,7 @@ import { sessionSchema, type AppSession } from "@/lib/auth/session-types";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { getGlobalSessionPolicy } from "@/lib/system-config/policy";
-import { normalizeUiLocale } from "@/lib/i18n/locales";
+import { createPerfScope } from "@/server/perf/perf";
 
 export type { AppSession } from "@/lib/auth/session-types";
 
@@ -140,16 +140,6 @@ const getUserSessionLimitOverride = async (userId: string) => {
     .limit(1);
 
   return parseSessionLimit(row?.sessionLimit);
-};
-
-const getUserUiLocale = async (userId: string) => {
-  const [row] = await db
-    .select({ uiLocale: users.uiLocale })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  return row?.uiLocale ? normalizeUiLocale(row.uiLocale) : null;
 };
 
 const getEffectiveSessionLimit = async (userId: string) => {
@@ -322,10 +312,22 @@ export async function getSessionTokenFromAuthorizationHeader() {
   return parseBearerToken(requestHeaders.get("authorization"));
 }
 
-export async function getSessionTokenFromRequest() {
-  const authorizationToken = await getSessionTokenFromAuthorizationHeader();
+export async function getSessionTokenFromRequest(
+  perf?: ReturnType<typeof createPerfScope>,
+) {
+  const authorizationToken = perf
+    ? await perf.step("token.authorizationHeader", () => getSessionTokenFromAuthorizationHeader(), {
+        kind: "auth",
+      })
+    : await getSessionTokenFromAuthorizationHeader();
   if (authorizationToken) {
     return authorizationToken;
+  }
+
+  if (perf) {
+    return perf.step("token.cookieStore", () => getSessionTokenFromCookieStore(), {
+      kind: "auth",
+    });
   }
 
   return getSessionTokenFromCookieStore();
@@ -364,57 +366,82 @@ export async function enforceUserSessionLimitNow(userId: string) {
 }
 
 const readSession = async () => {
-  const sessionToken = await getSessionTokenFromRequest();
-  if (!sessionToken) {
-    if (AUTH_DEBUG) {
-      console.info("[auth] readSession: missing bearer token and session cookie");
-    }
-    return null;
-  }
+  const perf = createPerfScope("auth.session.read");
 
-  const claims = await verifySessionTokenClaims(sessionToken);
-  if (!claims) {
-    if (AUTH_DEBUG) {
-      console.warn("[auth] readSession: invalid token");
-    }
-    return null;
-  }
-
-  if (isRedisSessionCheckEnabled()) {
-    const tokenState = await redisGetJson<unknown>(sessionTokenCacheKey(claims.jti));
-    if (!tokenState) {
+  try {
+    const sessionToken = await getSessionTokenFromRequest(perf);
+    if (!sessionToken) {
       if (AUTH_DEBUG) {
-        console.warn(`[auth] readSession: token revoked id=${claims.jti.slice(0, 8)}...`);
+        console.info("[auth] readSession: missing bearer token and session cookie");
       }
       return null;
     }
 
-    const currentVersion = await getUserTokenVersion(claims.userId);
-    if (!currentVersion || claims.tokenVersion !== currentVersion) {
-      if (AUTH_DEBUG) {
-        console.warn(
-          `[auth] readSession: token version mismatch id=${claims.jti.slice(0, 8)}...`,
-        );
-      }
-      return null;
-    }
-  }
-
-  const parsed = sessionSchema.safeParse(claims);
-  if (!parsed.success) {
-    return null;
-  }
-
-  const userUiLocale = await getUserUiLocale(parsed.data.userId);
-  const syncedSession = userUiLocale ? { ...parsed.data, uiLocale: userUiLocale } : parsed.data;
-
-  if (AUTH_DEBUG) {
-    console.info(
-      `[auth] readSession: ok id=${claims.jti.slice(0, 8)}... user=${parsed.data.userId}`,
+    const claims = await perf.step(
+      "token.verify",
+      () => verifySessionTokenClaims(sessionToken),
+      { kind: "auth" },
     );
-  }
+    if (!claims) {
+      if (AUTH_DEBUG) {
+        console.warn("[auth] readSession: invalid token");
+      }
+      return null;
+    }
 
-  return syncedSession;
+    if (isRedisSessionCheckEnabled()) {
+      const tokenState = await perf.step(
+        "redis.tokenState",
+        () => redisGetJson<unknown>(sessionTokenCacheKey(claims.jti)),
+        { kind: "cache" },
+      );
+      if (!tokenState) {
+        if (AUTH_DEBUG) {
+          console.warn(`[auth] readSession: token revoked id=${claims.jti.slice(0, 8)}...`);
+        }
+        return null;
+      }
+
+      const currentVersion = await perf.step(
+        "redis.tokenVersion",
+        () => getUserTokenVersion(claims.userId),
+        { kind: "cache" },
+      );
+      if (!currentVersion || claims.tokenVersion !== currentVersion) {
+        if (AUTH_DEBUG) {
+          console.warn(
+            `[auth] readSession: token version mismatch id=${claims.jti.slice(0, 8)}...`,
+          );
+        }
+        return null;
+      }
+    }
+
+    const parsed = await perf.step(
+      "logic.parseClaims",
+      () => sessionSchema.safeParse(claims),
+      { kind: "logic" },
+    );
+    if (!parsed.success) {
+      return null;
+    }
+
+    const syncedSession = await perf.step(
+      "logic.syncSession",
+      () => parsed.data,
+      { kind: "logic" },
+    );
+
+    if (AUTH_DEBUG) {
+      console.info(
+        `[auth] readSession: ok id=${claims.jti.slice(0, 8)}... user=${parsed.data.userId}`,
+      );
+    }
+
+    return syncedSession;
+  } finally {
+    perf.end();
+  }
 };
 
 const getSessionForRequest = cache(readSession);

@@ -2,6 +2,53 @@
 
 ไฟล์นี้บันทึก "ทำไม" ของการออกแบบสำคัญ เพื่อให้ AI/คนทำงานต่อไม่เดาเอง
 
+## ADR-035: ใช้ `inventory_balances` เป็น Read Model กลางของ Stock แทนการ Aggregate จาก `inventory_movements` ทุก Request
+
+- Date: April 25, 2026
+- Status: Accepted
+- Decision:
+  - เพิ่มตาราง `inventory_balances(store_id, product_id, on_hand_base, reserved_base, available_base, updated_at)` เป็น stock read model กลาง
+  - migrate/backfill เริ่มต้นจาก `inventory_movements` ทันที และ `npm run db:repair` ต้อง rebuild ตารางนี้ได้สำหรับฐานที่ตก migration
+  - hot read paths จะอ่านจาก `inventory_balances` ก่อน เช่น `/stock`, `/api/stock/current`, order stock validation, และ current stock ใน purchase flow
+  - ทุก write path ที่ insert `inventory_movements` ใน stock/order/purchase flow ต้อง sync delta เข้า `inventory_balances` ใน transaction เดียวกันผ่าน helper กลาง
+  - `micro-cache first page` ไม่ถูกใช้เป็นฐานหลักของ stock เพราะ stale/invalidation cost สูงกว่า read model แบบ summary table
+- Reason:
+  - หลังลด auth/cache/route overhead แล้ว bottleneck ที่เหลือของ `/stock` คือ single DB phase ที่ยังต้องอ่าน/aggregate stock balance
+  - ปัญหาหลักอยู่ที่ remote round-trip ไป Turso มากกว่าการ transform ใน JS ดังนั้นการ precompute balance จะคุ้มกว่าการเพิ่ม Promise parallel หรือ page cache
+  - stock data ถูกใช้ซ้ำในหลายจุด ไม่ใช่แค่ first page ของ `/stock`; summary table จึงให้ประโยชน์กว้างกว่า cache เฉพาะหน้า
+- Consequence:
+  - write paths ต้องระวัง consistency เพิ่มขึ้น และห้าม insert movement แล้วลืม update summary
+  - ต้องมี repair/rebuild path สำหรับกรณี read model drift
+  - ถ้าจะ cache stock list ในอนาคต ควรเป็น layer เสริมบน read model นี้ ไม่ใช่แทนที่มัน
+  - migration รอบนี้เป็น incremental: ยังเก็บ `inventory_movements` เป็น source of truth สำหรับ audit/history ต่อไป
+
+## ADR-034: Read Path ที่ Sensitive ต่อ Latency อนุญาตให้ใช้ Raw libsql SQL ตรง โดยยังคง Drizzle เป็นค่าปริยายของระบบ
+
+- Date: April 24, 2026
+- Status: Accepted
+- Decision:
+  - คง `Drizzle ORM` เป็น default สำหรับ schema, transaction-heavy write path, และ business flow ทั่วไป
+  - สำหรับ read path ที่ latency-sensitive โดยตรง อนุญาตให้ route/query layer ใช้ `getLibsqlClient().execute(...)` ตรงได้
+  - singleton Turso client ต้องถูก reuse จาก `lib/db/client.ts` เสมอ ห้ามสร้าง libsql client ใหม่ราย request
+  - route ที่เป็น fast read path ควรใส่ `runtime=nodejs`, `dynamic=force-dynamic`, `preferredRegion=["hnd1","sin1"]`, `Cache-Control: no-store`, `Server-Timing`, และ `latency` ใน response
+  - perf logging ของ path เหล่านี้ควรแยกอย่างน้อยเป็น `auth`, `db`, `logic`, `response/ui` เพื่อให้เห็นว่าช้าเพราะ query, transformation, หรือ render/composition
+  - ฝั่ง client ของหน้า stock/history ควร log `network`, `parseJson`, และ `commit` พร้อม parse `Server-Timing` กลับมา เพื่อวัดช่วง "API ตอบแล้วแต่ UI ยังไม่ขึ้น" แยกจากเวลาฐานข้อมูล
+  - hot SSR/UI path อนุญาตให้ใช้ข้อมูลที่อยู่ใน session claim ก่อน เช่น `uiLocale`, `activeRoleId`, `activeRoleName` เพื่อลด DB membership/profile lookup ซ้ำ ๆ ในทุก request
+  - small metadata ที่เปลี่ยนไม่บ่อยแต่กระทบ critical path (`categories`, `storeThresholds`, role permission keys สำหรับ current-session UI) อนุญาตให้ cache แบบ short TTL ได้ ถ้ามี invalidate ที่ชัดเมื่อข้อมูลต้นทางเปลี่ยน
+  - หากข้อมูลบางส่วนถูกใช้เฉพาะบาง tab/flow เช่น `unitOptions` ของ stock recording form ให้แยก query path ตาม use case แทนการแบกข้อมูลนั้นใน inventory list ทั้งหมด
+  - สำหรับ interactive flow ที่ยังต้องใช้ข้อมูลเสริมรายสินค้า เช่น `unitOptions` ใน stock recording form ให้ SSR เริ่มจาก payload ขั้นต่ำก่อน แล้วค่อย lazy-load exact product ผ่าน API เฉพาะรายการที่ผู้ใช้เลือกจริง; ถ้า response exact-product มี stock snapshot อยู่แล้ว ให้ใช้ response เดียวเป็น source ของ UI แทนการยิง current-stock API ซ้ำ
+- rollout แบบ incremental เริ่มจาก `GET /api/stock/current`, `GET /api/stock/products`, และ `GET /api/products/search`
+- Reason:
+  - bottleneck หลักของระบบไม่ได้มาจาก Turso client reuse แต่เกิดจาก query count, abstraction depth, และ post-query assembly ใน JS
+  - บน Turso/networked SQLite การลด round-trip และลดงานประกอบข้อมูลต่อ request ให้ผลกับ latency ชัดกว่าการยึด query builder เดียวทุกจุด
+  - การเปิดทางให้ raw SQL เฉพาะ hot read path ช่วยเพิ่มความเร็วโดยไม่ต้อง rewrite ทั้งระบบหรือเสีย type-safe/schema discipline ของ Drizzle ในส่วนที่ยังเหมาะสม
+- Consequence:
+  - query สำคัญต้องดูแลเรื่อง selected columns, index support, และ API contract เองอย่างมีวินัยมากขึ้น
+  - docs/API/schema ต้องบันทึกให้ชัดว่า endpoint ไหนถูก optimize แล้วและพึ่ง index อะไร
+  - ถ้า endpoint ไหนยังไม่เป็น bottleneck จริง ให้คง Drizzle path เดิมไว้เพื่อลด maintenance cost
+  - SSR/UI บางจุดอาจเห็นข้อมูล locale/role/metadata ช้ากว่า DB จริงเล็กน้อยจนกว่า session จะ refresh หรือ cache จะหมด TTL แต่ authorization จริงของ API ยังต้องพึ่ง DB path เดิม
+  - query path ของ stock/inventory อาจไม่ได้คืน payload เท่ากับ recording path ทุกจุดอีกต่อไป จึงต้องรักษา contract ระหว่าง tab ให้ชัดว่าฟิลด์ไหนเป็น optional/ใช้เฉพาะบาง flow
+
 ## ADR-033: Extra Cost ของ PO รองรับเฉพาะสกุลร้านหรือสกุลซื้อของ PO และเก็บยอดต้นฉบับแยกจากยอดฐานร้าน
 
 - Date: March 24, 2026

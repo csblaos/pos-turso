@@ -4,9 +4,27 @@
 
 ## Migration Status
 
-- journal entries: `44`
-- latest migration tag: `0044_superb_the_phantom`
+- journal entries: `46`
+- latest migration tag: `0046_black_korg`
 - latest focus:
+  - เพิ่ม stock read model `inventory_balances`:
+    - `store_id`
+    - `product_id`
+    - `on_hand_base`
+    - `reserved_base`
+    - `available_base`
+    - `updated_at`
+    - migration `0046_black_korg.sql` จะ backfill จาก `inventory_movements`
+    - `scripts/repair-migrations.mjs` สามารถ rebuild ตารางนี้จาก movement history ได้
+    - index ที่เพิ่ม:
+      - `inventory_balances_product_id_idx`
+      - `inventory_balances_store_available_idx`
+      - `inventory_balances_store_on_hand_idx`
+  - เพิ่ม index ชุดแรกสำหรับ latency-sensitive read path:
+    - `inventory_movements_store_product_idx` บน `(store_id, product_id)`
+    - `products_store_name_idx` บน `(store_id, name)`
+    - `products_store_category_name_idx` บน `(store_id, category_id, name)`
+    - `scripts/repair-migrations.mjs` ensure index ชุดนี้แบบ compat ได้ด้วย สำหรับฐานที่ต้องใช้ `npm run db:repair`
   - เพิ่มสถานะระงับ Client (SUPERADMIN) เพื่อปิดใช้งานทั้ง client ชั่วคราว:
     - `users.client_suspended`
     - `users.client_suspended_at`
@@ -88,6 +106,7 @@
 - `products`
 - `product_units`
 - `contacts`
+- `inventory_balances`
 - `inventory_movements`
 
 ### Orders / Shipping / Purchase
@@ -143,8 +162,16 @@
 - `purchase_orders.shipping_cost_original` / `other_cost_original` = ยอดต้นฉบับตามสกุลที่กรอกในฟอร์ม PO
 - `purchase_orders.shipping_cost_currency` / `other_cost_currency` = สกุลเงินของ extra cost (จำกัดที่ `store currency` หรือ `purchase currency`)
 - `purchase_orders.shipping_cost` / `other_cost` = ยอดฐานร้าน (`store currency`) หลังแปลงเรท ใช้เป็น source of truth สำหรับ landed cost / AP / outstanding
+- `inventory_balances.store_id -> stores.id`
+- `inventory_balances.product_id -> products.id`
 - `inventory_movements.store_id -> stores.id`
 - `inventory_movements.product_id -> products.id`
+- index สำคัญสำหรับ read path latency batch แรก:
+  - `inventory_balances_store_available_idx(store_id, available_base, product_id)` รองรับ list/filter low stock จาก read model
+  - `inventory_balances_store_on_hand_idx(store_id, on_hand_base, product_id)` รองรับ query on-hand summary
+  - `inventory_movements_store_product_idx(store_id, product_id)` รองรับ stock balance lookup ต่อสินค้า
+  - `products_store_name_idx(store_id, name)` รองรับ stock/product list ที่ sort ตามชื่อในขอบเขตร้าน
+  - `products_store_category_name_idx(store_id, category_id, name)` รองรับ stock/products page เมื่อกรองหมวดแล้ว sort ตามชื่อ
 
 ### Orders
 

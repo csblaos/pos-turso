@@ -16,10 +16,15 @@ import { stores } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { ProductsHeaderRefreshButton } from "@/components/app/products-header-refresh-button";
 import { ProductsPageSkeleton } from "@/components/app/products-page-skeleton";
-import dynamic from "next/dynamic";
+import dynamicImport from "next/dynamic";
 
 const PRODUCT_PAGE_SIZE = 30;
 type ProductStatusFilter = "all" | "active" | "inactive";
+type ProductSortOption = "newest" | "name-asc" | "name-desc" | "price-asc" | "price-desc";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const preferredRegion = ["hnd1", "sin1"];
 
 function parseStatusFilter(value: string | undefined): ProductStatusFilter {
   if (value === "active" || value === "inactive") {
@@ -28,13 +33,33 @@ function parseStatusFilter(value: string | undefined): ProductStatusFilter {
   return "all";
 }
 
+function parseSortOption(value: string | undefined): ProductSortOption {
+  if (
+    value === "name-asc" ||
+    value === "name-desc" ||
+    value === "price-asc" ||
+    value === "price-desc"
+  ) {
+    return value;
+  }
+  return "newest";
+}
+
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ status?: string }>;
+  searchParams?: Promise<{
+    status?: string;
+    q?: string;
+    categoryId?: string;
+    sort?: string;
+  }>;
 }) {
   const params = await searchParams;
   const initialStatusFilter = parseStatusFilter(params?.status);
+  const initialQuery = params?.q?.trim() ?? "";
+  const initialCategoryId = params?.categoryId?.trim() ?? "";
+  const initialSortOption = parseSortOption(params?.sort);
 
   const [session, permissionKeys] = await Promise.all([
     getSession(),
@@ -50,7 +75,7 @@ export default async function ProductsPage({
 
   const uiLocale = session.uiLocale ?? DEFAULT_UI_LOCALE;
 
-  const ProductsManagement = dynamic(
+  const ProductsManagement = dynamicImport(
     () =>
       import("@/components/app/products-management").then(
         (module) => module.ProductsManagement,
@@ -83,8 +108,10 @@ export default async function ProductsPage({
   const [productPage, summaryCounts, units, categories, financial, storeRow] = await Promise.all([
     listStoreProductsPage({
       storeId: session.activeStoreId,
+      search: initialQuery || undefined,
+      categoryId: initialCategoryId || undefined,
       status: initialStatusFilter,
-      sort: "newest",
+      sort: initialSortOption,
       page: 1,
       pageSize: PRODUCT_PAGE_SIZE,
     }),
@@ -126,7 +153,10 @@ export default async function ProductsPage({
         canArchive={canArchive}
         canViewCost={canViewCost}
         canUpdateCost={canUpdateCost}
+        initialQuery={initialQuery}
+        initialCategoryId={initialCategoryId || null}
         initialStatusFilter={initialStatusFilter}
+        initialSortOption={initialSortOption}
       />
     </section>
   );

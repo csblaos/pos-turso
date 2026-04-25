@@ -663,7 +663,13 @@ export const products = sqliteTable(
   (table) => ({
     productsStoreIdIdx: index("products_store_id_idx").on(table.storeId),
     productsCreatedAtIdx: index("products_created_at_idx").on(table.createdAt),
+    productsStoreNameIdx: index("products_store_name_idx").on(table.storeId, table.name),
     productsCategoryIdIdx: index("products_category_id_idx").on(table.categoryId),
+    productsStoreCategoryNameIdx: index("products_store_category_name_idx").on(
+      table.storeId,
+      table.categoryId,
+      table.name,
+    ),
     productsModelIdIdx: index("products_model_id_idx").on(table.modelId),
     productsStoreBarcodeIdx: index("products_store_barcode_idx").on(table.storeId, table.barcode),
     productsStoreSkuUnique: uniqueIndex("products_store_sku_unique").on(
@@ -781,12 +787,45 @@ export const inventoryMovements = sqliteTable(
     inventoryMovementsStoreTypeCreatedAtIdx: index(
       "inventory_movements_store_type_created_at_idx",
     ).on(table.storeId, table.type, table.createdAt, table.id),
+    inventoryMovementsStoreProductIdx: index(
+      "inventory_movements_store_product_idx",
+    ).on(table.storeId, table.productId),
     inventoryMovementsProductIdIdx: index(
       "inventory_movements_product_id_idx",
     ).on(table.productId),
     inventoryMovementsCreatedAtIdx: index(
       "inventory_movements_created_at_idx",
     ).on(table.createdAt),
+  }),
+);
+
+export const inventoryBalances = sqliteTable(
+  "inventory_balances",
+  {
+    storeId: text("store_id")
+      .notNull()
+      .references(() => stores.id, { onDelete: "cascade" }),
+    productId: text("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "restrict" }),
+    onHandBase: integer("on_hand_base").notNull().default(0),
+    reservedBase: integer("reserved_base").notNull().default(0),
+    availableBase: integer("available_base").notNull().default(0),
+    updatedAt: text("updated_at").notNull().default(createdAtDefault),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.storeId, table.productId] }),
+    inventoryBalancesProductIdIdx: index("inventory_balances_product_id_idx").on(
+      table.productId,
+    ),
+    inventoryBalancesStoreAvailableIdx: index(
+      "inventory_balances_store_available_idx",
+    ).on(table.storeId, table.availableBase, table.productId),
+    inventoryBalancesStoreOnHandIdx: index("inventory_balances_store_on_hand_idx").on(
+      table.storeId,
+      table.onHandBase,
+      table.productId,
+    ),
   }),
 );
 

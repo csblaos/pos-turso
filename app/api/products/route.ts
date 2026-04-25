@@ -5,7 +5,11 @@ import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db/client";
 import { productUnits, products, units } from "@/lib/db/schema";
-import { enforcePermission, toRBACErrorResponse } from "@/lib/rbac/access";
+import {
+  enforcePermission,
+  enforcePermissionForCurrentSession,
+  toRBACErrorResponse,
+} from "@/lib/rbac/access";
 import {
   buildVariantColumns,
   isVariantCombinationUniqueError,
@@ -18,10 +22,20 @@ import {
   type ProductStatusFilter,
 } from "@/lib/products/service";
 import { normalizeProductPayload, productUpsertSchema } from "@/lib/products/validation";
+import { createPerfScope } from "@/server/perf/perf";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const preferredRegion = ["hnd1", "sin1"];
 
 export async function GET(request: Request) {
+  const perf = createPerfScope("api.products");
   try {
-    const { storeId } = await enforcePermission("products.view");
+    const { storeId } = await perf.step(
+      "auth.permission",
+      () => enforcePermissionForCurrentSession("products.view"),
+      { kind: "auth", serverTimingName: "auth" },
+    );
     const { searchParams } = new URL(request.url);
     const keyword = searchParams.get("q")?.trim() || undefined;
     const categoryId = searchParams.get("categoryId")?.trim() || undefined;
@@ -46,30 +60,60 @@ export async function GET(request: Request) {
         ? sortParam
         : "newest";
 
-    const [pageResult, summary] = await Promise.all([
-      listStoreProductsPage({
-        storeId,
-        search: keyword,
-        categoryId,
-        status,
-        sort,
-        page,
-        pageSize,
-      }),
-      getStoreProductSummaryCounts(storeId),
-    ]);
+    const [pageResult, summary] = await perf.step(
+      "db.pageAndSummary",
+      () =>
+        Promise.all([
+          listStoreProductsPage({
+            storeId,
+            search: keyword,
+            categoryId,
+            status,
+            sort,
+            page,
+            pageSize,
+          }),
+          getStoreProductSummaryCounts(storeId),
+        ]),
+      { kind: "db", serverTimingName: "db" },
+    );
 
-    return NextResponse.json({
-      ok: true,
-      products: pageResult.items,
-      total: pageResult.total,
-      page: pageResult.page,
-      pageSize: pageResult.pageSize,
-      hasMore: pageResult.page * pageResult.pageSize < pageResult.total,
-      summary,
-    });
+    const payload = await perf.step(
+      "logic.shapeResponse",
+      () => ({
+        ok: true,
+        products: pageResult.items,
+        total: pageResult.total,
+        page: pageResult.page,
+        pageSize: pageResult.pageSize,
+        hasMore: pageResult.page * pageResult.pageSize < pageResult.total,
+        count: pageResult.items.length,
+        summary,
+        latency: perf.elapsedMs(),
+      }),
+      { kind: "logic", serverTimingName: "logic" },
+    );
+
+    const response = await perf.step(
+      "response.json",
+      () =>
+        NextResponse.json(payload, {
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        }),
+      { kind: "logic", serverTimingName: "response" },
+    );
+    response.headers.set(
+      "Server-Timing",
+      perf.serverTiming({ includeTotal: true, totalName: "app" }),
+    );
+
+    return response;
   } catch (error) {
     return toRBACErrorResponse(error);
+  } finally {
+    perf.end();
   }
 }
 
