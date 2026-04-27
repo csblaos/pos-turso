@@ -387,40 +387,48 @@ export async function getPurchaseOrderById(
   const executor: PurchaseRepoExecutor = tx ?? db;
   const purchaseUnits = alias(units, "purchase_units");
   const baseUnits = alias(units, "base_units");
+  const paidUsers = alias(users, "paid_users");
   const [poRow] = await executor
     .select({
       po: purchaseOrders,
       createdByName: users.name,
-      paidByName: sql<string | null>`(
-        SELECT ${users.name}
-        FROM ${users}
-        WHERE ${users.id} = ${purchaseOrders.paidBy}
-        LIMIT 1
-      )`,
+      paidByName: paidUsers.name,
     })
     .from(purchaseOrders)
     .leftJoin(users, eq(purchaseOrders.createdBy, users.id))
+    .leftJoin(paidUsers, eq(purchaseOrders.paidBy, paidUsers.id))
     .where(
       and(eq(purchaseOrders.id, poId), eq(purchaseOrders.storeId, storeId)),
     );
 
   if (!poRow) return null;
 
-  const itemRows = await executor
-    .select({
-      item: purchaseOrderItems,
-      productName: products.name,
-      productSku: products.sku,
-      purchaseUnitCode: purchaseUnits.code,
-      purchaseUnitNameTh: purchaseUnits.nameTh,
-      baseUnitCode: baseUnits.code,
-      baseUnitNameTh: baseUnits.nameTh,
-    })
-    .from(purchaseOrderItems)
-    .innerJoin(products, eq(purchaseOrderItems.productId, products.id))
-    .innerJoin(purchaseUnits, eq(purchaseOrderItems.unitId, purchaseUnits.id))
-    .innerJoin(baseUnits, eq(products.baseUnitId, baseUnits.id))
-    .where(eq(purchaseOrderItems.purchaseOrderId, poId));
+  const [itemRows, paymentRows] = await Promise.all([
+    executor
+      .select({
+        item: purchaseOrderItems,
+        productName: products.name,
+        productSku: products.sku,
+        purchaseUnitCode: purchaseUnits.code,
+        purchaseUnitNameTh: purchaseUnits.nameTh,
+        baseUnitCode: baseUnits.code,
+        baseUnitNameTh: baseUnits.nameTh,
+      })
+      .from(purchaseOrderItems)
+      .innerJoin(products, eq(purchaseOrderItems.productId, products.id))
+      .innerJoin(purchaseUnits, eq(purchaseOrderItems.unitId, purchaseUnits.id))
+      .innerJoin(baseUnits, eq(products.baseUnitId, baseUnits.id))
+      .where(eq(purchaseOrderItems.purchaseOrderId, poId)),
+    executor
+      .select({
+        payment: purchaseOrderPayments,
+        createdByName: users.name,
+      })
+      .from(purchaseOrderPayments)
+      .leftJoin(users, eq(purchaseOrderPayments.createdBy, users.id))
+      .where(eq(purchaseOrderPayments.purchaseOrderId, poId))
+      .orderBy(desc(purchaseOrderPayments.paidAt), desc(purchaseOrderPayments.createdAt)),
+  ]);
 
   const items = itemRows.map((r) => ({
     ...r.item,
@@ -431,16 +439,6 @@ export async function getPurchaseOrderById(
     baseUnitCode: r.baseUnitCode,
     baseUnitNameTh: r.baseUnitNameTh,
   }));
-
-  const paymentRows = await executor
-    .select({
-      payment: purchaseOrderPayments,
-      createdByName: users.name,
-    })
-    .from(purchaseOrderPayments)
-    .leftJoin(users, eq(purchaseOrderPayments.createdBy, users.id))
-    .where(eq(purchaseOrderPayments.purchaseOrderId, poId))
-    .orderBy(desc(purchaseOrderPayments.paidAt), desc(purchaseOrderPayments.createdAt));
 
   const paymentEntries = paymentRows.map((row) => ({
     ...row.payment,

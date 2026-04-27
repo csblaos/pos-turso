@@ -72,6 +72,7 @@ export async function GET(request: Request) {
             sort,
             page,
             pageSize,
+            mode: "lite",
           }),
           getStoreProductSummaryCounts(storeId),
         ]),

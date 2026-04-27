@@ -157,65 +157,69 @@ export default async function StockPage({
     const initialTab = resolveInitialTab(params?.tab);
     const inventorySearchQuery = params?.inventoryQ?.trim() ?? "";
     const inventoryCategoryId = params?.inventoryCategoryId?.trim() ?? "";
-    const deferredTabFallback = <StockPageSkeleton />;
+    const [inventoryCategories, inventoryThresholds, purchaseStoreConfig] = await Promise.all([
+      perf.step("data.inventory.categories", () => getCachedStockCategories(activeStoreId), {
+        kind: "cache",
+      }),
+      perf.step(
+        "data.inventory.storeThresholds",
+        () => getCachedStockThresholds(activeStoreId),
+        { kind: "cache" },
+      ),
+      perf.step(
+        "data.purchase.storeConfig",
+        () =>
+          db
+            .select({
+              currency: stores.currency,
+              logoUrl: stores.logoUrl,
+              pdfShowLogo: stores.pdfShowLogo,
+              pdfShowSignature: stores.pdfShowSignature,
+              pdfShowNote: stores.pdfShowNote,
+              pdfHeaderColor: stores.pdfHeaderColor,
+              pdfCompanyName: stores.pdfCompanyName,
+              pdfCompanyAddress: stores.pdfCompanyAddress,
+              pdfCompanyPhone: stores.pdfCompanyPhone,
+            })
+            .from(stores)
+            .where(eq(stores.id, activeStoreId))
+            .limit(1)
+            .then((rows) => rows[0] ?? null),
+        { kind: "db" },
+      ),
+    ]);
 
-    let inventoryTabContent = deferredTabFallback;
-    let purchaseTabContent = deferredTabFallback;
-    let recordingTabContent = deferredTabFallback;
-    let historyTabContent = deferredTabFallback;
+    let inventorySeedRows: Awaited<ReturnType<typeof getStockProductsPage>> = [];
+    let inventoryHasInitialSeed = false;
+    let recordingSeedRows: Awaited<ReturnType<typeof getStockProductsPage>> = [];
+    let recordingHasInitialSeed = false;
+    let historySeed: Awaited<ReturnType<typeof getStockMovementsPage>> = {
+      movements: [],
+      total: 0,
+    };
+    let historyHasInitialSeed = false;
+    let purchaseSeedRows: Awaited<ReturnType<typeof getPurchaseOrderListPage>> = [];
+    let purchaseHasInitialSeed = false;
 
     if (initialTab === "inventory") {
-      const [stockProductRows, categories, storeRow] = await Promise.all([
-        perf.step(
-          "data.inventory.products",
-          () =>
-            getStockProductsPage({
-              storeId: activeStoreId,
-              limit: PRODUCT_PAGE_SIZE + 1,
-              offset: 0,
-              categoryId: inventoryCategoryId || undefined,
-              query: inventorySearchQuery || undefined,
-              includeUnitOptions: false,
-            }),
-          { kind: "db" },
-        ),
-        perf.step("data.inventory.categories", () => getCachedStockCategories(activeStoreId), {
-          kind: "cache",
-        }),
-        perf.step(
-          "data.inventory.storeThresholds",
-          () => getCachedStockThresholds(activeStoreId),
-          { kind: "cache" },
-        ),
-      ]);
-
-      const { initialProducts, initialHasMoreProducts } = await perf.step(
-        "logic.inventory.pageState",
-        () => ({
-          initialProducts: stockProductRows.slice(0, PRODUCT_PAGE_SIZE),
-          initialHasMoreProducts: stockProductRows.length > PRODUCT_PAGE_SIZE,
-        }),
-        { kind: "logic" },
+      inventorySeedRows = await perf.step(
+        "data.inventory.products",
+        () =>
+          getStockProductsPage({
+            storeId: activeStoreId,
+            limit: PRODUCT_PAGE_SIZE + 1,
+            offset: 0,
+            categoryId: inventoryCategoryId || undefined,
+            query: inventorySearchQuery || undefined,
+            includeUnitOptions: false,
+          }),
+        { kind: "db" },
       );
-
-      inventoryTabContent = await perf.step(
-        "ui.inventory.compose",
-        () => (
-          <StockInventoryView
-            products={initialProducts}
-            categories={categories}
-            storeOutStockThreshold={storeRow.outStockThreshold ?? 0}
-            storeLowStockThreshold={storeRow.lowStockThreshold ?? 10}
-            pageSize={PRODUCT_PAGE_SIZE}
-            initialHasMore={initialHasMoreProducts}
-          />
-        ),
-        { kind: "ui" },
-      );
+      inventoryHasInitialSeed = true;
     }
 
     if (initialTab === "recording") {
-      const stockProductRows = await perf.step(
+      recordingSeedRows = await perf.step(
         "data.recording.products",
         () =>
           getStockProductsPage({
@@ -228,30 +232,11 @@ export default async function StockPage({
           }),
         { kind: "db" },
       );
-
-      const initialProducts = await perf.step(
-        "logic.recording.pageState",
-        () => stockProductRows.slice(0, PRODUCT_PAGE_SIZE),
-        { kind: "logic" },
-      );
-
-      recordingTabContent = await perf.step(
-        "ui.recording.compose",
-        () => (
-          <StockRecordingForm
-            initialProducts={initialProducts}
-            canCreate={canPostMovement}
-            canAdjust={canAdjust}
-            canInbound={canInbound}
-            canUpdateCost={canUpdateCost}
-          />
-        ),
-        { kind: "ui" },
-      );
+      recordingHasInitialSeed = true;
     }
 
     if (initialTab === "history") {
-      const historyPage = await perf.step(
+      historySeed = await perf.step(
         "data.history.page",
         () =>
           getStockMovementsPage({
@@ -261,92 +246,56 @@ export default async function StockPage({
           }),
         { kind: "db" },
       );
-
-      historyTabContent = await perf.step(
-        "ui.history.compose",
-        () => (
-          <StockMovementHistory
-            movements={historyPage.movements}
-            initialTotal={historyPage.total}
-          />
-        ),
-        { kind: "ui" },
-      );
+      historyHasInitialSeed = true;
     }
 
     if (initialTab === "purchase") {
-      const [purchaseOrderRows, storeRow] = await Promise.all([
-        perf.step(
-          "data.purchase.orders",
-          () => getPurchaseOrderListPage(activeStoreId, PO_PAGE_SIZE + 1, 0),
-          { kind: "db" },
-        ),
-        perf.step(
-          "data.purchase.storeConfig",
-          () =>
-            db
-              .select({
-                currency: stores.currency,
-                logoUrl: stores.logoUrl,
-                pdfShowLogo: stores.pdfShowLogo,
-                pdfShowSignature: stores.pdfShowSignature,
-                pdfShowNote: stores.pdfShowNote,
-                pdfHeaderColor: stores.pdfHeaderColor,
-                pdfCompanyName: stores.pdfCompanyName,
-                pdfCompanyAddress: stores.pdfCompanyAddress,
-                pdfCompanyPhone: stores.pdfCompanyPhone,
-              })
-              .from(stores)
-              .where(eq(stores.id, activeStoreId))
-              .limit(1)
-              .then((rows) => rows[0] ?? null),
-          { kind: "db" },
-        ),
-      ]);
-
-      const { hasMorePO, initialPOs, storeCurrency, storeLogoUrl, storePdfConfig } =
-        await perf.step(
-          "logic.purchase.pageState",
-          () => {
-            const nextHasMorePO = purchaseOrderRows.length > PO_PAGE_SIZE;
-            const nextInitialPOs = purchaseOrderRows.slice(0, PO_PAGE_SIZE);
-            return {
-              hasMorePO: nextHasMorePO,
-              initialPOs: nextInitialPOs,
-              storeCurrency: parseStoreCurrency(storeRow?.currency),
-              storeLogoUrl: storeRow?.logoUrl ?? null,
-              storePdfConfig: {
-                showLogo: storeRow?.pdfShowLogo ?? true,
-                showSignature: storeRow?.pdfShowSignature ?? true,
-                showNote: storeRow?.pdfShowNote ?? true,
-                headerColor: storeRow?.pdfHeaderColor ?? "#f1f5f9",
-                companyName: storeRow?.pdfCompanyName ?? null,
-                companyAddress: storeRow?.pdfCompanyAddress ?? null,
-                companyPhone: storeRow?.pdfCompanyPhone ?? null,
-              },
-            };
-          },
-          { kind: "logic" },
+      purchaseSeedRows = await perf.step(
+        "data.purchase.orders",
+        () => getPurchaseOrderListPage(activeStoreId, PO_PAGE_SIZE + 1, 0),
+        { kind: "db" },
       );
-
-      purchaseTabContent = await perf.step(
-        "ui.purchase.compose",
-        () => (
-          <PurchaseOrderList
-            purchaseOrders={initialPOs}
-            activeStoreId={activeStoreId}
-            userId={session.userId}
-            storeCurrency={storeCurrency}
-            canCreate={canCreate}
-            pageSize={PO_PAGE_SIZE}
-            initialHasMore={hasMorePO}
-            storeLogoUrl={storeLogoUrl}
-            pdfConfig={storePdfConfig}
-          />
-        ),
-        { kind: "ui" },
-      );
+      purchaseHasInitialSeed = true;
     }
+
+    const inventoryPageState = await perf.step(
+      "logic.inventory.pageState",
+      () => ({
+        initialProducts: inventorySeedRows.slice(0, PRODUCT_PAGE_SIZE),
+        initialHasMoreProducts: inventorySeedRows.length > PRODUCT_PAGE_SIZE,
+      }),
+      { kind: "logic" },
+    );
+
+    const recordingInitialProducts = await perf.step(
+      "logic.recording.pageState",
+      () => recordingSeedRows.slice(0, PRODUCT_PAGE_SIZE),
+      { kind: "logic" },
+    );
+
+    const purchasePageState = await perf.step(
+      "logic.purchase.pageState",
+      () => {
+        const nextHasMorePO = purchaseSeedRows.length > PO_PAGE_SIZE;
+        const nextInitialPOs = purchaseSeedRows.slice(0, PO_PAGE_SIZE);
+        return {
+          hasMorePO: nextHasMorePO,
+          initialPOs: nextInitialPOs,
+          storeCurrency: parseStoreCurrency(purchaseStoreConfig?.currency),
+          storeLogoUrl: purchaseStoreConfig?.logoUrl ?? null,
+          storePdfConfig: {
+            showLogo: purchaseStoreConfig?.pdfShowLogo ?? true,
+            showSignature: purchaseStoreConfig?.pdfShowSignature ?? true,
+            showNote: purchaseStoreConfig?.pdfShowNote ?? true,
+            headerColor: purchaseStoreConfig?.pdfHeaderColor ?? "#f1f5f9",
+            companyName: purchaseStoreConfig?.pdfCompanyName ?? null,
+            companyAddress: purchaseStoreConfig?.pdfCompanyAddress ?? null,
+            companyPhone: purchaseStoreConfig?.pdfCompanyPhone ?? null,
+          },
+        };
+      },
+      { kind: "logic" },
+    );
 
     return perf.step(
       "ui.page.compose",
@@ -354,10 +303,48 @@ export default async function StockPage({
         <section className="space-y-4">
           <StockTabs
             initialTab={initialTab}
-            recordingTab={recordingTabContent}
-            inventoryTab={inventoryTabContent}
-            historyTab={historyTabContent}
-            purchaseTab={purchaseTabContent}
+            recordingTab={
+              <StockRecordingForm
+                initialProducts={recordingInitialProducts}
+                canCreate={canPostMovement}
+                canAdjust={canAdjust}
+                canInbound={canInbound}
+                canUpdateCost={canUpdateCost}
+                hasInitialSeed={recordingHasInitialSeed}
+              />
+            }
+            inventoryTab={
+              <StockInventoryView
+                products={inventoryPageState.initialProducts}
+                categories={inventoryCategories}
+                storeOutStockThreshold={inventoryThresholds.outStockThreshold ?? 0}
+                storeLowStockThreshold={inventoryThresholds.lowStockThreshold ?? 10}
+                pageSize={PRODUCT_PAGE_SIZE}
+                initialHasMore={inventoryPageState.initialHasMoreProducts}
+                hasInitialSeed={inventoryHasInitialSeed}
+              />
+            }
+            historyTab={
+              <StockMovementHistory
+                movements={historySeed.movements}
+                initialTotal={historySeed.total}
+                hasInitialSeed={historyHasInitialSeed}
+              />
+            }
+            purchaseTab={
+              <PurchaseOrderList
+                purchaseOrders={purchasePageState.initialPOs}
+                activeStoreId={activeStoreId}
+                userId={session.userId}
+                storeCurrency={purchasePageState.storeCurrency}
+                canCreate={canCreate}
+                pageSize={PO_PAGE_SIZE}
+                initialHasMore={purchasePageState.hasMorePO}
+                hasInitialSeed={purchaseHasInitialSeed}
+                storeLogoUrl={purchasePageState.storeLogoUrl}
+                pdfConfig={purchasePageState.storePdfConfig}
+              />
+            }
           />
         </section>
       ),

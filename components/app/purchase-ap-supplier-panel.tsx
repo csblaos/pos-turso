@@ -89,6 +89,9 @@ export type PurchaseApPanelPreset = {
   resetPoQuery?: boolean;
 };
 
+const AP_SUPPLIER_CACHE_MAX_ENTRIES = 16;
+const AP_STATEMENT_CACHE_MAX_ENTRIES = 48;
+
 const dueStatusKeyMap: Record<Exclude<DueFilter, "ALL">, MessageKey> = {
   OVERDUE: "purchase.ap.dueStatus.OVERDUE",
   DUE_SOON: "purchase.ap.dueStatus.DUE_SOON",
@@ -417,6 +420,24 @@ export function PurchaseApSupplierPanel({
   const [bulkNoteInput, setBulkNoteInput] = useState("");
   const [bulkProgressText, setBulkProgressText] = useState<string | null>(null);
   const [bulkErrors, setBulkErrors] = useState<string[]>([]);
+  const supplierSummaryCacheRef = useRef<
+    Map<string, { suppliers: PurchaseApSupplierSummaryItem[]; fetchedAt: string }>
+  >(new Map());
+  const statementCacheRef = useRef<
+    Map<
+      string,
+      {
+        rows: PurchaseApStatementRow[];
+        summary: PurchaseApStatementSummary | null;
+        fetchedAt: string;
+      }
+    >
+  >(new Map());
+  const supplierAbortRef = useRef<AbortController | null>(null);
+  const statementAbortRef = useRef<AbortController | null>(null);
+  const supplierRequestKeyRef = useRef<string | null>(null);
+  const statementRequestKeyRef = useRef<string | null>(null);
+  const lastRefreshKeyRef = useRef<string | null | undefined>(refreshKey);
 
   const getDateShortcutValue = useCallback(
     (shortcut: "TODAY" | "PLUS_7" | "END_OF_MONTH" | "CLEAR"): string => {
@@ -465,7 +486,50 @@ export function PurchaseApSupplierPanel({
     return () => window.clearTimeout(timer);
   }, [poQueryInput]);
 
-  const loadSupplierSummary = useCallback(async () => {
+  const supplierSummaryCacheKey = useMemo(
+    () => `${supplierQuery.trim().toLowerCase() || "-"}|100`,
+    [supplierQuery],
+  );
+
+  const statementCacheKey = useMemo(
+    () =>
+      [
+        selectedSupplierKey ?? "-",
+        paymentFilter,
+        dueFilter,
+        dueFrom || "-",
+        dueTo || "-",
+        poQuery.trim().toLowerCase() || "-",
+        "500",
+      ].join("|"),
+    [dueFilter, dueFrom, dueTo, paymentFilter, poQuery, selectedSupplierKey],
+  );
+
+  const loadSupplierSummary = useCallback(async (options?: { force?: boolean }) => {
+    const force = options?.force ?? false;
+    const cached = supplierSummaryCacheRef.current.get(supplierSummaryCacheKey);
+    if (cached && !force) {
+      setSuppliers(cached.suppliers);
+      setSupplierError(null);
+      setSelectedSupplierKey((prev) => {
+        if (cached.suppliers.length === 0) {
+          return null;
+        }
+        if (prev && cached.suppliers.some((item) => item.supplierKey === prev)) {
+          return prev;
+        }
+        return cached.suppliers[0]!.supplierKey;
+      });
+      return;
+    }
+    if (supplierRequestKeyRef.current === supplierSummaryCacheKey && !force) {
+      return;
+    }
+
+    supplierAbortRef.current?.abort();
+    const controller = new AbortController();
+    supplierAbortRef.current = controller;
+    supplierRequestKeyRef.current = supplierSummaryCacheKey;
     setIsLoadingSuppliers(true);
     try {
       const params = new URLSearchParams();
@@ -476,7 +540,7 @@ export function PurchaseApSupplierPanel({
       const query = params.toString();
       const res = await authFetch(
         `/api/stock/purchase-orders/ap-by-supplier${query ? `?${query}` : ""}`,
-        { cache: "no-store" },
+        { cache: "no-store", signal: controller.signal },
       );
       const data = (await res.json().catch(() => null)) as
         | {
@@ -485,12 +549,25 @@ export function PurchaseApSupplierPanel({
             suppliers?: PurchaseApSupplierSummaryItem[];
           }
         | null;
+      if (controller.signal.aborted) {
+        return;
+      }
       if (!res.ok || !data?.ok) {
         setSupplierError(data?.message ?? t(uiLocale, "purchase.ap.error.loadSuppliersFailed"));
         return;
       }
 
       const nextSuppliers = Array.isArray(data.suppliers) ? data.suppliers : [];
+      supplierSummaryCacheRef.current.set(supplierSummaryCacheKey, {
+        suppliers: nextSuppliers,
+        fetchedAt: new Date().toISOString(),
+      });
+      if (supplierSummaryCacheRef.current.size > AP_SUPPLIER_CACHE_MAX_ENTRIES) {
+        const oldestKey = supplierSummaryCacheRef.current.keys().next().value;
+        if (oldestKey) {
+          supplierSummaryCacheRef.current.delete(oldestKey);
+        }
+      }
       setSuppliers(nextSuppliers);
       setSupplierError(null);
 
@@ -505,13 +582,25 @@ export function PurchaseApSupplierPanel({
         return nextSuppliers[0]!.supplierKey;
       });
     } catch {
+      if (controller.signal.aborted) {
+        return;
+      }
       setSupplierError(t(uiLocale, "purchase.error.serverUnreachableRetry"));
     } finally {
-      setIsLoadingSuppliers(false);
+      if (supplierRequestKeyRef.current === supplierSummaryCacheKey) {
+        supplierRequestKeyRef.current = null;
+      }
+      if (supplierAbortRef.current === controller) {
+        supplierAbortRef.current = null;
+      }
+      if (!controller.signal.aborted) {
+        setIsLoadingSuppliers(false);
+      }
     }
-  }, [supplierQuery, uiLocale]);
+  }, [supplierQuery, supplierSummaryCacheKey, uiLocale]);
 
-  const loadStatement = useCallback(async () => {
+  const loadStatement = useCallback(async (options?: { force?: boolean }) => {
+    const force = options?.force ?? false;
     if (!selectedSupplierKey) {
       setStatementRows([]);
       setStatementSummary(null);
@@ -519,6 +608,21 @@ export function PurchaseApSupplierPanel({
       return;
     }
 
+    const cached = statementCacheRef.current.get(statementCacheKey);
+    if (cached && !force) {
+      setStatementRows(cached.rows);
+      setStatementSummary(cached.summary);
+      setStatementError(null);
+      return;
+    }
+    if (statementRequestKeyRef.current === statementCacheKey && !force) {
+      return;
+    }
+
+    statementAbortRef.current?.abort();
+    const controller = new AbortController();
+    statementAbortRef.current = controller;
+    statementRequestKeyRef.current = statementCacheKey;
     setIsLoadingStatement(true);
     try {
       const params = new URLSearchParams();
@@ -532,7 +636,7 @@ export function PurchaseApSupplierPanel({
 
       const res = await authFetch(
         `/api/stock/purchase-orders/ap-by-supplier/statement?${params.toString()}`,
-        { cache: "no-store" },
+        { cache: "no-store", signal: controller.signal },
       );
       const data = (await res.json().catch(() => null)) as
         | {
@@ -542,24 +646,64 @@ export function PurchaseApSupplierPanel({
             summary?: PurchaseApStatementSummary;
           }
         | null;
+      if (controller.signal.aborted) {
+        return;
+      }
 
       if (!res.ok || !data?.ok) {
         setStatementError(data?.message ?? t(uiLocale, "purchase.ap.error.loadStatementFailed"));
         return;
       }
 
-      setStatementRows(Array.isArray(data.rows) ? data.rows : []);
-      setStatementSummary(data.summary ?? null);
+      const nextRows = Array.isArray(data.rows) ? data.rows : [];
+      const nextSummary = data.summary ?? null;
+      statementCacheRef.current.set(statementCacheKey, {
+        rows: nextRows,
+        summary: nextSummary,
+        fetchedAt: new Date().toISOString(),
+      });
+      if (statementCacheRef.current.size > AP_STATEMENT_CACHE_MAX_ENTRIES) {
+        const oldestKey = statementCacheRef.current.keys().next().value;
+        if (oldestKey) {
+          statementCacheRef.current.delete(oldestKey);
+        }
+      }
+      setStatementRows(nextRows);
+      setStatementSummary(nextSummary);
       setStatementError(null);
     } catch {
+      if (controller.signal.aborted) {
+        return;
+      }
       setStatementError(t(uiLocale, "purchase.error.serverUnreachableRetry"));
     } finally {
-      setIsLoadingStatement(false);
+      if (statementRequestKeyRef.current === statementCacheKey) {
+        statementRequestKeyRef.current = null;
+      }
+      if (statementAbortRef.current === controller) {
+        statementAbortRef.current = null;
+      }
+      if (!controller.signal.aborted) {
+        setIsLoadingStatement(false);
+      }
     }
-  }, [dueFilter, dueFrom, dueTo, paymentFilter, poQuery, selectedSupplierKey, uiLocale]);
+  }, [
+    dueFilter,
+    dueFrom,
+    dueTo,
+    paymentFilter,
+    poQuery,
+    selectedSupplierKey,
+    statementCacheKey,
+    uiLocale,
+  ]);
 
   useEffect(() => {
-    void loadSupplierSummary();
+    const shouldForce =
+      lastRefreshKeyRef.current !== undefined &&
+      lastRefreshKeyRef.current !== refreshKey;
+    lastRefreshKeyRef.current = refreshKey;
+    void loadSupplierSummary(shouldForce ? { force: true } : undefined);
   }, [loadSupplierSummary, refreshKey]);
 
   useEffect(() => {
@@ -588,6 +732,8 @@ export function PurchaseApSupplierPanel({
 
   useEffect(() => {
     return () => {
+      supplierAbortRef.current?.abort();
+      statementAbortRef.current?.abort();
       onLoadingChange?.(false);
     };
   }, [onLoadingChange]);
@@ -901,7 +1047,8 @@ export function PurchaseApSupplierPanel({
           variant="outline"
           className="h-8 rounded-lg px-2.5 text-xs"
           onClick={() => {
-            void loadSupplierSummary();
+            void loadSupplierSummary({ force: true });
+            void loadStatement({ force: true });
           }}
           disabled={isLoadingSuppliers}
         >
@@ -1368,7 +1515,8 @@ export function PurchaseApSupplierPanel({
               variant="outline"
               className="h-8 rounded-lg px-2.5 text-xs"
               onClick={() => {
-                void loadSupplierSummary();
+                void loadSupplierSummary({ force: true });
+                void loadStatement({ force: true });
               }}
               disabled={isLoadingSuppliers}
             >

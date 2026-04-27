@@ -1,8 +1,16 @@
 "use client";
 
 import { Edit, FileText, Package, ShoppingCart, type LucideIcon } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { t, type MessageKey } from "@/lib/i18n/messages";
 import { useUiLocale } from "@/lib/i18n/use-ui-locale";
@@ -19,6 +27,11 @@ type TabId = "inventory" | "purchase" | "recording" | "history";
 type PendingStockTabScrollRestore =
   | { mode: "preserve"; x: number; y: number }
   | { mode: "keep_sticky"; x: number; y: number; topPx: number };
+
+type StockTabContextValue = {
+  activeTab: TabId;
+  changeTab: (tab: TabId) => void;
+};
 
 const tabs: ReadonlyArray<{
   id: TabId;
@@ -55,6 +68,42 @@ const tabs: ReadonlyArray<{
 const isTabId = (value: string | null): value is TabId =>
   value === "recording" || value === "inventory" || value === "history" || value === "purchase";
 
+const StockTabContext = createContext<StockTabContextValue | null>(null);
+
+function resolveTabFromSearch(search: string, fallback: TabId): TabId {
+  const params = new URLSearchParams(search);
+  const value = params.get("tab");
+  return isTabId(value) ? value : fallback;
+}
+
+function syncTabInUrl(tab: TabId) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  if (tab === "inventory") {
+    params.delete("tab");
+  } else {
+    params.set("tab", tab);
+  }
+
+  const nextQuery = params.toString();
+  const nextUrl = nextQuery
+    ? `${window.location.pathname}?${nextQuery}${window.location.hash}`
+    : `${window.location.pathname}${window.location.hash}`;
+  window.history.replaceState(window.history.state, "", nextUrl);
+}
+
+export function useIsStockTabActive(tab: TabId): boolean {
+  const context = useContext(StockTabContext);
+  return context?.activeTab === tab;
+}
+
+export function useStockTabNavigation(): ((tab: TabId) => void) | null {
+  return useContext(StockTabContext)?.changeTab ?? null;
+}
+
 export function StockTabs({
   recordingTab,
   inventoryTab,
@@ -62,23 +111,19 @@ export function StockTabs({
   purchaseTab,
   initialTab = "inventory",
 }: StockTabsProps) {
-  const router = useRouter();
   const uiLocale = useUiLocale();
-  const searchParams = useSearchParams() ?? new URLSearchParams();
-  const tabFromQuery = searchParams.get("tab");
-  const initialActiveTab: TabId = isTabId(tabFromQuery)
-    ? tabFromQuery
-    : isTabId(initialTab)
-      ? initialTab
-      : "inventory";
-  const [activeTab, setActiveTab] = useState<TabId>(
-    initialActiveTab,
-  );
+  const fallbackInitialTab: TabId = isTabId(initialTab) ? initialTab : "inventory";
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    if (typeof window === "undefined") {
+      return fallbackInitialTab;
+    }
+    return resolveTabFromSearch(window.location.search, fallbackInitialTab);
+  });
   const [mountedTabs, setMountedTabs] = useState<Record<TabId, boolean>>(() => ({
-    inventory: initialActiveTab === "inventory",
-    purchase: initialActiveTab === "purchase",
-    recording: initialActiveTab === "recording",
-    history: initialActiveTab === "history",
+    inventory: activeTab === "inventory",
+    purchase: activeTab === "purchase",
+    recording: activeTab === "recording",
+    history: activeTab === "history",
   }));
   const pendingScrollRestoreRef = useRef<PendingStockTabScrollRestore | null>(null);
   const tabBarRef = useRef<HTMLDivElement | null>(null);
@@ -88,11 +133,19 @@ export function StockTabs({
   }, [activeTab]);
 
   useEffect(() => {
-    if (!isTabId(tabFromQuery)) {
+    if (typeof window === "undefined") {
       return;
     }
-    setActiveTab(tabFromQuery);
-  }, [tabFromQuery]);
+
+    const syncFromLocation = () => {
+      setActiveTab(resolveTabFromSearch(window.location.search, fallbackInitialTab));
+    };
+
+    window.addEventListener("popstate", syncFromLocation);
+    return () => {
+      window.removeEventListener("popstate", syncFromLocation);
+    };
+  }, [fallbackInitialTab]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -145,8 +198,22 @@ export function StockTabs({
     };
   }, [activeTab, mountedTabs]);
 
+  const changeTab = useCallback((tab: TabId) => {
+    setActiveTab(tab);
+    syncTabInUrl(tab);
+  }, []);
+
+  const tabContext = useMemo<StockTabContextValue>(
+    () => ({
+      activeTab,
+      changeTab,
+    }),
+    [activeTab, changeTab],
+  );
+
   return (
-    <div className="space-y-2">
+    <StockTabContext.Provider value={tabContext}>
+      <div className="space-y-2">
       {/* Tab bar */}
       <div ref={tabBarRef} className="sticky top-0 z-20 -mx-1 rounded-xl py-2 px-0">
         <div className="flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -183,19 +250,12 @@ export function StockTabs({
                           topPx,
                         }
                       : {
-                          mode: "preserve",
+                  mode: "preserve",
                           x: window.scrollX,
                           y: window.scrollY,
                         };
                   }
-                  setActiveTab(tab.id);
-                  const params = new URLSearchParams(
-                    typeof window !== "undefined"
-                      ? window.location.search
-                      : searchParams.toString(),
-                  );
-                  params.set("tab", tab.id);
-                  router.replace(`?${params.toString()}`, { scroll: false });
+                  changeTab(tab.id);
                 }}
               >
                 <Icon className="h-4 w-4" />
@@ -220,6 +280,7 @@ export function StockTabs({
       <div className={activeTab === "history" ? "block" : "hidden"} aria-hidden={activeTab !== "history"}>
         {mountedTabs.history ? historyTab : null}
       </div>
-    </div>
+      </div>
+    </StockTabContext.Provider>
   );
 }

@@ -2,6 +2,57 @@
 
 ไฟล์นี้บันทึก "ทำไม" ของการออกแบบสำคัญ เพื่อให้ AI/คนทำงานต่อไม่เดาเอง
 
+## ADR-038: หน้า `/products` แยก List-Lite ออกจาก Detail-Full เพื่อลด First Load
+
+- Date: April 27, 2026
+- Status: Accepted
+- Decision:
+  - `GET /api/products` และ SSR seed ของ `/products` ใช้ list payload แบบเบา (`lite`) สำหรับ first-open/page/filter only
+  - list-lite path ของ products ใช้ raw SQL สำหรับ page rows โดยตรง และ join `inventory_balances` ใน query เดียวเพื่อหลีกเลี่ยง flow หลาย phase แบบเดิม
+  - full product detail (`conversions`, `costTracking`, `latestPurchaseOrderCost`) ย้ายไป `GET /api/products/[productId]` แล้วโหลด on-demand ตอนเปิด detail/edit/duplicate
+  - ฝั่ง `ProductsManagement` เก็บ detail cache ใน client เพื่อไม่ต้องยิง full detail ซ้ำเมื่อเปิดสินค้าเดิมรอบต่อไป
+- Reason:
+  - log perf ชี้ว่า bottleneck ของ `/api/products` อยู่ที่ `db.pageAndSummary` โดย list path เดิมแบก data ลึกเกินกว่าที่หน้า list ใช้จริง
+  - บน Turso/network DB การลด query phase สำคัญกว่าการคง query builder ทุกจุด; raw SQL สำหรับ hot read path นี้คุ้มกว่าเพราะลดจาก `count -> ids -> detail -> balances` เหลือ `page rows + count fallback`
+  - `conversions` และ cost audit metadata จำเป็นกับ detail/edit มากกว่า list; แยก payload ช่วยลด first-load โดยไม่ต้อง rewrite ทั้งหน้า `/products`
+- Consequence:
+  - หน้า list จะเร็วขึ้น แต่การเปิด detail/edit/duplicate ครั้งแรกของสินค้าแต่ละตัวจะมี on-demand fetch เพิ่ม 1 ครั้ง
+  - ถ้าต้องการ optimize เพิ่มในอนาคต จุดถัดไปควรเป็น query shape ของ list page และ optional metadata (`units/categories/financial`) ไม่ใช่ย้ายของหนักกลับมาที่ list payload
+
+## ADR-037: `SUPPLIER_AP` ใช้ Keep-Mounted Workspace + Client Cache แทนการ Reload Panel ทุกครั้ง
+
+- Date: April 27, 2026
+- Status: Accepted
+- Decision:
+  - panel `AP by Supplier` ใต้ `/stock?tab=purchase` จะ keep-mounted หลังถูกเปิดครั้งแรก แทนการ unmount/remount ตอนสลับ workspace
+  - ฝั่ง client ของ `PurchaseApSupplierPanel` ต้องมี memory cache แยกสำหรับ `supplier summary` และ `statement` ตาม query key พร้อม request abort/dedupe
+- Reason:
+  - pain หลักของ workspace นี้คือ repeated switch แล้ว panel ถูก cold start ใหม่, ยิง API ซ้ำ, และ query AP มี payload ค่อนข้างหนักกว่า workspace อื่น
+  - client cache/keep-mounted ช่วย UX ตอนกลับมา workspace เดิมได้ตรงที่สุด โดยไม่ต้องเก็บข้อมูล AP ไว้ข้าม request ใน Redis
+  - ทีมต้องการหลีกเลี่ยงการเก็บข้อมูล AP panel ลง Redis ดังนั้น repeated workspace switch จะอาศัย client workspace state เป็นหลัก ส่วน first-open ยังเป็น live query ตามปกติ
+- Consequence:
+  - ผู้ใช้สามารถเห็นข้อมูล AP เดิมได้ทันทีเมื่อกลับมา workspace เดิม และค่อย refresh แบบ background/explicit refresh แทนการเห็น skeleton ทุกครั้ง
+  - ข้อมูล AP จะไม่ถูก share cache ข้าม request/user ที่ฝั่ง server แล้ว
+  - ถ้าภายหลัง first-open ของ AP workspace ยังช้าเกินรับได้ ควรแก้ที่ query shape/payload หรือทำ invalidation-aware server cache แบบ explicit หลังทีมยอมรับ trade-off ใหม่เท่านั้น
+
+## ADR-036: Stock Tabs ใช้ Client-Cached Workspace หลัง First Load แทนการ Route-Navigate ทุกครั้ง
+
+- Date: April 27, 2026
+- Status: Accepted
+- Decision:
+  - หน้า `/stock` ยังใช้ SSR seed เฉพาะ active tab สำหรับ first load/deep link เหมือนเดิม
+  - หลังจาก hydrate แล้ว การสลับแท็บ `inventory/purchase/recording/history` จะ sync query `tab` ด้วย `window.history.replaceState(...)` แทน `router.replace(...)`
+  - แต่ละแท็บต้อง keep-mounted หลังเปิดครั้งแรก และเก็บ state/data/caches ของตัวเองไว้เพื่อให้กลับมาแท็บเดิมได้ทันที
+  - non-active tabs อนุญาตให้ mount ครั้งแรกแบบ no-seed แล้ว fetch initial data ฝั่ง client เฉพาะตอนถูกเปิดจริง แทนการ preload ทุกแท็บใน SSR
+- Reason:
+  - UX เป้าหมายของ stock workspace คือ “first open อาจรอได้เล็กน้อย แต่ repeated tab switch ต้องเร็วกว่าเดิมชัดเจน”
+  - route-driven tab switch เดิมทำให้แม้แท็บจะ keep-mounted ฝั่ง client ก็ยังโดน server navigation/new RSC payload คั่นอยู่ และ user ยังเห็น skeleton/ดีเลย์ซ้ำ
+  - การ preload ทุกแท็บใน SSR ขัดกับเป้าหมาย first load ที่เบาและเร็ว
+- Consequence:
+  - filter/query ภายใน stock tabs ที่ต้อง sync ลง URL ควรใช้ `window.history.replaceState(...)` หรือ local state เป็นหลัก เพื่อลด accidental route rerender
+  - การวัด perf ของ “เปลี่ยนแท็บ” จะย้ายจาก SSR log ไปเป็น client/API phase มากขึ้น
+  - ถ้าจะทำให้ first-open ของแท็บที่ยังไม่เคยเปิดเร็วขึ้นอีก ควรพิจารณา idle prefetch/background revalidate เป็น layer ถัดไป ไม่ใช่กลับไป SSR ทุกแท็บพร้อมกัน
+
 ## ADR-035: ใช้ `inventory_balances` เป็น Read Model กลางของ Stock แทนการ Aggregate จาก `inventory_movements` ทุก Request
 
 - Date: April 25, 2026

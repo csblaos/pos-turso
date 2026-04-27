@@ -296,6 +296,8 @@ export function ProductsManagement({
   const loadMoreRequestIdRef = useRef(0);
   const productListAbortRef = useRef<AbortController | null>(null);
   const productPageCacheRef = useRef<Map<string, ProductListCacheEntry>>(new Map());
+  const productDetailCacheRef = useRef<Map<string, ProductListItem>>(new Map());
+  const productDetailRequestRef = useRef<Map<string, Promise<ProductListItem | null>>>(new Map());
   const hasInitializedListEffectRef = useRef(false);
   const seededInitialListKeyRef = useRef<string | null>(null);
   const submitIntentRef = useRef<"save" | "save-and-next">("save");
@@ -447,6 +449,57 @@ export function ProductsManagement({
         sort: sortOption,
       }),
     [buildProductListCacheKey, deferredQuery, selectedCategoryId, sortOption, statusFilter],
+  );
+
+  const fetchProductDetail = useCallback(
+    async (productId: string, options?: { silent?: boolean }) => {
+      const silent = options?.silent ?? false;
+      const cached = productDetailCacheRef.current.get(productId);
+      if (cached) {
+        return cached;
+      }
+
+      const inFlight = productDetailRequestRef.current.get(productId);
+      if (inFlight) {
+        return inFlight;
+      }
+
+      const request = (async () => {
+        try {
+          const res = await authFetch(`/api/products/${productId}`, {
+            cache: "no-store",
+          });
+          const data = (await res.json().catch(() => null)) as
+            | {
+                ok?: boolean;
+                message?: string;
+                product?: ProductListItem;
+              }
+            | null;
+
+          if (!res.ok || !data?.ok || !data.product) {
+            if (!silent) {
+              toast.error(data?.message ?? t(uiLocale, "products.error.loadListFailed"));
+            }
+            return null;
+          }
+
+          productDetailCacheRef.current.set(productId, data.product);
+          return data.product;
+        } catch {
+          if (!silent) {
+            toast.error(t(uiLocale, "stock.error.serverUnreachableRetry"));
+          }
+          return null;
+        } finally {
+          productDetailRequestRef.current.delete(productId);
+        }
+      })();
+
+      productDetailRequestRef.current.set(productId, request);
+      return request;
+    },
+    [uiLocale],
   );
 
   const syncStatusFilterToUrl = useCallback(
@@ -1391,21 +1444,23 @@ export function ProductsManagement({
     setShowCreateSheet(true);
   };
 
-  const beginEdit = (product: ProductListItem) => {
+  const beginEdit = async (product: ProductListItem) => {
     if (!canUpdate) return;
+    const detailProductData =
+      (await fetchProductDetail(product.id, { silent: false })) ?? product;
     submitIntentRef.current = "save";
     hideDeactivateConfirmImmediately();
     setShowDetailImagePreview(false);
     const hasVariantMeta = Boolean(
-      product.modelId ||
-        product.modelName ||
-        product.variantLabel ||
-        product.variantOptions.length > 0,
+      detailProductData.modelId ||
+        detailProductData.modelName ||
+        detailProductData.variantLabel ||
+        detailProductData.variantOptions.length > 0,
     );
     setMode("edit");
-    setEditingProductId(product.id);
+    setEditingProductId(detailProductData.id);
     setImageFile(null);
-    setCurrentImageUrl(product.imageUrl ?? null);
+    setCurrentImageUrl(detailProductData.imageUrl ?? null);
     setIsImageMarkedForRemoval(false);
     setMatrixUseSecondAxis(false);
     setMatrixRows([]);
@@ -1418,17 +1473,17 @@ export function ProductsManagement({
     setHasManualVariantSortOrder(false);
     setHasManualSku(true);
     form.reset({
-      sku: product.sku,
-      name: product.name,
-      barcode: product.barcode ?? "",
-      baseUnitId: product.baseUnitId,
-      allowBaseUnitSale: product.allowBaseUnitSale,
-      priceBase: product.priceBase,
-      costBase: product.costBase,
-      outStockThreshold: product.outStockThreshold ?? "",
-      lowStockThreshold: product.lowStockThreshold ?? "",
-      categoryId: product.categoryId ?? "",
-      conversions: product.conversions.map((c) => ({
+      sku: detailProductData.sku,
+      name: detailProductData.name,
+      barcode: detailProductData.barcode ?? "",
+      baseUnitId: detailProductData.baseUnitId,
+      allowBaseUnitSale: detailProductData.allowBaseUnitSale,
+      priceBase: detailProductData.priceBase,
+      costBase: detailProductData.costBase,
+      outStockThreshold: detailProductData.outStockThreshold ?? "",
+      lowStockThreshold: detailProductData.lowStockThreshold ?? "",
+      categoryId: detailProductData.categoryId ?? "",
+      conversions: detailProductData.conversions.map((c) => ({
         unitId: c.unitId,
         multiplierToBase: c.multiplierToBase,
         enabledForSale: c.enabledForSale,
@@ -1437,10 +1492,10 @@ export function ProductsManagement({
       variant: hasVariantMeta
         ? {
             enabled: true,
-            modelName: product.modelName ?? "",
-            variantLabel: product.variantLabel ?? "",
-            variantSortOrder: product.variantSortOrder ?? 0,
-            options: product.variantOptions.map((option) => ({
+            modelName: detailProductData.modelName ?? "",
+            variantLabel: detailProductData.variantLabel ?? "",
+            variantSortOrder: detailProductData.variantSortOrder ?? 0,
+            options: detailProductData.variantOptions.map((option) => ({
               attributeCode: option.attributeCode,
               attributeName: option.attributeName,
               valueCode: option.valueCode,
@@ -1468,6 +1523,10 @@ export function ProductsManagement({
     setCostDraftInput(formatCostDraftInput(product.costBase));
     setCostReasonDraft("");
     setShowDetailSheet(true);
+    void fetchProductDetail(product.id, { silent: true }).then((fullProduct) => {
+      if (!fullProduct) return;
+      setDetailProduct((prev) => (prev && prev.id === fullProduct.id ? fullProduct : prev));
+    });
   };
 
   const closeCreateSheetImmediate = useCallback(() => {
@@ -1610,16 +1669,18 @@ export function ProductsManagement({
     };
   }, [mode, uiLocale, unsavedCloseTarget]);
 
-  const duplicateProduct = (product: ProductListItem) => {
+  const duplicateProduct = async (product: ProductListItem) => {
     if (!canCreate) return;
+    const detailProductData =
+      (await fetchProductDetail(product.id, { silent: false })) ?? product;
     submitIntentRef.current = "save";
     hideDeactivateConfirmImmediately();
     setShowDetailImagePreview(false);
     const hasVariantMeta = Boolean(
-      product.modelId ||
-        product.modelName ||
-        product.variantLabel ||
-        product.variantOptions.length > 0,
+      detailProductData.modelId ||
+        detailProductData.modelName ||
+        detailProductData.variantLabel ||
+        detailProductData.variantOptions.length > 0,
     );
     setMode("create");
     setEditingProductId(null);
@@ -1637,17 +1698,17 @@ export function ProductsManagement({
     setHasManualVariantSortOrder(false);
     setHasManualSku(true);
     form.reset({
-      sku: `${product.sku}-COPY`,
-      name: `${product.name} ${t(uiLocale, "products.duplicate.nameSuffix")}`,
+      sku: `${detailProductData.sku}-COPY`,
+      name: `${detailProductData.name} ${t(uiLocale, "products.duplicate.nameSuffix")}`,
       barcode: "",
-      baseUnitId: product.baseUnitId,
-      allowBaseUnitSale: product.allowBaseUnitSale,
-      priceBase: product.priceBase,
-      costBase: product.costBase,
-      outStockThreshold: product.outStockThreshold ?? "",
-      lowStockThreshold: product.lowStockThreshold ?? "",
-      categoryId: product.categoryId ?? "",
-      conversions: product.conversions.map((c) => ({
+      baseUnitId: detailProductData.baseUnitId,
+      allowBaseUnitSale: detailProductData.allowBaseUnitSale,
+      priceBase: detailProductData.priceBase,
+      costBase: detailProductData.costBase,
+      outStockThreshold: detailProductData.outStockThreshold ?? "",
+      lowStockThreshold: detailProductData.lowStockThreshold ?? "",
+      categoryId: detailProductData.categoryId ?? "",
+      conversions: detailProductData.conversions.map((c) => ({
         unitId: c.unitId,
         multiplierToBase: c.multiplierToBase,
         enabledForSale: c.enabledForSale,
@@ -1656,10 +1717,10 @@ export function ProductsManagement({
       variant: hasVariantMeta
         ? {
             enabled: true,
-            modelName: product.modelName ?? product.name,
-            variantLabel: product.variantLabel ?? "",
-            variantSortOrder: product.variantSortOrder ?? 0,
-            options: product.variantOptions.map((option) => ({
+            modelName: detailProductData.modelName ?? detailProductData.name,
+            variantLabel: detailProductData.variantLabel ?? "",
+            variantSortOrder: detailProductData.variantSortOrder ?? 0,
+            options: detailProductData.variantOptions.map((option) => ({
               attributeCode: option.attributeCode,
               attributeName: option.attributeName,
               valueCode: option.valueCode,

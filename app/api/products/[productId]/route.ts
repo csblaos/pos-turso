@@ -8,11 +8,14 @@ import { auditEvents, productUnits, products, units } from "@/lib/db/schema";
 import {
   RBACError,
   enforcePermission,
+  enforcePermissionForCurrentSession,
   hasPermission,
   toRBACErrorResponse,
 } from "@/lib/rbac/access";
 import { normalizeProductPayload, updateProductSchema } from "@/lib/products/validation";
 import { buildAuditEventValues } from "@/server/services/audit.service";
+import { getStoreProductById } from "@/lib/products/service";
+import { createPerfScope } from "@/server/perf/perf";
 import {
   deleteProductImageFromR2,
   isProductImageR2Configured,
@@ -23,6 +26,68 @@ import {
   buildVariantColumns,
   isVariantCombinationUniqueError,
 } from "@/lib/products/variant-persistence";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const preferredRegion = ["hnd1", "sin1"];
+
+export async function GET(
+  _request: Request,
+  context: { params: Promise<{ productId: string }> },
+) {
+  const perf = createPerfScope("api.products.detail");
+  try {
+    const [{ storeId }, { productId }] = await Promise.all([
+      perf.step(
+        "auth.permission",
+        () => enforcePermissionForCurrentSession("products.view"),
+        { kind: "auth", serverTimingName: "auth" },
+      ),
+      context.params,
+    ]);
+
+    const product = await perf.step(
+      "db.product",
+      () => getStoreProductById(storeId, productId),
+      { kind: "db", serverTimingName: "db" },
+    );
+
+    if (!product) {
+      return NextResponse.json({ message: "ไม่พบสินค้า" }, { status: 404 });
+    }
+
+    const payload = await perf.step(
+      "logic.shapeResponse",
+      () => ({
+        ok: true,
+        product,
+        latency: perf.elapsedMs(),
+      }),
+      { kind: "logic", serverTimingName: "logic" },
+    );
+
+    const response = await perf.step(
+      "response.json",
+      () =>
+        NextResponse.json(payload, {
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        }),
+      { kind: "logic", serverTimingName: "response" },
+    );
+    response.headers.set(
+      "Server-Timing",
+      perf.serverTiming({ includeTotal: true, totalName: "app" }),
+    );
+
+    return response;
+  } catch (error) {
+    return toRBACErrorResponse(error);
+  } finally {
+    perf.end();
+  }
+}
 
 export async function PATCH(
   request: Request,

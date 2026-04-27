@@ -19,12 +19,25 @@
   - write paths ที่ insert `inventory_movements` ใน stock/order/purchase flow จะ sync `inventory_balances` ใน transaction เดียวกันแล้ว เพื่อไม่ให้ read model stale หลังมี movement ใหม่
   - `GET /api/products/search?q&includeStock=true` ตัด N+1 เดิมออก โดยไม่เรียก `getInventoryBalanceForProduct()` ซ้ำทีละสินค้าอีกแล้ว แต่ map `stockOnHand/stockReserved/stockAvailable` ที่ query layer โหลดมาอยู่แล้วเป็น field `stock`
   - `GET /api/products` รอบล่าสุดใช้ current-session permission path แล้ว และส่ง `Cache-Control: no-store`, `Server-Timing`, `latency`, `count` เพื่อ trace products list ได้แบบเดียวกับ stock routes
+  - products list/read path ถูกแยกเป็น `list-lite` กับ `detail-full` แล้ว:
+    - `GET /api/products` และ SSR seed ของ `/products` จะคืน list payload แบบเบา ไม่โหลด `conversions` และ cost audit metadata ทุกแถว
+    - เพิ่ม `GET /api/products/[productId]` สำหรับ full product detail; `ProductsManagement` จะเรียก on-demand ตอนเปิด detail/edit/duplicate และ cache ไว้ฝั่ง client
+    - `GET /api/products` list-lite path ใช้ raw SQL แล้ว โดย page rows จะ join `inventory_balances` ตรงใน query เดียว แทน flow เดิมที่แตกเป็น `count + page ids + detail rows + balances`
   - หน้า `/products` รอบล่าสุดให้ SSR อ่าน `q/categoryId/status/sort` จาก URL แล้ว และ client จะไม่ยิง `/api/products` ซ้ำทันทีหลัง hydrate ถ้า filter ปัจจุบันยังตรงกับ SSR seed เดิม
   - `GET /api/stock/movements` (ทั้ง overview และ `view=history`) ส่ง `Cache-Control: no-store`, `Server-Timing`, และ `latency` แล้ว เพื่อให้ trace history tab ได้ละเอียดเหมือน stock/products
   - ลด work ซ้ำตอนสลับแท็บของหน้า `/stock` เพิ่ม:
     - `StockMovementHistory` จะไม่ background refetch ทันทีถ้ามี SSR/cached result สำหรับ key ปัจจุบันอยู่แล้ว
     - `PurchaseOrderList` จะไม่ `reloadFirstPage()` ทันทีหลัง mount อีกแล้วถ้ามี SSR initial list อยู่
     - `pending-rate` queue ของ purchase tab จะ auto-load เฉพาะตอน workspace เป็น `MONTH_END` และ dedupe key ซ้ำจาก effect
+  - stock tabs ถูกย้ายไปใช้ client-cached workspace แล้ว:
+    - initial page load ยัง SSR seed เฉพาะ active tab เท่านั้น
+    - หลังจากนั้น `StockTabs` จะ sync `?tab=` ด้วย `window.history.replaceState(...)` แทน `router.replace(...)` เพื่อไม่ให้เปลี่ยนแท็บแล้วเกิด server rerender ทั้งหน้า
+    - แต่ละแท็บ (`inventory/history/recording/purchase`) ถูก keep-mounted และจะเก็บ state/data เดิมไว้หลังเปิดครั้งแรก ทำให้การสลับกลับแท็บเดิมควร instant กว่า first-open
+    - non-active tabs จะ mount จริงตอนเปิดครั้งแรก พร้อม fetch initial data ฝั่ง client ถ้ายังไม่มี SSR seed; `purchase` ยังพก store config/PDF config จาก SSR shell ไว้เสมอเพื่อให้ first-open ฝั่ง client ไม่ต้อง reload shell ใหม่
+  - workspace `SUPPLIER_AP` ใต้ `/stock?tab=purchase` ถูก optimize สำหรับ repeated switch แล้ว:
+    - panel ถูก keep-mounted หลังเปิดครั้งแรก ไม่ unmount/remount ทุกครั้งที่ออกจาก workspace
+    - `PurchaseApSupplierPanel` มี client memory cache สำหรับ `supplier summary` และ `statement` พร้อม request abort/dedupe ตาม query key
+    - รอบล่าสุดถอด Redis micro-cache ออกแล้วตาม requirement ปัจจุบัน; ฝั่ง server กลับไป query ตรง และให้ repeated switch เร็วจาก client cache/workspace state เป็นหลัก
   - เพิ่ม migration [0045_thankful_zuras.sql](/Users/csl-dev/Desktop/alex/lex-pos/pos-turso/drizzle/0045_thankful_zuras.sql) สำหรับ index latency batch แรก:
     - `inventory_movements(store_id, product_id)`
     - `products(store_id, name)`
@@ -1831,6 +1844,8 @@ npm run build
 - การ์ด list ของ PO ในหน้า `/stock?tab=purchase` ปรับยอดรวมให้ตรงกับ detail แล้ว: list API คืน `totalCostPurchase` เพิ่ม และ UI จะโชว์ยอดซื้อจริงใน `purchaseCurrency` เป็นหลักสำหรับ PO ต่างสกุลเงิน พร้อม `≈` ยอดฐานร้านเป็นค่ารอง
 - `PurchaseOrderList` ตั้ง `cache: "no-store"` ให้ GET ของ `/api/stock/purchase-orders`, `/api/stock/purchase-orders/[poId]`, และ `/api/stock/purchase-orders/pending-rate` แล้ว เพื่อลดอาการหน้า list PO ค้างค่าเก่าหลัง create/receive/settle ขณะที่ detail สดกว่า
 - route GET ของ `/api/stock/purchase-orders`, `/api/stock/purchase-orders/[poId]`, และ `/api/stock/purchase-orders/pending-rate` ส่ง `Cache-Control: no-store` แล้วด้วย เพื่อปิดโอกาสที่ browser/Next cache ฝั่ง response ทำให้การ์ด list PO ค้าง `0 items / $0 / outstanding` ทั้งที่ detail ถูกต้อง
+- `GET /api/stock/purchase-orders/[poId]` ลด latency ของ detail modal เพิ่มแล้ว: route ใช้ `enforcePermissionForCurrentSession("inventory.view")` และส่ง `Server-Timing`/`latency` กลับมาเพื่อจับช่วง `auth/db/response`, ขณะที่ `getPurchaseOrderById()` เปลี่ยน `paidByName` จาก scalar subquery เป็น `left join` และดึง `itemRows` + `paymentRows` แบบขนานเพื่อลด round-trip ไป Turso
+- first-open ของ workspace `PO Operations` ในหน้า `/stock?tab=purchase` ปรับ loading semantics แล้ว: ถ้ายังไม่มี SSR seed และ client ต้องโหลด list ครั้งแรก `PurchaseOrderList` จะยก `isRefreshingList` ตั้งแต่ก่อน fetch, list area จะแสดง loading state ทันที, และปุ่ม `Create PO` จะถูกแทนด้วย loading pill ชั่วคราวเพื่อไม่ให้ผู้ใช้สับสนว่า action button กำลังทำงาน
 - ต้นเหตุอีกชั้นของ PO list ไม่ตรง detail คือ `components/app/purchase-order-list.tsx` ใช้ `useState(initialList)` แล้วไม่ sync prop ใหม่จาก `router.refresh()`; เพิ่ม `useEffect` รีเซ็ต `poList/poPage/hasMore` เมื่อ `initialList` เปลี่ยนแล้ว จึงไม่ค้างค่าเก่าระดับ client state อีก
 - เพิ่ม helper แปลง `PurchaseOrderDetail` เป็น `PurchaseOrderListItem` ใน `components/app/purchase-order-list.tsx` แล้ว และให้ `PODetailSheet` upsert แถวใน `poList` ทันทีหลัง `save edit / change status / finalize rate / settle / apply extra cost / reverse payment` เพื่อลดเคส list card ค้าง `0 items / $0 / outstanding` แม้ detail ถูก
 - เพิ่ม force refresh ของ PO list เมื่อแท็บ `/stock?tab=purchase` ถูกเปิดครั้งแรกด้วย `reloadFirstPage()` ผ่าน API `no-store`; ช่วยปิดช่องว่างกรณี `initialPOs` จาก server render stale กว่า detail API

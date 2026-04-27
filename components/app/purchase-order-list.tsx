@@ -32,6 +32,7 @@ import toast from "react-hot-toast";
 
 import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
+import { useIsStockTabActive } from "@/components/app/stock-tabs";
 import {
   StockTabErrorState,
   StockTabLoadingState,
@@ -112,6 +113,7 @@ type PurchaseOrderListProps = {
   canCreate: boolean;
   pageSize: number;
   initialHasMore: boolean;
+  hasInitialSeed: boolean;
   storeLogoUrl?: string | null;
   pdfConfig?: Partial<PoPdfConfig>;
 };
@@ -904,6 +906,7 @@ export function PurchaseOrderList({
   canCreate,
   pageSize,
   initialHasMore,
+  hasInitialSeed,
   storeLogoUrl,
   pdfConfig,
 }: PurchaseOrderListProps) {
@@ -919,7 +922,7 @@ export function PurchaseOrderList({
     () => rawSearchParams ?? new URLSearchParams(),
     [rawSearchParams],
   );
-  const isPurchaseTabActive = searchParams.get("tab") === "purchase";
+  const isPurchaseTabActive = useIsStockTabActive("purchase");
   const workspaceFromQuery = useMemo(() => {
     const raw = searchParams.get(PURCHASE_WORKSPACE_QUERY_KEY);
     return isPurchaseWorkspace(raw) ? raw : null;
@@ -968,15 +971,29 @@ export function PurchaseOrderList({
   const [activeKpiShortcut, setActiveKpiShortcut] = useState<KpiShortcut | null>(null);
   const [apPanelPreset, setApPanelPreset] = useState<PurchaseApPanelPreset | null>(null);
   const [savedPresets, setSavedPresets] = useState<SavedPurchasePreset[]>([]);
-  const hasLoadedFreshPurchaseListRef = useRef(false);
-  const skippedInitialPurchaseRefreshRef = useRef(false);
+  const hasLoadedOperationsListRef = useRef(hasInitialSeed);
+  const [mountedWorkspaces, setMountedWorkspaces] = useState<Record<PurchaseWorkspace, boolean>>(
+    () => ({
+      OPERATIONS: workspaceTab === "OPERATIONS",
+      MONTH_END: workspaceTab === "MONTH_END",
+      SUPPLIER_AP: workspaceTab === "SUPPLIER_AP",
+    }),
+  );
   const lastAutoPendingQueueKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
+    setMountedWorkspaces((prev) => ({ ...prev, [workspaceTab]: true }));
+  }, [workspaceTab]);
+
+  useEffect(() => {
+    if (!hasInitialSeed) {
+      return;
+    }
     setPoList(initialList);
     setPoPage(1);
     setHasMore(initialHasMore);
-  }, [initialHasMore, initialList]);
+    setLastUpdatedAt(new Date().toISOString());
+  }, [hasInitialSeed, initialHasMore, initialList]);
   const [pendingRateQueue, setPendingRateQueue] = useState<PendingRateQueueItem[]>([]);
   const [isLoadingPendingQueue, setIsLoadingPendingQueue] = useState(false);
   const [pendingQueueError, setPendingQueueError] = useState<string | null>(null);
@@ -1192,12 +1209,13 @@ export function PurchaseOrderList({
           x: window.scrollX,
           y: window.scrollY,
         };
+        const nextUrl = nextQuery
+          ? `${pathname}?${nextQuery}${window.location.hash}`
+          : `${pathname}${window.location.hash}`;
+        window.history.replaceState(window.history.state, "", nextUrl);
       }
-      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
-        scroll: false,
-      });
     },
-    [pathname, router, searchParams],
+    [pathname, searchParams],
   );
 
   useEffect(() => {
@@ -1830,12 +1848,15 @@ export function PurchaseOrderList({
   const reloadFirstPage = useCallback(async () => {
     setIsRefreshingList(true);
     try {
+      if (workspaceTab === "MONTH_END") {
+        await loadPendingQueue();
+        return;
+      }
       await loadPurchaseOrders(1, true);
-      await loadPendingQueue();
     } finally {
       setIsRefreshingList(false);
     }
-  }, [loadPendingQueue, loadPurchaseOrders]);
+  }, [loadPendingQueue, loadPurchaseOrders, workspaceTab]);
 
   const loadMore = useCallback(async () => {
     if (isLoadingMore || !hasMore) return;
@@ -1870,16 +1891,32 @@ export function PurchaseOrderList({
     if (!isPurchaseTabActive) {
       return;
     }
-    if (hasLoadedFreshPurchaseListRef.current) {
+    if (workspaceTab !== "OPERATIONS") {
       return;
     }
-    hasLoadedFreshPurchaseListRef.current = true;
-    if (!skippedInitialPurchaseRefreshRef.current) {
-      skippedInitialPurchaseRefreshRef.current = true;
+    if (hasLoadedOperationsListRef.current) {
       return;
     }
-    void reloadFirstPage();
-  }, [isPurchaseTabActive, reloadFirstPage]);
+    hasLoadedOperationsListRef.current = true;
+    let isCancelled = false;
+    setIsRefreshingList(true);
+    void (async () => {
+      try {
+        await loadPurchaseOrders(1, true);
+      } finally {
+        if (!isCancelled) {
+          setIsRefreshingList(false);
+        }
+      }
+    })();
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    isPurchaseTabActive,
+    loadPurchaseOrders,
+    workspaceTab,
+  ]);
 
   useEffect(() => {
     if (!isPurchaseTabActive || workspaceTab !== "MONTH_END") {
@@ -2623,6 +2660,8 @@ export function PurchaseOrderList({
       outstandingBase,
     };
   }, [pendingRateQueue.length, poList, storeCurrency]);
+  const isInitialOperationsLoading =
+    workspaceTab === "OPERATIONS" && isRefreshingList && poList.length === 0;
   const activeKpiShortcutLabel = useMemo(() => {
     if (activeKpiShortcut === "OPEN_PO") return t(uiLocale, "purchase.kpiShortcut.OPEN_PO.active");
     if (activeKpiShortcut === "PENDING_RATE") {
@@ -2644,12 +2683,19 @@ export function PurchaseOrderList({
         <div>
           <h2 className="text-sm font-semibold text-slate-900">{t(uiLocale, "purchase.title")}</h2>
           <p className="text-[11px] text-slate-500">
-            {poList.length > 0
+            {isInitialOperationsLoading
+              ? t(uiLocale, "purchase.list.refreshing")
+              : poList.length > 0
               ? `${poList.length.toLocaleString(numberLocale)} ${t(uiLocale, "purchase.items")}`
               : t(uiLocale, "purchase.emptyList")}
           </p>
         </div>
-        {canCreate && (
+        {isInitialOperationsLoading ? (
+          <div className="inline-flex h-9 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3.5 text-sm font-medium text-slate-600">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {t(uiLocale, "common.loading")}
+          </div>
+        ) : canCreate && (
           <div className="flex items-center">
             <button
               type="button"
@@ -3169,18 +3215,23 @@ export function PurchaseOrderList({
       </div>
       ) : null}
 
-      {workspaceTab === "SUPPLIER_AP" ? (
-      <PurchaseApSupplierPanel
-        storeCurrency={storeCurrency}
-        refreshKey={lastUpdatedAt}
-        preset={apPanelPreset ?? apQueryPreset}
-        onLoadingChange={setIsSupplierApPanelLoading}
-        onFiltersChange={handleApFiltersChange}
-        onAfterBulkSettle={reloadFirstPage}
-        onOpenPurchaseOrder={(poId) => {
-          setSelectedPO(poId);
-        }}
-      />
+      {mountedWorkspaces.SUPPLIER_AP ? (
+        <div
+          className={workspaceTab === "SUPPLIER_AP" ? "block" : "hidden"}
+          aria-hidden={workspaceTab !== "SUPPLIER_AP"}
+        >
+          <PurchaseApSupplierPanel
+            storeCurrency={storeCurrency}
+            refreshKey={lastUpdatedAt}
+            preset={apPanelPreset ?? apQueryPreset}
+            onLoadingChange={setIsSupplierApPanelLoading}
+            onFiltersChange={handleApFiltersChange}
+            onAfterBulkSettle={reloadFirstPage}
+            onOpenPurchaseOrder={(poId) => {
+              setSelectedPO(poId);
+            }}
+          />
+        </div>
       ) : null}
 
       {workspaceTab === "OPERATIONS" ? (

@@ -15,6 +15,7 @@ import toast from "react-hot-toast";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import { BarcodeScannerPanel } from "@/components/app/barcode-scanner-panel";
+import { useIsStockTabActive } from "@/components/app/stock-tabs";
 import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import {
@@ -41,6 +42,7 @@ type StockInventoryViewProps = {
   storeLowStockThreshold: number;
   pageSize: number;
   initialHasMore: boolean;
+  hasInitialSeed: boolean;
 };
 
 type FilterOption = "all" | "low" | "out";
@@ -101,6 +103,7 @@ export function StockInventoryView({
   storeLowStockThreshold,
   pageSize,
   initialHasMore,
+  hasInitialSeed,
 }: StockInventoryViewProps) {
   const pathname = usePathname() ?? "/";
   const rawSearchParams = useSearchParams();
@@ -110,8 +113,7 @@ export function StockInventoryView({
   );
   const uiLocale = useUiLocale();
   const numberLocale = uiLocaleToDateLocale(uiLocale);
-  const tabQuery = searchParams.get("tab");
-  const isInventoryTabActive = tabQuery === null || tabQuery === "inventory";
+  const isInventoryTabActive = useIsStockTabActive("inventory");
   const searchQueryFromUrl = searchParams.get(INVENTORY_Q_QUERY_KEY)?.trim() ?? "";
   const filterFromUrl =
     parseInventoryFilter(searchParams.get(INVENTORY_FILTER_QUERY_KEY)) ?? "all";
@@ -145,10 +147,12 @@ export function StockInventoryView({
   const [showScannerPermission, setShowScannerPermission] = useState(false);
   const [hasSeenScannerPermission, setHasSeenScannerPermission] = useState(false);
   const lastFetchedInventoryKeyRef = useRef(
-    buildInventoryFetchKey({
-      categoryId: categoryIdFromUrl,
-      query: searchQueryFromUrl,
-    }),
+    hasInitialSeed
+      ? buildInventoryFetchKey({
+          categoryId: categoryIdFromUrl,
+          query: searchQueryFromUrl,
+        })
+      : null,
   );
   const inventoryQueryRequestIdRef = useRef(0);
   const hasActiveInventorySearchQuery = searchQuery.trim().length > 0;
@@ -160,6 +164,9 @@ export function StockInventoryView({
     (isRefreshingData || isInventoryQueryLoading) && productItems.length === 0;
 
   useEffect(() => {
+    if (!hasInitialSeed) {
+      return;
+    }
     setProductItems(products);
     setProductPage(1);
     setHasMoreProducts(initialHasMore);
@@ -167,10 +174,8 @@ export function StockInventoryView({
       categoryId: categoryIdFromUrl,
       query: searchQueryFromUrl,
     });
-    if (products.length > 0) {
-      setLastUpdatedAt(new Date().toISOString());
-    }
-  }, [categoryIdFromUrl, initialHasMore, products, searchQueryFromUrl]);
+    setLastUpdatedAt(new Date().toISOString());
+  }, [categoryIdFromUrl, hasInitialSeed, initialHasMore, products, searchQueryFromUrl]);
 
   useEffect(() => {
     const seen = window.localStorage.getItem(SCANNER_PERMISSION_STORAGE_KEY) === "1";

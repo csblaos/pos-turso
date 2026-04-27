@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { BarcodeScannerPanel } from "@/components/app/barcode-scanner-panel";
+import { useIsStockTabActive } from "@/components/app/stock-tabs";
 import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import {
@@ -37,6 +38,7 @@ import {
 type StockMovementHistoryProps = {
   movements: InventoryMovementView[];
   initialTotal: number;
+  hasInitialSeed: boolean;
 };
 
 type MovementTypeFilter =
@@ -365,7 +367,11 @@ function buildHistoryCacheKey(params: {
   ].join("|");
 }
 
-export function StockMovementHistory({ movements, initialTotal }: StockMovementHistoryProps) {
+export function StockMovementHistory({
+  movements,
+  initialTotal,
+  hasInitialSeed,
+}: StockMovementHistoryProps) {
   const pathname = usePathname() ?? "/";
   const rawSearchParams = useSearchParams();
   const searchParams = useMemo(
@@ -383,7 +389,7 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
     t(uiLocale, "purchase.calendar.weekday.FRI"),
     t(uiLocale, "purchase.calendar.weekday.SAT"),
   ] as const;
-  const isHistoryTabActive = searchParams.get("tab") === "history";
+  const isHistoryTabActive = useIsStockTabActive("history");
   const typeFilterFromQuery =
     parseHistoryTypeFilter(searchParams.get(HISTORY_TYPE_QUERY_KEY)) ?? "all";
   const pageFromQuery = parsePositivePage(searchParams.get(HISTORY_PAGE_QUERY_KEY));
@@ -460,6 +466,9 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
   );
 
   useEffect(() => {
+    if (!hasInitialSeed) {
+      return;
+    }
     setMovementItems(movements);
     setTotalItems(initialTotal);
     setErrorMessage(null);
@@ -470,7 +479,7 @@ export function StockMovementHistory({ movements, initialTotal }: StockMovementH
       total: initialTotal,
       fetchedAt: fetchedAt ?? new Date().toISOString(),
     });
-  }, [initialHistoryCacheKey, initialTotal, movements]);
+  }, [hasInitialSeed, initialHistoryCacheKey, initialTotal, movements]);
 
   useEffect(() => {
     if (!isHistoryTabActive) {

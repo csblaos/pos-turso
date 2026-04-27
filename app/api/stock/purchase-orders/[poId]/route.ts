@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 
-import { enforcePermission, toRBACErrorResponse } from "@/lib/rbac/access";
+import {
+  enforcePermission,
+  enforcePermissionForCurrentSession,
+  toRBACErrorResponse,
+} from "@/lib/rbac/access";
 import {
   updatePOStatusSchema,
   updatePurchaseOrderSchema,
@@ -21,21 +25,47 @@ import {
   hashRequestBody,
   safeMarkIdempotencyFailed,
 } from "@/server/services/idempotency.service";
+import { createPerfScope } from "@/server/perf/perf";
 
 type RouteParams = { params: Promise<{ poId: string }> };
 const NO_STORE_HEADERS = {
   "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
 } as const;
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const preferredRegion = ["hnd1", "sin1"];
+
 export async function GET(_request: Request, { params }: RouteParams) {
+  const perf = createPerfScope("api.stock.purchaseOrderDetail");
   try {
-    const { storeId } = await enforcePermission("inventory.view");
-    const { poId } = await params;
-    const po = await getPurchaseOrderDetail(poId, storeId);
-    return NextResponse.json(
-      { ok: true, purchaseOrder: po },
-      { headers: NO_STORE_HEADERS },
+    const [{ storeId }, { poId }] = await Promise.all([
+      perf.step(
+        "auth.permission",
+        () => enforcePermissionForCurrentSession("inventory.view"),
+        { kind: "auth", serverTimingName: "auth" },
+      ),
+      params,
+    ]);
+    const po = await perf.step(
+      "db.purchaseOrderDetail",
+      () => getPurchaseOrderDetail(poId, storeId),
+      { kind: "db", serverTimingName: "db" },
     );
+    const response = await perf.step(
+      "response.json",
+      () =>
+        NextResponse.json(
+          { ok: true, purchaseOrder: po, latency: perf.elapsedMs() },
+          { headers: NO_STORE_HEADERS },
+        ),
+      { kind: "logic", serverTimingName: "response" },
+    );
+    response.headers.set(
+      "Server-Timing",
+      perf.serverTiming({ includeTotal: true, totalName: "app" }),
+    );
+    return response;
   } catch (error) {
     if (error instanceof PurchaseServiceError) {
       return NextResponse.json(
@@ -44,6 +74,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
       );
     }
     return toRBACErrorResponse(error);
+  } finally {
+    perf.end();
   }
 }
 

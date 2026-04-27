@@ -114,6 +114,7 @@ export default async function ProductsPage({
       sort: initialSortOption,
       page: 1,
       pageSize: PRODUCT_PAGE_SIZE,
+      mode: "lite",
     }),
     getStoreProductSummaryCounts(session.activeStoreId),
     listUnits(session.activeStoreId),

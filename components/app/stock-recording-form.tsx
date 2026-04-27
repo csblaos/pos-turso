@@ -15,6 +15,10 @@ import { Button } from "@/components/ui/button";
 import { SlideUpSheet } from "@/components/ui/slide-up-sheet";
 import { BarcodeScannerPanel } from "@/components/app/barcode-scanner-panel";
 import {
+  useIsStockTabActive,
+  useStockTabNavigation,
+} from "@/components/app/stock-tabs";
+import {
   StockTabEmptyState,
   StockTabErrorState,
   StockTabLoadingState,
@@ -36,6 +40,7 @@ type StockRecordingFormProps = {
   canAdjust: boolean;
   canInbound: boolean;
   canUpdateCost: boolean;
+  hasInitialSeed: boolean;
 };
 
 type MovementType = "IN" | "ADJUST" | "RETURN";
@@ -83,6 +88,7 @@ export function StockRecordingForm({
   canAdjust,
   canInbound,
   canUpdateCost,
+  hasInitialSeed,
 }: StockRecordingFormProps) {
   const router = useRouter();
   const pathname = usePathname() ?? "/";
@@ -91,9 +97,10 @@ export function StockRecordingForm({
     () => rawSearchParams ?? new URLSearchParams(),
     [rawSearchParams],
   );
+  const changeTab = useStockTabNavigation();
   const uiLocale = useUiLocale();
   const numberLocale = uiLocaleToDateLocale(uiLocale);
-  const isRecordingTabActive = searchParams.get("tab") === "recording";
+  const isRecordingTabActive = useIsStockTabActive("recording");
   const movementTypeFromQuery = parseMovementTypeQuery(
     searchParams.get(RECORDING_MOVEMENT_QUERY_KEY),
   );
@@ -202,14 +209,14 @@ export function StockRecordingForm({
   }, []);
 
   useEffect(() => {
-    if (initialProducts.length === 0) {
+    if (!hasInitialSeed || initialProducts.length === 0) {
       return;
     }
     if (productItems.length === 0) {
       setProductItems(initialProducts);
       setLastUpdatedAt(new Date().toISOString());
     }
-  }, [initialProducts, productItems.length]);
+  }, [hasInitialSeed, initialProducts, productItems.length]);
 
   useEffect(() => {
     if (productItems.length === 0) {
@@ -287,7 +294,9 @@ export function StockRecordingForm({
       return;
     }
 
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(
+      typeof window !== "undefined" ? window.location.search : searchParams.toString(),
+    );
     const defaultMovementType = movementTypeOptions[0] ?? "IN";
     let changed = false;
 
@@ -316,16 +325,18 @@ export function StockRecordingForm({
     }
 
     const nextQuery = params.toString();
-    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
-      scroll: false,
-    });
+    if (typeof window !== "undefined") {
+      const nextUrl = nextQuery
+        ? `${pathname}?${nextQuery}${window.location.hash}`
+        : `${pathname}${window.location.hash}`;
+      window.history.replaceState(window.history.state, "", nextUrl);
+    }
   }, [
     isRecordingTabActive,
     movementType,
     movementTypeOptions,
     pathname,
     productId,
-    router,
     searchParams,
   ]);
 
@@ -463,6 +474,13 @@ export function StockRecordingForm({
     }
   }, [uiLocale]);
 
+  useEffect(() => {
+    if (!isRecordingTabActive || hasInitialSeed || productItems.length > 0) {
+      return;
+    }
+    void refreshRecordingData();
+  }, [hasInitialSeed, isRecordingTabActive, productItems.length, refreshRecordingData]);
+
   const quickPresets = useMemo(() => {
     const presets: {
       id: string;
@@ -582,10 +600,8 @@ export function StockRecordingForm({
   );
 
   const jumpToPurchaseTab = useCallback(() => {
-    const params = new URLSearchParams(window.location.search);
-    params.set("tab", "purchase");
-    router.push(`?${params.toString()}`);
-  }, [router]);
+    changeTab?.("purchase");
+  }, [changeTab]);
 
   const jumpToProductCost = useCallback(() => {
     if (!selectedProduct) {
@@ -1154,9 +1170,7 @@ export function StockRecordingForm({
             <button
               type="button"
               onClick={() => {
-                const params = new URLSearchParams(window.location.search);
-                params.set("tab", "history");
-                router.push(`?${params.toString()}`);
+                changeTab?.("history");
               }}
               className="text-xs text-blue-600 hover:text-blue-700"
             >

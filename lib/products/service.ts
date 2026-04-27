@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 
-import { db } from "@/lib/db/client";
+import { db, getLibsqlClient } from "@/lib/db/client";
 import { getInventoryBalancesByStoreForProducts } from "@/lib/inventory/queries";
 import {
   auditEvents,
@@ -99,6 +99,8 @@ export type ProductSummaryCounts = {
   active: number;
   inactive: number;
 };
+
+type ProductListDataMode = "full" | "lite";
 
 type ProductRowWithConversion = {
   id: string;
@@ -373,11 +375,188 @@ const buildProductsWhere = ({
   return whereClause;
 };
 
+const defaultCostTracking = (): ProductCostTracking => ({
+  source: "UNKNOWN",
+  updatedAt: null,
+  actorName: null,
+  reason: null,
+  reference: null,
+});
+
+async function listStoreProductsPageLiteRaw({
+  storeId,
+  search,
+  categoryId,
+  status = "all",
+  sort = "newest",
+  page = 1,
+  pageSize = 30,
+}: {
+  storeId: string;
+  search?: string;
+  categoryId?: string;
+  status?: ProductStatusFilter;
+  sort?: ProductSortOption;
+  page?: number;
+  pageSize?: number;
+}): Promise<ProductPageResult> {
+  const client = getLibsqlClient();
+  const safePage = Math.max(1, Math.trunc(page));
+  const safePageSize = Math.min(100, Math.max(1, Math.trunc(pageSize)));
+  const offset = (safePage - 1) * safePageSize;
+
+  const args: Array<string | number> = [storeId];
+  const whereParts = ["p.store_id = ?"];
+  const keyword = search?.trim();
+  if (keyword) {
+    const keywordLike = `%${keyword}%`;
+    whereParts.push(
+      "(p.name like ? or p.sku like ? or p.barcode like ? or p.variant_label like ?)",
+    );
+    args.push(keywordLike, keywordLike, keywordLike, keywordLike);
+  }
+
+  const normalizedCategoryId = categoryId?.trim();
+  if (normalizedCategoryId) {
+    whereParts.push("p.category_id = ?");
+    args.push(normalizedCategoryId);
+  }
+
+  if (status === "active") {
+    whereParts.push("p.active = 1");
+  } else if (status === "inactive") {
+    whereParts.push("p.active = 0");
+  }
+
+  const orderBy =
+    sort === "name-asc"
+      ? "p.name asc, p.created_at desc"
+      : sort === "name-desc"
+        ? "p.name desc, p.created_at desc"
+        : sort === "price-asc"
+          ? "p.price_base asc, p.name asc"
+          : sort === "price-desc"
+            ? "p.price_base desc, p.name asc"
+            : "p.created_at desc, p.name asc";
+
+  const whereSql = whereParts.join(" and ");
+  const rowsResult = await client.execute({
+    sql: `
+      select
+        p.id,
+        p.sku,
+        p.name,
+        p.barcode,
+        p.model_id,
+        pm.name as model_name,
+        p.variant_label,
+        p.variant_options_json,
+        p.variant_sort_order,
+        p.image_url,
+        p.category_id,
+        pc.name as category_name,
+        p.base_unit_id,
+        bu.code as base_unit_code,
+        bu.name_th as base_unit_name_th,
+        p.allow_base_unit_sale,
+        p.price_base,
+        p.cost_base,
+        p.out_stock_threshold,
+        p.low_stock_threshold,
+        p.active,
+        p.created_at,
+        coalesce(ib.on_hand_base, 0) as stock_on_hand,
+        coalesce(ib.reserved_base, 0) as stock_reserved,
+        coalesce(ib.available_base, 0) as stock_available,
+        count(*) over() as total_count
+      from products p
+      inner join units bu on bu.id = p.base_unit_id
+      left join product_models pm on pm.id = p.model_id
+      left join product_categories pc on pc.id = p.category_id
+      left join inventory_balances ib
+        on ib.store_id = p.store_id
+       and ib.product_id = p.id
+      where ${whereSql}
+      order by ${orderBy}
+      limit ? offset ?
+    `,
+    args: [...args, safePageSize, offset],
+  });
+
+  const rows = rowsResult.rows;
+  const items: ProductListItem[] = rows.map((row) => ({
+    id: String(row.id),
+    sku: String(row.sku),
+    name: String(row.name),
+    barcode: row.barcode ? String(row.barcode) : null,
+    modelId: row.model_id ? String(row.model_id) : null,
+    modelName: row.model_name ? String(row.model_name) : null,
+    variantLabel: row.variant_label ? String(row.variant_label) : null,
+    variantOptionsJson: row.variant_options_json ? String(row.variant_options_json) : null,
+    variantOptions: parseVariantOptions(
+      row.variant_options_json ? String(row.variant_options_json) : null,
+    ),
+    variantSortOrder: Number(row.variant_sort_order ?? 0),
+    imageUrl: resolveProductImageUrl(row.image_url ? String(row.image_url) : null),
+    categoryId: row.category_id ? String(row.category_id) : null,
+    categoryName: row.category_name ? String(row.category_name) : null,
+    baseUnitId: String(row.base_unit_id),
+    baseUnitCode: String(row.base_unit_code),
+    baseUnitNameTh: String(row.base_unit_name_th),
+    allowBaseUnitSale: Number(row.allow_base_unit_sale ?? 0) === 1,
+    priceBase: Number(row.price_base ?? 0),
+    costBase: Number(row.cost_base ?? 0),
+    outStockThreshold:
+      row.out_stock_threshold === null || row.out_stock_threshold === undefined
+        ? null
+        : Number(row.out_stock_threshold),
+    lowStockThreshold:
+      row.low_stock_threshold === null || row.low_stock_threshold === undefined
+        ? null
+        : Number(row.low_stock_threshold),
+    stockOnHand: Number(row.stock_on_hand ?? 0),
+    stockReserved: Number(row.stock_reserved ?? 0),
+    stockAvailable: Number(row.stock_available ?? 0),
+    costTracking: defaultCostTracking(),
+    latestPurchaseOrderCost: null,
+    active: Number(row.active ?? 0) === 1,
+    createdAt: String(row.created_at),
+    conversions: [],
+  }));
+
+  const total =
+    rows.length > 0
+      ? Number(rows[0]?.total_count ?? 0)
+      : Number(
+          (
+            await client.execute({
+              sql: `
+                select count(*) as total
+                from products p
+                where ${whereSql}
+              `,
+              args,
+            })
+          ).rows[0]?.total ?? 0,
+        );
+
+  return {
+    items,
+    total,
+    page: safePage,
+    pageSize: safePageSize,
+  };
+}
+
 async function listStoreProductsByIds(
   storeId: string,
   productIds: string[],
+  options?: {
+    mode?: ProductListDataMode;
+  },
 ): Promise<ProductListItem[]> {
   if (productIds.length === 0) return [];
+  const mode = options?.mode ?? "full";
 
   const baseUnits = alias(units, "base_units");
   const conversionUnits = alias(units, "conversion_units");
@@ -406,24 +585,41 @@ async function listStoreProductsByIds(
       lowStockThreshold: products.lowStockThreshold,
       active: products.active,
       createdAt: products.createdAt,
-      conversionUnitId: conversionUnits.id,
-      conversionUnitCode: conversionUnits.code,
-      conversionUnitNameTh: conversionUnits.nameTh,
-      multiplierToBase: productUnits.multiplierToBase,
-      conversionEnabledForSale: productUnits.enabledForSale,
-      conversionPricePerUnit: productUnits.pricePerUnit,
+      conversionUnitId:
+        mode === "full" ? conversionUnits.id : sql<string | null>`null`,
+      conversionUnitCode:
+        mode === "full" ? conversionUnits.code : sql<string | null>`null`,
+      conversionUnitNameTh:
+        mode === "full" ? conversionUnits.nameTh : sql<string | null>`null`,
+      multiplierToBase:
+        mode === "full" ? productUnits.multiplierToBase : sql<number | null>`null`,
+      conversionEnabledForSale:
+        mode === "full" ? productUnits.enabledForSale : sql<boolean | null>`null`,
+      conversionPricePerUnit:
+        mode === "full" ? productUnits.pricePerUnit : sql<number | null>`null`,
     })
     .from(products)
     .innerJoin(baseUnits, eq(products.baseUnitId, baseUnits.id))
     .leftJoin(productModels, eq(products.modelId, productModels.id))
     .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
-    .leftJoin(productUnits, eq(productUnits.productId, products.id))
-    .leftJoin(conversionUnits, eq(productUnits.unitId, conversionUnits.id))
+    .leftJoin(
+      productUnits,
+      mode === "full" ? eq(productUnits.productId, products.id) : sql`0 = 1`,
+    )
+    .leftJoin(
+      conversionUnits,
+      mode === "full" ? eq(productUnits.unitId, conversionUnits.id) : sql`0 = 1`,
+    )
     .where(and(eq(products.storeId, storeId), inArray(products.id, productIds)));
-  const [balances, costAuditSummary] = await Promise.all([
-    getInventoryBalancesByStoreForProducts(storeId, productIds),
-    getLatestCostTrackingByProductIds(storeId, productIds),
-  ]);
+  const balances = await getInventoryBalancesByStoreForProducts(storeId, productIds);
+  const costAuditSummary =
+    mode === "full"
+      ? await getLatestCostTrackingByProductIds(storeId, productIds)
+      : {
+          trackingByProductId: new Map<string, ProductCostTracking>(),
+          latestPurchaseOrderCostByProductId:
+            new Map<string, ProductLatestPurchaseOrderCost>(),
+        };
 
   const items = mapProductRows(rows);
   const balanceByProductId = new Map(balances.map((balance) => [balance.productId, balance]));
@@ -447,6 +643,9 @@ async function listStoreProductsByIds(
 export async function listStoreProducts(
   storeId: string,
   search?: string,
+  options?: {
+    mode?: ProductListDataMode;
+  },
 ): Promise<ProductListItem[]> {
   const whereClause = buildProductsWhere({ storeId, search });
   const idRows = await db
@@ -456,7 +655,7 @@ export async function listStoreProducts(
     .orderBy(desc(products.createdAt), asc(products.name));
 
   const orderedIds = idRows.map((row) => row.id);
-  const items = await listStoreProductsByIds(storeId, orderedIds);
+  const items = await listStoreProductsByIds(storeId, orderedIds, options);
   const itemById = new Map(items.map((item) => [item.id, item]));
 
   return orderedIds.flatMap((id) => {
@@ -473,6 +672,7 @@ export async function listStoreProductsPage({
   sort = "newest",
   page = 1,
   pageSize = 30,
+  mode = "full",
 }: {
   storeId: string;
   search?: string;
@@ -481,7 +681,20 @@ export async function listStoreProductsPage({
   sort?: ProductSortOption;
   page?: number;
   pageSize?: number;
+  mode?: ProductListDataMode;
 }): Promise<ProductPageResult> {
+  if (mode === "lite") {
+    return listStoreProductsPageLiteRaw({
+      storeId,
+      search,
+      categoryId,
+      status,
+      sort,
+      page,
+      pageSize,
+    });
+  }
+
   const safePage = Math.max(1, Math.trunc(page));
   const safePageSize = Math.min(100, Math.max(1, Math.trunc(pageSize)));
   const offset = (safePage - 1) * safePageSize;
@@ -540,7 +753,7 @@ export async function listStoreProductsPage({
           .limit(safePageSize)
           .offset(offset);
   const orderedIds = idRows.map((row) => row.id);
-  const items = await listStoreProductsByIds(storeId, orderedIds);
+  const items = await listStoreProductsByIds(storeId, orderedIds, { mode });
   const itemById = new Map(items.map((item) => [item.id, item]));
 
   return {
@@ -552,6 +765,14 @@ export async function listStoreProductsPage({
     page: safePage,
     pageSize: safePageSize,
   };
+}
+
+export async function getStoreProductById(
+  storeId: string,
+  productId: string,
+): Promise<ProductListItem | null> {
+  const items = await listStoreProductsByIds(storeId, [productId], { mode: "full" });
+  return items[0] ?? null;
 }
 
 export async function getStoreProductSummaryCounts(

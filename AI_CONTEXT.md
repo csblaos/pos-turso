@@ -138,6 +138,8 @@ npm run po:audit:integrity
     - การ์ด list ของ PO ใน `/stock?tab=purchase` แสดงยอดให้ตรงกับ detail แล้ว: ถ้า `purchaseCurrency` ต่างจาก `storeCurrency` จะใช้ `totalCostPurchase` เป็นยอดหลัก และแสดง `≈ totalCostBase + shipping + other` เป็นยอดรอง แทนการโชว์ฐานร้านอย่างเดียว
     - client fetch ของ PO list/detail/pending-rate queue ใน `components/app/purchase-order-list.tsx` ถูกตั้ง `cache: "no-store"` แล้ว เพื่อลดโอกาสที่หน้า list ค้างค่าเก่า (`items/$0/outstanding`) หลัง create/receive/settle แต่ detail สดถูกต้อง
     - API GET ของ `app/api/stock/purchase-orders/route.ts`, `app/api/stock/purchase-orders/[poId]/route.ts`, และ `app/api/stock/purchase-orders/pending-rate/route.ts` ส่ง `Cache-Control: no-store` แล้ว เพื่อลดอาการ browser/Next reuse payload เก่าที่ทำให้หน้า list PO ไม่ตรงกับ detail
+    - `GET /api/stock/purchase-orders/[poId]` ถูกลด latency เพิ่มเติมแล้ว: route ใช้ `enforcePermissionForCurrentSession("inventory.view")` + `Server-Timing`/`latency` สำหรับ perf breakdown, และใน repo เปลี่ยนจาก lookup `paidByName` แบบ subquery เป็น `left join` ตรง พร้อมดึง `items` กับ `payments` แบบ `Promise.all(...)` เพื่อลด DB round-trip ของ PO detail
+    - first-open ของ `PO Operations` ใน `/stock?tab=purchase` ปรับ UX loading แล้ว: เมื่อแท็บนี้ยังไม่มี SSR seed และ client ต้องโหลด list ครั้งแรก ระบบจะยก `isRefreshingList` ตั้งแต่เริ่ม fetch และแสดง loading pill ตำแหน่ง header action แทนปุ่ม `Create PO`; spinner หลักยังอยู่ในพื้นที่ list เพื่อให้สื่อว่า “กำลังโหลดรายการ PO” ไม่ใช่ “กำลังสร้าง PO”
     - แก้ state sync ของ `PurchaseOrderList` แล้ว: เดิม client ใช้ `useState(initialList)` ครั้งเดียวและไม่ sync เมื่อ `router.refresh()` ส่ง props ใหม่จาก server ทำให้ PO list card ค้าง `0 items / $0 / outstanding` แม้ detail สดถูกต้อง; ตอนนี้มี `useEffect` รีเซ็ต `poList/poPage/hasMore` เมื่อ `initialList` หรือ `initialHasMore` เปลี่ยน
     - `PurchaseOrderList` มี helper แปลง `PurchaseOrderDetail -> PurchaseOrderListItem` แล้ว และ `PODetailSheet` จะ upsert แถวใน `poList` ตรง ๆ หลัง action สำเร็จ (`status change`, `finalize rate`, `settle`, `apply extra cost`, `reverse payment`, `save edit`) แทนการหวังพึ่ง `router.refresh()` อย่างเดียว
     - เมื่อเปิดแท็บ PO ใน `/stock?tab=purchase` ฝั่ง client จะ force refresh list 1 รอบผ่าน API `no-store` แล้ว เพื่อกันกรณี server-rendered `initialPOs` stale กว่า detail API
@@ -365,6 +367,8 @@ npm run po:audit:integrity
   - หน้า `/products` ใช้ server-side pagination สำหรับรายการสินค้า (รองรับ `q/category/status/sort/page/pageSize`) และปุ่ม `โหลดเพิ่มเติม` จะดึงหน้าถัดไปจาก API จริง
   - server render ของหน้า `/products` อ่าน filter หลักจาก URL แล้ว (`q`, `categoryId`, `status`, `sort`) เพื่อ seed initial list ให้ตรงกับ deep link และไม่ต้องรีเฟรช `/api/products` ซ้ำทันทีหลัง hydrate เมื่อ filter ยังตรงกับ SSR payload
   - `GET /api/products` ใช้ current-session permission path แล้ว, ส่ง `Cache-Control: no-store`, `Server-Timing`, และ `latency` เพื่อ trace read path ของ products list ได้ละเอียดขึ้น
+  - `GET /api/products` รอบล่าสุดถูกลดเป็น list-lite path แล้ว: page list/SSR seed จะยังส่ง stock summary/variant/category/basic pricing แต่ไม่แบก `conversions` และ cost-audit detail ทุกแถวอีก; ของหนักถูกย้ายไป `GET /api/products/[productId]` แบบ on-demand
+  - `GET /api/products` list-lite path ถูกย้ายไปใช้ raw SQL แล้ว: รวม `products + base unit + category/model + inventory_balances` ใน query เดียวสำหรับ page rows และ fallback count แยกเฉพาะกรณี page ว่าง เพื่อลด query phase จากเดิมแบบ `count -> ids -> detail -> balances`
   - เพิ่มโครงสร้างฐานข้อมูล Variant แบบ Phase 1 แล้ว (`product_models`, `product_model_attributes`, `product_model_attribute_values` + คอลัมน์เชื่อมใน `products`) โดยยังไม่บังคับเปลี่ยน UX เดิมทันที
   - ฟอร์ม `เพิ่ม/แก้ไขสินค้า` ใน `/products` รองรับโหมด Variant แล้ว (กำหนด `model`, `variant label`, `sort order`, และ option key/value) โดย backend จะผูก `products.model_id` และเติม dictionary ใน `product_model_attributes`/`product_model_attribute_values` ให้อัตโนมัติ
   - ฟอร์ม `เพิ่มสินค้า` ช่อง `ราคาขาย` ปรับเป็นค่าว่างเริ่มต้น + `placeholder: 0`; หากผู้ใช้ไม่กรอก ระบบยังตีความค่าเป็น `0` ตอน submit (ลดการต้องลบ `0` ก่อนพิมพ์)
@@ -425,7 +429,7 @@ npm run po:audit:integrity
   - Modal สแกนบาร์โค้ดใน `/products` เปลี่ยนจากปุ่ม `สลับกล้อง` เป็น dropdown `เลือกกล้อง` (กรณีมีกล้องมากกว่า 1 ตัว) เพื่อเลือกกล้องที่ต้องการได้ตรง ๆ และจดจำกล้องล่าสุด
   - แก้ต้นทุนใน Product Detail (`update_cost`) ต้องกรอก `เหตุผล` เสมอ และระบบจะบันทึก audit action `product.cost.manual_update`
   - เมื่อรับสินค้าเข้า PO แล้วต้นทุนเปลี่ยน ระบบจะบันทึก audit action `product.cost.auto_from_po` อัตโนมัติ
-  - Product payload (`GET /api/products`) มี `costTracking` เพิ่มเพื่อใช้แสดงที่มาของต้นทุนล่าสุด (source/time/actor/reason/reference)
+  - Product detail (`GET /api/products/[productId]`) จะคืน full payload ของสินค้า รวม `conversions`, `costTracking`, และ `latestPurchaseOrderCost`; ฝั่ง `ProductsManagement` ใช้ route นี้ตอนเปิด detail/edit/duplicate เพื่อไม่ให้ first-open ของ `/products` ช้าจากการแบกข้อมูลลึกมาทั้งหน้า list
   - การสลับแท็บสถานะสินค้า (`ทั้งหมด/ใช้งาน/ปิดใช้งาน`) ในหน้า `/products` ปรับให้ตอบสนองเร็วขึ้นด้วย client cache + request abort และมี skeleton loading ระหว่างรอผลหน้าแรกของ filter ใหม่ (แยกจาก loading ของปุ่ม `โหลดเพิ่มเติม`)
   - หน้า `/products` ผูกแท็บสถานะกับ URL query `status` แล้ว (เช่น `?status=inactive`) เพื่อให้ hard refresh / back-forward คงแท็บเดิม
 - Stock/Purchase:
@@ -500,6 +504,10 @@ npm run po:audit:integrity
     - ถ้า workspace bar ยังไม่ sticky: restore `window.scrollX/Y` เดิมหลัง workspace ใหม่พร้อม
     - ถ้า workspace bar กำลัง sticky อยู่: snapshot โหมด `keep_sticky` แล้วคำนวณ scroll ใหม่จาก `workspaceStickyBarRef.getBoundingClientRect().top` เทียบ `computed top` เพื่อให้ bar ใหม่ยัง stuck ต่อหลังโหลด
     - กรณี `SUPPLIER_AP` parent จะรอ loading state จาก panel (`supplier summary` + `statement`) ก่อนค่อย restore scroll เพื่อกันจังหวะ UI ขยับหลังข้อมูล AP โหลดเสร็จ; ฝั่ง panel debounce ตอนปล่อย `loading=false` สั้น ๆ (`120ms`) เพื่อกันช่องว่างระหว่าง fetch 2 ชุด
+  - workspace `SUPPLIER_AP` รอบล่าสุดถูก optimize สำหรับ repeated switch แล้ว:
+    - panel จะ keep-mounted หลังเปิดครั้งแรก แทนการ unmount/remount ทุกครั้งที่สลับ workspace
+    - ฝั่ง client มี memory cache แยกทั้ง `supplier summary` และ `statement` ตาม query key พร้อม abort/dedupe request ที่กำลังวิ่งอยู่
+    - รอบล่าสุดถอด Redis micro-cache ออกจาก AP workspace แล้วตาม requirement ปัจจุบัน; ความเร็วตอนสลับกลับ workspace เดิมจะพึ่ง keep-mounted + client cache เป็นหลัก
   - คิว `PO รอปิดเรท` รองรับ workflow ปลายเดือนแบบกลุ่ม:
     - เลือกหลาย PO แล้ว `ปิดเรท + ชำระปลายเดือน` ได้ในครั้งเดียว
     - บังคับเลือก PO สกุลเดียวกันต่อรอบ และใส่ `paymentReference` รอบบัตรเดียวกัน
@@ -531,6 +539,11 @@ npm run po:audit:integrity
     - `GET /api/stock/products` เปลี่ยน page query หลักไปใช้ raw SQL + `inventory_balances` และ inventory path merge `products + balances` ให้เหลือ query phase เดียว
     - inventory path ของหน้า `/stock` ไม่โหลด `unitOptions` แล้ว
     - recording path ของหน้า `/stock` ก็ลด SSR payload ลงแล้ว: initial list โหลดแค่ base unit ก่อน และจะ lazy-load `unitOptions` พร้อม stock snapshot ของสินค้าที่ถูกเลือกผ่าน `GET /api/stock/products?productId=...&includeUnitOptions=true`
+    - stock tabs รอบล่าสุดถูกย้ายเป็น client-cached workspace:
+      - initial page load ยังใช้ SSR seed เฉพาะ active tab
+      - หลัง hydrate การเปลี่ยนแท็บใช้ `window.history.replaceState(...)` แทน `router.replace(...)` เพื่อไม่ให้ทั้งหน้า `/stock` rerender จาก server อีกทุกครั้ง
+      - แต่ละแท็บจะ keep-mounted หลังเปิดครั้งแรก และเก็บ state/data ของตัวเองไว้ เพื่อให้การสลับกลับแท็บเดิมเร็วกว่า first-open อย่างชัดเจน
+      - non-active tabs จะ fetch initial data ฝั่ง client ตอนถูกเปิดครั้งแรกถ้ายังไม่มี SSR seed
     - `GET /api/products/search?q&includeStock=true` ตัด N+1 เดิมออก โดย reuse stock fields ที่ query layer โหลดมาอยู่แล้วแทนการยิง balance ซ้ำทีละสินค้า
     - perf logging ถูกแยก phase มากขึ้นแล้ว: server/API จะ log `auth`, `db`, `logic`, `ui`; client ฝั่ง stock tabs จะ log `network`, `parseJson`, และ `commit` พร้อมอ่าน `Server-Timing` กลับมาแสดงเป็น breakdown
     - auth/RBAC path แยก timing ละเอียดยิ่งขึ้นแล้ว: `getSession()` จะ log `token.authorizationHeader`, `token.cookieStore`, `token.verify`, `redis.tokenState`, `redis.tokenVersion`; ส่วน `getUserPermissionsForCurrentSession()` จะ log `db.membership`, `db.ownerPermissionCatalog`, `db.rolePermissionKeys` หรือ `cache.rolePermissionKeys` ตาม path ที่ใช้
@@ -552,9 +565,9 @@ npm run po:audit:integrity
   - กล่องคำแนะนำในแท็บ `บันทึกสต็อก` ปรับเป็นพับ/ขยายได้ (default ปิด) เพื่อลดความยาวบนจอมือถือ โดยยังคงคำเตือนหลักและ CTA ไปแท็บ `สั่งซื้อ (PO)` ให้เห็นตลอด
   - ใน mobile ของแท็บ `บันทึกสต็อก` เพิ่มปุ่ม sticky `บันทึกสต็อก` ที่ก้นจอ และเพิ่มปุ่ม `ดูสินค้าทั้งหมด` เปิด list picker (ค้นหาชื่อ/SKU แล้วแตะเลือกได้)
   - `POST /api/stock/movements` จะ reject field กลุ่มต้นทุน/เรท (`cost/costBase/rate/exchangeRate/...`) ด้วย 400 เพื่อบังคับ separation ระหว่างงาน Recording vs PO/Month-End
-  - แท็บ `บันทึกสต็อก` sync filter หลักลง URL แล้ว (`recordingType`, `recordingProductId`) เพื่อแชร์ลิงก์มุมมอง/สินค้าเป้าหมายในทีมได้ โดยใช้ `router.replace(..., { scroll: false })`
+  - แท็บ `บันทึกสต็อก` sync filter หลักลง URL แล้ว (`recordingType`, `recordingProductId`) เพื่อแชร์ลิงก์มุมมอง/สินค้าเป้าหมายในทีมได้ โดยใช้ `window.history.replaceState(...)`
   - แท็บ `บันทึกสต็อก` จะทำ URL sync/query restore เฉพาะตอน active tab เป็น `recording` เพื่อลด race condition เขียน query ข้ามแท็บ
-  - ลิงก์ `ดูประวัติทั้งหมด` ในแท็บบันทึกสต็อก เปลี่ยนเป็น `router.push(?tab=history)` (ไม่ hard reload)
+  - ลิงก์ `ดูประวัติทั้งหมด` และ CTA ไป `แท็บ PO` ในแท็บบันทึกสต็อก จะสลับแท็บผ่าน stock tab context/client state แล้ว ไม่ route navigate ทั้งหน้า
   - แท็บ `ประวัติ` ใช้ server-side pagination/filter ผ่าน `GET /api/stock/movements?view=history` รองรับกรอง `ประเภท/สินค้า/ช่วงวันที่`
   - แท็บ `ประวัติ` รองรับ filter type เพิ่ม `RESERVE/RELEASE` แล้ว และ sync filter/page ลง URL (`historyType`, `historyQ`, `historyDateFrom`, `historyDateTo`, `historyPage`) เพื่อแชร์มุมมองได้
   - ปรับ UX แท็บ `ประวัติ` จากแถวปุ่มประเภทหลายปุ่ม เป็นฟอร์มตัวกรองเรียบง่าย (`ประเภท` dropdown + `ค้นหา` + `ช่วงวันที่`) และค่อย apply ตอนกด `ใช้ตัวกรอง`
